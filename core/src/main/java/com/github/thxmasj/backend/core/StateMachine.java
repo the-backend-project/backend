@@ -65,6 +65,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -248,12 +249,7 @@ public class StateMachine implements AutoCloseable {
                 "Invalid event log: " + eventLog.events().stream().map(Event::typeName).collect(joining(","))));
           InputEvent<?> event = inputEvent(delayedTrigger);
           Debug.log("resolveState with: " + event);
-          return onEvent(
-              delayedTrigger.correlationId(),
-              event,
-              eventLog,
-              null
-          )
+          return firedByDelayedTrigger(delayedTrigger.correlationId(), event, eventLog)
               .flatMap(processResult -> switch (processResult) {
                     // State is resolved and delayed trigger already deleted by the change triggered by this event.
                     case Accepted<?> _ -> Mono.just(ResolverStatus.Ok);
@@ -479,6 +475,11 @@ public class StateMachine implements AutoCloseable {
     return onEvent(correlationId, inputEvent.eventType(), inputEvent.data(), eventLog, requestStep, null, null, null);
   }
 
+  /// The event of a delayed trigger, whose trigger is deleted with the change of the event
+  private <I> Mono<ProcessResult<?>> firedByDelayedTrigger(String correlationId, InputEvent<I> event, EventLog eventLog) {
+    return onEvent(correlationId, event.eventType(), event.data(), eventLog, null, TriggerType.DELAYED, null, null);
+  }
+
   private List<Change> changes(@NotNull TransitionStep<?> tail) {
     ArrayList<Change> changes = new ArrayList<>();
     for (var c = tail; c != null; c = c.previous()) {
@@ -515,7 +516,7 @@ public class StateMachine implements AutoCloseable {
             // An event which is not stored is not in the log of a stored entity, so the event the action leads to is
             // the next one stored
             actionTriggers.add(
-                event.type().stored() || isSessionOnly(acc.actionTrigger().eventLog().withNewEvent(event)) ?
+                event.type().stored() || isSessionOnly(acc.actionTrigger().eventLog(), event) ?
                     acc.actionTrigger().withEvent(event) :
                     acc.actionTrigger()
             );
@@ -839,10 +840,7 @@ public class StateMachine implements AutoCloseable {
   /// transaction of its own, and the calculations of a session are linked by the first step of each, which refers to the
   /// one before.
   private static TransitionStep<?> previousCalculation(TransitionStep<?> step) {
-    InputStep<?> initial = null;
-    for (var c = step; c != null; c = c.previous()) {
-      if (c instanceof InputStep<?> i) initial = i;
-    }
+    InputStep<?> initial = initial(step);
     return initial != null ? initial.stage1() : null;
   }
 
@@ -853,7 +851,7 @@ public class StateMachine implements AutoCloseable {
   /// entity model is matched too.
   private EventLog logFromNestedChanges(UUID entityId, EntityModel entityModel, TransitionStep<?> transitionStep) {
     EventLog log = logFromCalculation(entityId, entityModel, transitionStep);
-    if (log != null)
+    if (log != null || !hasEntitiesOfTheSessionOnly(entityModel))
       return log;
     for (var calculation = previousCalculation(transitionStep); calculation != null; calculation = previousCalculation(calculation)) {
       log = logFromCalculation(entityId, entityModel, calculation);
@@ -871,11 +869,11 @@ public class StateMachine implements AutoCloseable {
           && event.entityId().equals(entityId)
           && model.equals(entityModel)
           && !(previous instanceof ChoiceStep)) {
-        EventLog log = c.inputStep().log().withNewEvent(event);
+        EventLog log = c.inputStep().log();
         // An event which is not stored is not in the log of a stored entity, which the next event stored follows
-        if (!event.type().stored() && !isSessionOnly(log))
+        if (!event.type().stored() && !isSessionOnly(log, event))
           continue;
-        return log;
+        return log.withNewEvent(event);
       }
     }
     return null;
@@ -885,6 +883,19 @@ public class StateMachine implements AutoCloseable {
   /// stored, or created by an event which is not stored
   private static boolean isSessionOnly(EventLog log) {
     return !log.entityModel().stored() || (!log.events().isEmpty() && !log.events().getFirst().type().stored());
+  }
+
+  /// Whether the entity of the log would be one of the session only with the event, as [#isSessionOnly(EventLog)] of
+  /// the log with it, without copying the log
+  private static boolean isSessionOnly(EventLog log, Event<?> event) {
+    Event<?> first = log.events().isEmpty() ? event : log.events().getFirst();
+    return !log.entityModel().stored() || !first.type().stored();
+  }
+
+  /// Whether entities of the session only are of the model, which a group is not
+  private boolean hasEntitiesOfTheSessionOnly(EntityModel entityModel) {
+    Traverser traverser = traversers.get(entityModel);
+    return traverser == null || traverser.hasEntitiesOfTheSessionOnly();
   }
 
   private record EntityKey(UUID entityModelId, UUID entityId) {
@@ -900,10 +911,66 @@ public class StateMachine implements AutoCloseable {
       if (c instanceof OutputStep<?>(TransitionStep<?> previous, ProcessResult<?> stepOutput)
           && stepOutput instanceof Accepted<?>(Event<?> event, EntityModel model, _, _, _)
           && !(previous instanceof ChoiceStep)
-          && isSessionOnly(c.inputStep().log().withNewEvent(event)))
+          && isSessionOnly(c.inputStep().log(), event))
         keys.add(new EntityKey(model.id(), event.entityId()));
     }
     return keys;
+  }
+
+  /// The changes with the delayed events numbered after the last event stored on their entities, which they fire
+  /// unless another event is stored first: the transition's own event, unless it isn't stored, e.g. as a transition
+  /// chosen isn't, and the events stored after it on the entity in the calculation
+  private static List<Change> withDelayedEventsNumbered(List<Change> changes, Set<EntityKey> sessionOnly) {
+    return changes.stream()
+        .map(change -> change.delayedEvent() == null ? change : Change.fromDelayedEvent(numbered(change.delayedEvent(), changes, sessionOnly)))
+        .toList();
+  }
+
+  /// The delayed event, numbered after the last event stored on its entity. It is created with the number after the
+  /// event of the transition triggering it, which follows the last event stored on the entity before the calculation.
+  private static <T> DelayedEvent<T> numbered(DelayedEvent<T> delayedEvent, List<Change> changes, Set<EntityKey> sessionOnly) {
+    int transitionsEvent = delayedEvent.eventNumber() - 1;
+    int lastStoredBefore = transitionsEvent - 1;
+    var entity = new EntityKey(delayedEvent.entityModel().id(), delayedEvent.entityId());
+    int lastStored = lastStoredEvent(changes, entity, sessionOnly).orElse(lastStoredBefore);
+    return delayedEvent.withEventNumber(lastStored + 1);
+  }
+
+  /// The number of the last event of the changes stored on the entity, if any
+  private static OptionalInt lastStoredEvent(List<Change> changes, EntityKey entity, Set<EntityKey> sessionOnly) {
+    return changes.stream()
+        .filter(change -> change.newEvent() != null && EntityKey.of(change).equals(entity) && isStored(change, sessionOnly))
+        .mapToInt(change -> change.newEvent().eventNumber())
+        .max();
+  }
+
+  /// The changes with the deletion of the stored trigger which fired the event of the calculation, if no event is stored
+  /// on its entity, which would delete it, e.g. as the transition chosen isn't stored. It comes first, as a delayed event
+  /// the calculation triggers on the entity replaces the trigger.
+  private static List<Change> withFiredTrigger(List<Change> changes, TransitionStep<?> tail, Set<EntityKey> sessionOnly) {
+    InputStep<?> initial = initial(tail);
+    if (initial == null || initial.triggerType() == null)
+      return changes;
+    var entity = new EntityKey(initial.log().entityModel().id(), initial.log().entityId());
+    if (lastStoredEvent(changes, entity, sessionOnly).isPresent())
+      return changes;
+    var withDeletion = new ArrayList<Change>(changes.size() + 1);
+    withDeletion.add(Change.fromFiredTrigger(
+        initial.log().entityModel(),
+        initial.log().entityId(),
+        new Change.FiredTrigger(initial.triggerType(), initial.triggerId(), initial.eventNumber())
+    ));
+    withDeletion.addAll(changes);
+    return withDeletion;
+  }
+
+  /// The first step of the calculation of the step, of the event it calculates
+  private static InputStep<?> initial(TransitionStep<?> step) {
+    InputStep<?> initial = null;
+    for (var c = step; c != null; c = c.previous()) {
+      if (c instanceof InputStep<?> i) initial = i;
+    }
+    return initial;
   }
 
   private static boolean isStored(Change change, Set<EntityKey> sessionOnly) {
@@ -913,8 +980,7 @@ public class StateMachine implements AutoCloseable {
   }
 
   /// Fails for a change which is not stored but would have to be: a delayed or conditional trigger of an entity of the
-  /// session only, which fires in a session of its own, or an event fired by a stored trigger, which is deleted with the
-  /// event
+  /// session only, which fires in a session of its own
   private static void requireStorable(List<Change> changes, Set<EntityKey> sessionOnly) {
     for (var change : changes) {
       if (isStored(change, sessionOnly))
@@ -924,13 +990,6 @@ public class StateMachine implements AutoCloseable {
             "%s on %s/%s is a delayed or conditional trigger of an entity of the session only, whose events are not " +
                 "stored, but it fires in a session of its own",
             change.delayedEvent() != null ? change.delayedEvent().type().name() : change.conditionalTrigger().type().name(),
-            change.entityModel().name(),
-            change.entityId()
-        ));
-      if (change.triggerType() != null)
-        throw new IllegalStateException(String.format(
-            "%s on %s/%s is not stored, but was fired by a stored trigger, which is deleted with the event it fires",
-            change.newEvent().type().name(),
             change.entityModel().name(),
             change.entityId()
         ));
@@ -1201,8 +1260,8 @@ public class StateMachine implements AutoCloseable {
       String correlationId,
       TransitionStep<?> transitionStep
   ) {
-    List<Change> changes = changes(transitionStep);
     var sessionOnly = sessionOnlyEntities(transitionStep);
+    List<Change> changes = withFiredTrigger(withDelayedEventsNumbered(changes(transitionStep), sessionOnly), transitionStep, sessionOnly);
     Debug.log("Changes to store:\n" + changes.stream().map(Object::toString).collect(joining("\n")));
     return Mono.fromRunnable(() -> requireStorable(changes, sessionOnly))
         .thenReturn("")

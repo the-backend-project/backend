@@ -28,24 +28,22 @@ public interface EntityModel extends Identifiable {
   /// An entity model whose transitions are created when they are first asked for, so that they can refer to the model
   /// itself and to other models created the same way, e.g. as constants which refer to each other.
   static EntityModel of(String name, UUID id, Supplier<Map<State, List<TransitionModel<?, ?>>>> transitions) {
-    var created = new Memoized<>(transitions, "transitions of entity model " + name);
-    return new EntityModel() {
-      @Override public String name() {return name;}
-      @Override public UUID id() {return id;}
-      @Override public Map<State, List<TransitionModel<?, ?>>> transitions() {return created.get();}
-      @Override public String toString() {return name;}
-    };
+    return memoized(name, id, transitions, true);
   }
 
   /// An entity model which is not stored, whose entities are of the session only (see [#stored()]), with its transitions
   /// created when they are first asked for, as [#of(String, UUID, Supplier)]
   static EntityModel notStored(String name, UUID id, Supplier<Map<State, List<TransitionModel<?, ?>>>> transitions) {
+    return memoized(name, id, transitions, false);
+  }
+
+  private static EntityModel memoized(String name, UUID id, Supplier<Map<State, List<TransitionModel<?, ?>>>> transitions, boolean stored) {
     var created = new Memoized<>(transitions, "transitions of entity model " + name);
     return new EntityModel() {
       @Override public String name() {return name;}
       @Override public UUID id() {return id;}
       @Override public Map<State, List<TransitionModel<?, ?>>> transitions() {return created.get();}
-      @Override public boolean stored() {return false;}
+      @Override public boolean stored() {return stored;}
       @Override public String toString() {return name;}
     };
   }

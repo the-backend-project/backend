@@ -330,7 +330,7 @@ public class BackofficeTest {
   void resourcesAreNotStored() throws Exception {
     assertThat(get(server, "/health", null).statusCode()).isEqualTo(200);
     assertThat(get(server, "/backoffice/static/backoffice.css", null).statusCode()).isEqualTo(200);
-    long resources = Init.client().sql("SELECT COUNT(*) AS N FROM \"" + backofficeSchema + "\".\"Entity\" WHERE EntityModelId=:model")
+    long resources = Init.client().sql("SELECT CAST(COUNT(*) AS INT) AS N FROM \"" + backofficeSchema + "\".\"Entity\" WHERE EntityModelId=:model")
         .name("Test.Resources")
         .bind("model", UUID.fromString("8e3c1a6f-4b2d-4d97-a5e0-2f7b9c4d1e83"))
         .map(row -> row.get("N", Integer.class).longValue())

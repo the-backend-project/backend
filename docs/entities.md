@@ -125,11 +125,12 @@ tested, drawn in the state diagrams and told the [monitoring](monitoring.md), wi
   any other: it is calculated, may trigger events on other entities, which are stored if they are of stored types, is
   given to the one who triggered it and is told the listener. It is not written to the event log, so the state of an
   entity must not depend on it: on an entity which is stored, its transitions stay in their state (`toSelf()`), which
-  the state machine checks when it is created. The next event stored on the entity takes its event number, and so does
-  a delayed event its transition triggers, which fires unless another event is stored first and replaces the delayed
-  event pending on the entity, as one of a stored event does. Its transition can't have a conditional trigger, which
-  refers to the event, and it can't be a delayed event itself, as a delayed trigger is deleted with the event it
-  fires. An event reading an entity, for another entity to assemble from, is one, named `<subject> looked up`.
+  the state machine checks when it is created. The next event stored on the entity takes its event number. A delayed
+  event is numbered after the last event stored on its entity, so one triggered by the transition of an event not
+  stored, also one chosen, fires unless another event is stored first, and replaces the delayed event pending on the
+  entity, as one of a stored event does. Its transition can't have a conditional trigger, which refers to the event.
+  A delayed or conditional trigger may fire an event which isn't stored: the trigger is deleted with the changes of
+  the event, as it is when the event is stored. An event reading an entity, for another entity to assemble from, is one, named `<subject> looked up`.
 * **An entity of the session only** is created by an event which is not stored, i.e. one from `Begin`, or is of an
   entity model whose `stored()` is false, e.g. one of `EntityModel.notStored(name, id, transitions)`. None of its
   events are stored, whatever their types, so its transitions may go to any state, also on events not stored. The
@@ -137,9 +138,9 @@ tested, drawn in the state diagrams and told the [monitoring](monitoring.md), wi
   delayed or conditional triggers, which fire in a session of their own: the change fails if it has one. An inbox request which is
   [not stored](http-inbox.md#requests-not-stored) is one.
 * **A masked event** is stored with its output masked: `.masked(mask)` on a transition, after `to(...)`, gives the
-  output as it is stored. The event in the session has the whole output, which its triggers, the one who triggered it
-  and the transitions of the same session see, while the event log has the masked one, which is what the log of the
-  entity has later. The [inbox](http-inbox.md#masking) masks the credentials of the requests it stores this way.
+  output as it is stored. The event in the calculation has the whole output, which its triggers, the one who triggered
+  it and the transitions of the same calculation see, while the event log has the masked one. A later calculation, also
+  one of the same [session](#sessions), reads a stored entity from the event log, masked. The [inbox](http-inbox.md#masking) masks the credentials of the requests it stores this way.
 
 ```java
 // A page rendered from other entities, which is not stored

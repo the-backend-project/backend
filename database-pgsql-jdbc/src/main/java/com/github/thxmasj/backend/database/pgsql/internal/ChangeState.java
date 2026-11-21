@@ -10,6 +10,7 @@ import com.github.thxmasj.backend.core.IndexEntityModel;
 import com.github.thxmasj.backend.core.TriggerType;
 import com.github.thxmasj.backend.core.database.DatabaseClient;
 import com.github.thxmasj.backend.core.internal.DelayedEvent;
+import com.github.thxmasj.backend.core.internal.database.ChangeState.Change.FiredTrigger;
 import com.github.thxmasj.backend.core.internal.database.ConditionalTrigger;
 import java.time.Clock;
 import java.time.ZonedDateTime;
@@ -38,14 +39,7 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
 
   @Override
   protected String sql(List<Change> changes) {
-    return IntStream.range(0, changes.size()).mapToObj(i -> insertSql(
-        "p" + i + "_",
-        changes.get(i).entityModel(),
-        changes.get(i).newEvent(),
-        changes.get(i).delayedEvent(),
-        changes.get(i).conditionalTrigger(),
-        changes.get(i).triggerType()
-    )).collect(joining("\n"));
+    return IntStream.range(0, changes.size()).mapToObj(i -> insertSql("p" + i + "_", changes.get(i))).collect(joining("\n"));
   }
 
   /// The duplicate key of an id event, as reported by PostgreSQL, e.g. "f721bf54-891b-41a0-aa63-5d3cbde52437, \x7b22..."
@@ -56,12 +50,14 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
 
   private String insertSql(
       String parameterPrefix,
-      EntityModel entityModel,
-      Event<?> event,
-      DelayedEvent<?> delayedEvent,
-      ConditionalTrigger<?> conditionalTrigger,
-      TriggerType triggerType
+      Change change
   ) {
+    EntityModel entityModel = change.entityModel();
+    Event<?> event = change.newEvent();
+    DelayedEvent<?> delayedEvent = change.delayedEvent();
+    ConditionalTrigger<?> conditionalTrigger = change.conditionalTrigger();
+    TriggerType triggerType = change.triggerType();
+    FiredTrigger firedTrigger = change.firedTrigger();
     String sql = "";
     if (event != null && (entityModel instanceof IndexEntityModel || entityModel instanceof IdEntityModel)) {
       sql +=
@@ -116,6 +112,19 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
             WHERE Id=:triggerId;
             """.replace("{ConditionalTrigger}", table(schema, "ConditionalTrigger"));
       }
+    }
+
+    if (firedTrigger != null) {
+      // The trigger fired an event which isn't stored, which would otherwise have deleted it
+      sql += firedTrigger.type() == TriggerType.DELAYED ?
+          """
+          DELETE FROM {DelayedTrigger}
+          WHERE EntityId=:entityId AND EventNumber<=:eventNumber;
+          """.replace("{DelayedTrigger}", table(schema, "DelayedTrigger")) :
+          """
+          DELETE FROM {ConditionalTrigger}
+          WHERE Id=:triggerId;
+          """.replace("{ConditionalTrigger}", table(schema, "ConditionalTrigger"));
     }
 
     if (conditionalTrigger != null) {

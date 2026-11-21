@@ -73,9 +73,16 @@ final class Endpoints {
   /// request kept a while longer lets nothing through.
   private final Map<HttpRequest<byte[]>, Optional<HttpResponse<byte[]>>> answers = Collections.synchronizedMap(new WeakHashMap<>());
 
-  /// The response of a request answered at once, or null for a request for the entities of the identity provider
+  /// The response of a request answered at once, or null for a request for the entities of the identity provider. It
+  /// is computed outside the lock of the answers, as it may verify a token, so requests are answered in parallel, and a
+  /// request asked for twice at once is answered twice, alike.
   HttpResponse<byte[]> immediate(HttpRequest<byte[]> request) {
-    return answers.computeIfAbsent(request, r -> Optional.ofNullable(answer(r))).orElse(null);
+    Optional<HttpResponse<byte[]>> known = answers.get(request);
+    if (known == null) {
+      known = Optional.ofNullable(answer(request));
+      answers.put(request, known);
+    }
+    return known.orElse(null);
   }
 
   /// The access token, if it is valid. It is verified each time, rather than remembered, so that an expired token is
@@ -289,7 +296,8 @@ final class Endpoints {
 
   /// Whether the request is a registration of the identity provider itself
   static boolean isInternal(HttpRequest<byte[]> request) {
-    return internalKey.equals(request.headerValue(Inbox.InternalHeader));
+    // In constant time, so the time taken doesn't tell how much of the key is right
+    return Secrets.matches(request.headerValue(Inbox.InternalHeader), internalKey);
   }
 
   // Signing users in

@@ -462,30 +462,27 @@ public final class AtMostOnceBuilder {
         AtLeastOnce<RRQ> rollbackOnAcceptedModel,
         AtLeastOnce<RRQ> rollbackOnUnknownModel
     ) {
-      return (name, id) -> new AtMostOnce<>(
-          name,
-          id,
-          requestPayloadType,
-          responsePayloadType,
-          forwarder,
-          inflightTimeout,
-          processModel,
+      var callbacks = new AtMostOnce.Callbacks<>(
           onPeerUnavailable,
           onMissingResponse,
           onSuccess,
           onFailure,
           onValidResponseUnknown,
           onInvalidResponseRejection,
-          onInvalidResponseUnknown,
-          contentParser,
-          requestAwareContentParser,
-          isAccepted,
-          isRejected,
-          isRejectedByInvalidResponse,
-          rollbackOnAcceptedModel,
-          rollbackOnUnknownModel,
-          masking
+          onInvalidResponseUnknown
       );
+      var rules = new AtMostOnce.ResponseRules<>(contentParser, requestAwareContentParser, isAccepted, isRejected, isRejectedByInvalidResponse);
+      var shape = new AtMostOnce.Shape<>(
+          requestPayloadType,
+          responsePayloadType,
+          new ForwardAction(forwarder),
+          inflightTimeout,
+          processModel,
+          callbacks,
+          rules,
+          Masking.CREDENTIALS.and(masking)
+      );
+      return (name, id) -> new AtMostOnce<>(name, id, shape, _ -> rollbackOnAcceptedModel, _ -> rollbackOnUnknownModel);
     }
 
     @Override

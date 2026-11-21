@@ -49,6 +49,13 @@ public class NotStoredTest {
   static EventType<UUID, String> SignedIn = BasicEventType.of("Signed in", UUID.fromString("7a3e9c1d-5b0f-4d62-a8e4-c9f1b3d5e708"), DataType.uuid(), DataType.string());
   static EventType<String, String> SecretIssued = BasicEventType.of("Secret issued", UUID.fromString("4c8f2a6e-1d9b-4357-b0e3-d7a5c9f1e842"), DataType.string());
 
+  /// Not stored, and fired by a delayed trigger, whose transition records a view
+  static EventType<Void, Void> LookupDue = BasicEventType.notStored("Lookup due", UUID.fromString("1b3d5f7a-9c0e-4a24-86b8-dafc1e3f5a91"));
+  static EventType<Void, Void> LookupScheduled = BasicEventType.of("Lookup scheduled", UUID.fromString("3d5f7b9c-1e2a-4c46-a8da-fc1e3f5a7bb3"));
+  /// Stored, but chooses a transition which is not stored, after scheduling a stored event
+  static EventType<Void, Void> TouchScheduled = BasicEventType.of("Touch scheduled", UUID.fromString("5f7b9d1e-3a4c-4e68-8afc-1e3f5a7b9dd5"));
+  static EventType<Void, Void> TouchScheduledQuietly = BasicEventType.notStored("Touch scheduled quietly", UUID.fromString("7b9d1f3a-5c6e-4a8a-ac1e-3f5a7b9dbff7"));
+
   /// Not stored, and schedules a stored event on its entity
   static EventType<Void, Void> ReminderScheduled = BasicEventType.notStored("Reminder scheduled", UUID.fromString("8e2c4a6f-0b1d-4f37-95e9-a3c5e7b9d148"));
   static EventType<String, String> PasswordSet = BasicEventType.of("Password set", UUID.fromString("6a1f3c5e-8b2d-4e90-a7c4-d9e1b3f5a768"), DataType.string());
@@ -115,6 +122,16 @@ public class NotStoredTest {
         States.Opened, List.of(
             onEvent(AccountTouched).toSelf().output(),
             onEvent(ReminderScheduled).toSelf().assembleInput().trigger(AccountTouched).after(_ -> Duration.ofMillis(100)).output(),
+            onEvent(LookupScheduled).toSelf().assembleInput().trigger(LookupDue).after(_ -> Duration.ofMillis(100)).output(),
+            onEvent(LookupDue).toSelf()
+                .assemble(c -> c.log().entityId())
+                .trigger(ViewRecorded).with(id -> id).on(Views).identifiedBy(newEntityId())
+                .output(),
+            onEvent(TouchScheduled).toSelf()
+                .assembleInput()
+                .trigger(AccountTouched).after(_ -> Duration.ofMillis(100))
+                .when(_ -> true).then(onEvent(TouchScheduledQuietly).toSelf().output(), d -> null)
+                .otherwise(onEvent(AccountTouched).toSelf().output(), d -> null),
             onEvent(PasswordSet).toSelf().masked(_ -> "***").assembleInput().output(d -> d),
             onEvent(PageViewed).toSelf()
                 .assemble(c -> c.log().entityId())
@@ -239,5 +256,43 @@ public class NotStoredTest {
     var e = assertThrows(Exception.class, () -> log(Visit, List.of(VisitStarted, VisitClosed), events.getFirst().entityId()));
     assertTrue(e instanceof UnknownEntity || e.getCause() instanceof UnknownEntity, e.toString());
     assertTrue(lines.stream().anyMatch(l -> l.contains("\"eventType\":\"Delivery arrived\"") && l.contains("\"eventNumber\":2")), lines.toString());
+  }
+
+  private int delayedTriggerCount(UUID entityId) {
+    return Init.client().sql("SELECT CAST(COUNT(*) AS INT) AS N FROM \"" + schema + "\".\"DelayedTrigger\" WHERE EntityId=:entityId")
+        .name("Test.DelayedTriggers")
+        .bind("entityId", entityId)
+        .map(row -> row.get("N", Integer.class))
+        .one()
+        .block();
+  }
+
+  /// A delayed trigger which fires an event not stored is deleted as it fires, rather than firing again
+  @Test
+  public void aDelayedTriggerFiringAnEventNotStoredIsDeleted() throws InterruptedException {
+    UUID account = machine.onEvent(trigger(AccountOpened, Account), "a").blockFirst().entityId();
+    machine.onEvent(trigger(LookupScheduled, Account, account), null).blockFirst(Duration.ofSeconds(10));
+    assertEquals(1, delayedTriggerCount(account));
+
+    for (int i = 0; i < 100 && delayedTriggerCount(account) > 0; i++)
+      Thread.sleep(200);
+    assertEquals(0, delayedTriggerCount(account));
+    assertEquals(List.of("1:Account opened", "2:Lookup scheduled"), events(log(Account, List.of(AccountOpened, LookupScheduled), account)));
+    assertTrue(lines.stream().anyMatch(l -> l.contains("\"eventType\":\"Lookup due\"") && l.contains(account.toString())), lines.toString());
+  }
+
+  /// A transition whose event is stored, but which chooses one which isn't, numbers its delayed event after the
+  /// events actually stored
+  @Test
+  public void aDelayedEventOfATransitionChoosingOneNotStoredFires() throws InterruptedException {
+    UUID account = machine.onEvent(trigger(AccountOpened, Account), "a").blockFirst().entityId();
+    machine.onEvent(trigger(TouchScheduled, Account, account), null).blockFirst(Duration.ofSeconds(10));
+
+    List<String> events = List.of();
+    for (int i = 0; i < 100 && events.size() < 2; i++) {
+      Thread.sleep(200);
+      events = events(log(Account, List.of(AccountOpened, AccountTouched), account));
+    }
+    assertEquals(List.of("1:Account opened", "2:Account touched"), events);
   }
 }

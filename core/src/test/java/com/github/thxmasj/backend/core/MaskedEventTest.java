@@ -21,7 +21,7 @@ public class MaskedEventTest {
   /// The transitions of the session read the log of the entity with the whole data of a masked event, by every accessor
   @Test
   public void theLogOfTheSessionHasTheWholeDataOfAMaskedEvent() {
-    var event = new Event<>(UUID.randomUUID(), 1, PasswordSet, ZonedDateTime.now(), "hunter2", "***");
+    var event = new Event<>(UUID.randomUUID(), 1, PasswordSet, ZonedDateTime.now(), "hunter2", _ -> "***");
     var log = new EventLog(Account, event.entityId(), List.of(event));
     assertEquals("hunter2", log.one(PasswordSet));
     assertEquals("hunter2", log.oneIfExists(PasswordSet).orElseThrow());
@@ -42,19 +42,25 @@ public class MaskedEventTest {
   /// A mask giving null stores no data, rather than the data unmasked
   @Test
   public void aMaskGivingNullStoresNoData() {
-    var event = new Event<>(UUID.randomUUID(), 1, PasswordSet, ZonedDateTime.now(), "hunter2", null);
+    var event = new Event<>(UUID.randomUUID(), 1, PasswordSet, ZonedDateTime.now(), "hunter2", _ -> null);
     assertEquals(null, event.getMarshalledData());
     assertEquals("hunter2", event.getUnmarshalledData());
     var built = onEvent(PasswordSet).toSelf().masked(_ -> null).assembleInput().output(d -> d);
     assertEquals(PasswordSet, built.eventType());
   }
 
+  /// The data is masked when it is first marshalled, which only storing it asks for
   @Test
-  public void anEventNotStoredCantBeADelayedEvent() {
-    var e = assertThrows(IllegalArgumentException.class, () -> onEvent(Touched).toSelf()
-        .assembleInput()
-        .trigger(Viewed).after(_ -> java.time.Duration.ofMinutes(1))
-        .output());
-    assertTrue(e.getMessage().startsWith("Viewed is not stored, so it can't be a delayed event"), e.getMessage());
+  public void aMaskIsAppliedOnlyWhenTheDataStoredIsAskedFor() {
+    var masked = new java.util.concurrent.atomic.AtomicInteger();
+    var event = new Event<>(UUID.randomUUID(), 1, PasswordSet, ZonedDateTime.now(), "hunter2", _ -> {
+      masked.incrementAndGet();
+      return "***";
+    });
+    assertEquals("hunter2", event.getUnmarshalledData());
+    assertEquals(0, masked.get());
+    assertEquals("***", new String(event.getMarshalledData()));
+    assertEquals("***", new String(event.data()));
+    assertEquals(1, masked.get());
   }
 }

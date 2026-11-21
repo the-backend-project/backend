@@ -66,26 +66,52 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
   /// The copies with rollback message creators, see [#withRollback(BiFunction)]
   private final Map<CopyKey, AtMostOnce<RQ, RRQ>> copies = new HashMap<>();
 
-  private record Shape<T1, T2, T3, T4, T5, T6, T7, RQ, RS>(
-      DataType<RQ> requestPayloadType,
-      DataType<RS> responsePayloadType,
-      ForwardAction forward,
-      Duration inflightTimeout,
-      com.github.thxmasj.backend.core.EntityModel processModel,
+  /// The callbacks of the outcomes of a request, events triggered on the entity of the process which dispatched it
+  record Callbacks<T1, T2, T3, T4, T5, T6, T7, RS>(
       Callback<EntityModel, T1> onPeerUnavailable,
       Callback<EntityModel, T2> onMissingResponse,
       Callback<HttpResponse<RS>, T3> onSuccess,
       Callback<HttpResponse<RS>, T4> onFailure,
-      Callback<HttpResponse<RS>, T7> onValidResponseUnknown, // Rollback
+      Callback<HttpResponse<RS>, T7> onValidResponseUnknown,
       Callback<Tuple2<HttpResponse<byte[]>, String>, T5> onInvalidResponseRejection,
-      Callback<Tuple2<HttpResponse<byte[]>, String>, T6> onInvalidResponseUnknown, // Rollback
+      Callback<Tuple2<HttpResponse<byte[]>, String>, T6> onInvalidResponseUnknown
+  ) {}
+
+  /// How a response is parsed, by a content parser or one aware of the request, and what its outcome is
+  record ResponseRules<RQ, RS>(
       Function<HttpResponse<byte[]>, Validated<RS>> contentParser,
       BiFunction<HttpRequest<RQ>, HttpResponse<byte[]>, Validated<RS>> requestAwareContentParser,
       Predicate<HttpResponse<RS>> isAccepted,
       Predicate<HttpResponse<RS>> isRejected,
-      Predicate<Tuple2<HttpResponse<byte[]>, String>> isRejectedByInvalidResponse,
+      Predicate<Tuple2<HttpResponse<byte[]>, String>> isRejectedByInvalidResponse
+  ) {}
+
+  /// What an at-most-once request is: its payloads, how it is sent, the process it is of, its callbacks, how its
+  /// responses are handled and what is masked of it in the event log
+  record Shape<T1, T2, T3, T4, T5, T6, T7, RQ, RS>(
+      DataType<RQ> requestPayloadType,
+      DataType<RS> responsePayloadType,
+      ForwardAction forward,
+      Duration inflightTimeout,
+      EntityModel processModel,
+      Callbacks<T1, T2, T3, T4, T5, T6, T7, RS> callbacks,
+      ResponseRules<RQ, RS> rules,
       Masking masking
   ) {
+
+    Callback<EntityModel, T1> onPeerUnavailable() {return callbacks.onPeerUnavailable();}
+    Callback<EntityModel, T2> onMissingResponse() {return callbacks.onMissingResponse();}
+    Callback<HttpResponse<RS>, T3> onSuccess() {return callbacks.onSuccess();}
+    Callback<HttpResponse<RS>, T4> onFailure() {return callbacks.onFailure();}
+    Callback<HttpResponse<RS>, T7> onValidResponseUnknown() {return callbacks.onValidResponseUnknown();}
+    Callback<Tuple2<HttpResponse<byte[]>, String>, T5> onInvalidResponseRejection() {return callbacks.onInvalidResponseRejection();}
+    Callback<Tuple2<HttpResponse<byte[]>, String>, T6> onInvalidResponseUnknown() {return callbacks.onInvalidResponseUnknown();}
+    Function<HttpResponse<byte[]>, Validated<RS>> contentParser() {return rules.contentParser();}
+    BiFunction<HttpRequest<RQ>, HttpResponse<byte[]>, Validated<RS>> requestAwareContentParser() {return rules.requestAwareContentParser();}
+    Predicate<HttpResponse<RS>> isAccepted() {return rules.isAccepted();}
+    Predicate<HttpResponse<RS>> isRejected() {return rules.isRejected();}
+    Predicate<Tuple2<HttpResponse<byte[]>, String>> isRejectedByInvalidResponse() {return rules.isRejectedByInvalidResponse();}
+
 
     /// The request as stored, masked as bytes. A body which can't be read as the payload once masked is stored as none.
     HttpRequest<RQ> maskedRequest(HttpRequest<RQ> request) {
@@ -255,146 +281,14 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
     return rollbackOnUnknownModel;
   }
 
-  public <T1, T2, T3, T4, T5, T6, T7, RS> AtMostOnce(
+  /// An at-most-once request of the shape, which [AtMostOnceBuilder] builds, with the rollback models created by the
+  /// suppliers, given the outbox request, or none if a supplier is null
+  AtMostOnce(
       String name,
       UUID id,
-      DataType<RQ> requestPayloadType,
-      DataType<RS> responsePayloadType,
-      HttpClient forwarder,
-      Duration inflightTimeout,
-      com.github.thxmasj.backend.core.EntityModel processModel,
-      Callback<EntityModel, T1> onPeerUnavailable,
-      Callback<EntityModel, T2> onMissingResponse,
-      Callback<HttpResponse<RS>, T3> onSuccess,
-      Callback<HttpResponse<RS>, T4> onFailure,
-      Callback<HttpResponse<RS>, T7> onValidResponseUnknown, // Rollback
-      Callback<Tuple2<HttpResponse<byte[]>, String>, T5> onInvalidResponseRejection,
-      Callback<Tuple2<HttpResponse<byte[]>, String>, T6> onInvalidResponseUnknown, // Rollback
-      Function<HttpResponse<byte[]>, Validated<RS>> contentParser,
-      BiFunction<HttpRequest<RQ>, HttpResponse<byte[]>, Validated<RS>> requestAwareContentParser,
-      Predicate<HttpResponse<RS>> isAccepted,
-      Predicate<HttpResponse<RS>> isRejected,
-      Predicate<Tuple2<HttpResponse<byte[]>, String>> isRejectedByInvalidResponse,
-      AtLeastOnce<RRQ> rollbackOnAcceptedModel,
-      AtLeastOnce<RRQ> rollbackOnUnknownModel
-  ) {
-    this(
-        name, id, requestPayloadType, responsePayloadType, forwarder, inflightTimeout, processModel, onPeerUnavailable,
-        onMissingResponse, onSuccess, onFailure, onValidResponseUnknown, onInvalidResponseRejection,
-        onInvalidResponseUnknown, contentParser, requestAwareContentParser, isAccepted, isRejected,
-        isRejectedByInvalidResponse, rollbackOnAcceptedModel, rollbackOnUnknownModel, Masking.CREDENTIALS
-    );
-  }
-
-  /// @param masking what of the request and response is masked in the event log, see [Masking]
-  public <T1, T2, T3, T4, T5, T6, T7, RS> AtMostOnce(
-      String name,
-      UUID id,
-      DataType<RQ> requestPayloadType,
-      DataType<RS> responsePayloadType,
-      HttpClient forwarder,
-      Duration inflightTimeout,
-      com.github.thxmasj.backend.core.EntityModel processModel,
-      Callback<EntityModel, T1> onPeerUnavailable,
-      Callback<EntityModel, T2> onMissingResponse,
-      Callback<HttpResponse<RS>, T3> onSuccess,
-      Callback<HttpResponse<RS>, T4> onFailure,
-      Callback<HttpResponse<RS>, T7> onValidResponseUnknown, // Rollback
-      Callback<Tuple2<HttpResponse<byte[]>, String>, T5> onInvalidResponseRejection,
-      Callback<Tuple2<HttpResponse<byte[]>, String>, T6> onInvalidResponseUnknown, // Rollback
-      Function<HttpResponse<byte[]>, Validated<RS>> contentParser,
-      BiFunction<HttpRequest<RQ>, HttpResponse<byte[]>, Validated<RS>> requestAwareContentParser,
-      Predicate<HttpResponse<RS>> isAccepted,
-      Predicate<HttpResponse<RS>> isRejected,
-      Predicate<Tuple2<HttpResponse<byte[]>, String>> isRejectedByInvalidResponse,
-      AtLeastOnce<RRQ> rollbackOnAcceptedModel,
-      AtLeastOnce<RRQ> rollbackOnUnknownModel,
-      Masking masking
-  ) {
-    this(
-        name,
-        id,
-        requestPayloadType,
-        responsePayloadType,
-        forwarder,
-        inflightTimeout,
-        processModel,
-        onPeerUnavailable,
-        onMissingResponse,
-        onSuccess,
-        onFailure,
-        onValidResponseUnknown,
-        onInvalidResponseRejection,
-        onInvalidResponseUnknown,
-        contentParser,
-        requestAwareContentParser,
-        isAccepted,
-        isRejected,
-        isRejectedByInvalidResponse,
-        _ -> rollbackOnAcceptedModel,
-        _ -> rollbackOnUnknownModel,
-        masking
-    );
-  }
-
-  public <T1, T2, T3, T4, T5, T6, T7, RS> AtMostOnce(
-      String name,
-      UUID id,
-      DataType<RQ> requestPayloadType,
-      DataType<RS> responsePayloadType,
-      HttpClient forwarder,
-      Duration inflightTimeout,
-      com.github.thxmasj.backend.core.EntityModel processModel,
-      Callback<EntityModel, T1> onPeerUnavailable,
-      Callback<EntityModel, T2> onMissingResponse,
-      Callback<HttpResponse<RS>, T3> onSuccess,
-      Callback<HttpResponse<RS>, T4> onFailure,
-      Callback<HttpResponse<RS>, T7> onValidResponseUnknown, // Rollback
-      Callback<Tuple2<HttpResponse<byte[]>, String>, T5> onInvalidResponseRejection,
-      Callback<Tuple2<HttpResponse<byte[]>, String>, T6> onInvalidResponseUnknown, // Rollback
-      Function<HttpResponse<byte[]>, Validated<RS>> contentParser,
-      BiFunction<HttpRequest<RQ>, HttpResponse<byte[]>, Validated<RS>> requestAwareContentParser,
-      Predicate<HttpResponse<RS>> isAccepted,
-      Predicate<HttpResponse<RS>> isRejected,
-      Predicate<Tuple2<HttpResponse<byte[]>, String>> isRejectedByInvalidResponse,
+      Shape<?, ?, ?, ?, ?, ?, ?, RQ, ?> shape,
       Function<AtMostOnce<RQ, RRQ>, AtLeastOnce<RRQ>> rollbackOnAcceptedModelSupplier,
       Function<AtMostOnce<RQ, RRQ>, AtLeastOnce<RRQ>> rollbackOnUnknownModelSupplier
-  ) {
-    this(
-        name, id, requestPayloadType, responsePayloadType, forwarder, inflightTimeout, processModel, onPeerUnavailable,
-        onMissingResponse, onSuccess, onFailure, onValidResponseUnknown, onInvalidResponseRejection,
-        onInvalidResponseUnknown, contentParser, requestAwareContentParser, isAccepted, isRejected,
-        isRejectedByInvalidResponse, rollbackOnAcceptedModelSupplier, rollbackOnUnknownModelSupplier, Masking.CREDENTIALS
-    );
-  }
-
-  /// @param masking what of the request and response is masked in the event log, besides [Masking#CREDENTIALS],
-  ///                which every at-most-once request masks. The request is never sent again from the event log, so it
-  ///                can be masked, but what reads it from the log, e.g. a request aware content parser in the session
-  ///                of the response, or a rollback message creator, gets it masked.
-  public <T1, T2, T3, T4, T5, T6, T7, RS> AtMostOnce(
-      String name,
-      UUID id,
-      DataType<RQ> requestPayloadType,
-      DataType<RS> responsePayloadType,
-      HttpClient forwarder,
-      Duration inflightTimeout,
-      com.github.thxmasj.backend.core.EntityModel processModel,
-      Callback<EntityModel, T1> onPeerUnavailable,
-      Callback<EntityModel, T2> onMissingResponse,
-      Callback<HttpResponse<RS>, T3> onSuccess,
-      Callback<HttpResponse<RS>, T4> onFailure,
-      Callback<HttpResponse<RS>, T7> onValidResponseUnknown, // Rollback
-      Callback<Tuple2<HttpResponse<byte[]>, String>, T5> onInvalidResponseRejection,
-      Callback<Tuple2<HttpResponse<byte[]>, String>, T6> onInvalidResponseUnknown, // Rollback
-      Function<HttpResponse<byte[]>, Validated<RS>> contentParser,
-      BiFunction<HttpRequest<RQ>, HttpResponse<byte[]>, Validated<RS>> requestAwareContentParser,
-      Predicate<HttpResponse<RS>> isAccepted,
-      Predicate<HttpResponse<RS>> isRejected,
-      Predicate<Tuple2<HttpResponse<byte[]>, String>> isRejectedByInvalidResponse,
-      Function<AtMostOnce<RQ, RRQ>, AtLeastOnce<RRQ>> rollbackOnAcceptedModelSupplier,
-      Function<AtMostOnce<RQ, RRQ>, AtLeastOnce<RRQ>> rollbackOnUnknownModelSupplier,
-      Masking masking
   ) {
     this.name = name;
     this.id = id;
@@ -405,26 +299,7 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
             name + " has no rollback message creator. Use the outbox request of its Dispatcher."
         ))
     );
-    this.shape = new Shape<>(
-        requestPayloadType,
-        responsePayloadType,
-        new ForwardAction(forwarder),
-        inflightTimeout,
-        processModel,
-        onPeerUnavailable,
-        onMissingResponse,
-        onSuccess,
-        onFailure,
-        onValidResponseUnknown,
-        onInvalidResponseRejection,
-        onInvalidResponseUnknown,
-        contentParser,
-        requestAwareContentParser,
-        isAccepted,
-        isRejected,
-        isRejectedByInvalidResponse,
-        Masking.CREDENTIALS.and(masking)
-    );
+    this.shape = shape;
     this.rollbackOnAcceptedModelSupplier = rollbackOnAcceptedModelSupplier;
     this.rollbackOnUnknownModelSupplier = rollbackOnUnknownModelSupplier;
     this.rollbackOnAcceptedModel = rollbackOnAcceptedModelSupplier != null ? rollbackOnAcceptedModelSupplier.apply(this) : null;

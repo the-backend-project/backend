@@ -22,6 +22,9 @@ import java.util.Set;
 class Traverser {
 
   private final Map<State, List<TransitionModel<?, ?>>> transitions;
+  /// Whether entities of the session only are of the model: all of them if it is not stored, and those an event not
+  /// stored creates otherwise
+  private final boolean hasEntitiesOfTheSessionOnly;
 
   public Traverser(Map<State, List<TransitionModel<?, ?>>> transitions) {
     this(transitions, true);
@@ -31,6 +34,9 @@ class Traverser {
   ///               stored must not change their state
   public Traverser(Map<State, List<TransitionModel<?, ?>>> transitions, boolean stored) {
     this.transitions = transitions;
+    this.hasEntitiesOfTheSessionOnly = !stored || transitions.getOrDefault(Begin, List.of()).stream()
+        .flatMap(transition -> leaves(transition).stream())
+        .anyMatch(leaf -> !leaf.eventType().stored());
     transitions.forEach(this::requireUniquePaths);
     if (stored) {
       var reached = statesOfStoredEntities();
@@ -106,6 +112,12 @@ class Traverser {
   /// are compared by identity since separately built reverse models can't be compared
   private static boolean isDistinguishable(TransitionModel<?, ?> a, TransitionModel<?, ?> b) {
     return !Objects.equals(a.toState(), b.toState()) || a.reverseModel() != b.reverseModel();
+  }
+
+  /// Whether entities of the session only are of the model, which the later calculations of a session find among the
+  /// events of the earlier ones
+  boolean hasEntitiesOfTheSessionOnly() {
+    return hasEntitiesOfTheSessionOnly;
   }
 
   public State currentState(EventLog eventLog) {

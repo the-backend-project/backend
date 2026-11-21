@@ -42,8 +42,14 @@ public abstract class ChangeState {
           .bind("type", event.type().id())
           .bindNullable("data", byte[].class, event.getMarshalledData());
     }
-    if (change.triggerType() != null) {
+    if (change.triggerType() == TriggerType.CONDITIONAL) {
       spec.bind("triggerId", change.triggerId());
+    }
+    if (change.firedTrigger() != null) {
+      if (change.firedTrigger().type() == TriggerType.CONDITIONAL)
+        spec.bind("triggerId", change.firedTrigger().id());
+      else
+        spec.bind("eventNumber", change.firedTrigger().eventNumber());
     }
     if (change.conditionalTrigger() != null) {
       spec
@@ -96,6 +102,29 @@ public abstract class ChangeState {
     /// The severity of this change's new event, for the listener of the state machine. It is not stored.
     default Severity severity() {
       return Severity.Info;
+    }
+
+    /// A stored trigger which fired an event not stored, which is deleted by this change, as no event stored deletes it
+    ///
+    /// @param eventNumber the number of the event it fired, which a delayed trigger has
+    record FiredTrigger(TriggerType type, UUID id, int eventNumber) {}
+
+    /// The stored trigger this change deletes, as it fired an event not stored, or null
+    default FiredTrigger firedTrigger() {
+      return null;
+    }
+
+    static Change fromFiredTrigger(EntityModel entityModel, UUID entityId, FiredTrigger firedTrigger) {
+      return new Change() {
+        @Override public EntityModel entityModel() {return entityModel;}
+        @Override public UUID entityId() {return entityId;}
+        @Override public Event<?> newEvent() {return null;}
+        @Override public DelayedEvent<?> delayedEvent() {return null;}
+        @Override public FiredTrigger firedTrigger() {return firedTrigger;}
+        @Override public String toString() {
+          return entityModel.name() + ":" + entityId + ":fired(" + firedTrigger.type() + "):" + firedTrigger.eventNumber();
+        }
+      };
     }
 
     /**
