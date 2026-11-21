@@ -104,7 +104,8 @@ public class BasicEventType<I, O> implements EventType<I, O> {
     return notStored(name, id, dataType, dataType);
   }
 
-  /// An event type which is not stored, see [EventType#stored()]
+  /// An event type which is not stored, see [EventType#stored()], e.g. one reading an entity for another entity to
+  /// assemble from, named `<subject> looked up`
   public static class NotStored<I, O> extends BasicEventType<I, O> {
 
     public NotStored(String name, UUID id, DataType<I> inputDataType, DataType<O> outputDataType) {
@@ -114,14 +115,6 @@ public class BasicEventType<I, O> implements EventType<I, O> {
     @Override
     public boolean stored() {
       return false;
-    }
-  }
-
-  /// An event type which is not stored, reading an entity, e.g. for another entity to assemble from
-  public static class ReadOnly<I, O> extends NotStored<I, O> {
-
-    public ReadOnly(String name, UUID id, DataType<I> inputDataType, DataType<O> outputDataType) {
-      super(name, id, inputDataType, outputDataType);
     }
   }
 

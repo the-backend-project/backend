@@ -120,7 +120,8 @@ public class SettlementTransitions {
 
     this.transitions = Map.of(
         Begin, List.of(
-            // TODO: BatchNumberLookedUp cannot be ReadOnly as it triggers a transition
+            // TODO: BatchNumberLookedUp, which is not stored, can't take this transition from Begin to Open: an event not
+            // stored creating an entity makes it one of the session only, so the batch would never be stored
 //            onEvent(BatchNumberLookedUp).to(Open)
 //                .assembleInput()
 //                .newIdentifier(AcquirerBatchNumber, d -> d)

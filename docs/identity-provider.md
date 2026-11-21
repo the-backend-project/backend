@@ -23,7 +23,8 @@ Entra ID, so they keep their single sign-on and no passwords are kept here.
 
 Every registration, authorization and token request is an entity of its own, so the event log is a complete record of
 who registered which clients, which users signed in to which clients, and which tokens were issued to whom, without the
-event log of a client growing with its tokens. A token request reads its client with a read-only event.
+event log of a client growing with its tokens. A token request reads its client with `Client looked up`, an event
+which is [not stored](entities.md#events-and-entities-not-stored).
 
 A refused token request is an event of [severity](monitoring.md#severity) `Warning`, so attempts to guess a secret
 show up in the monitoring. So are an authorization request with an unknown client or redirect URI, and a failed

@@ -8,7 +8,6 @@ import static com.github.thxmasj.backend.core.Tuples.tuple;
 import static com.github.thxmasj.backend.http.inbox.HttpInbox.Request;
 
 import com.github.thxmasj.backend.core.BasicEventType;
-import com.github.thxmasj.backend.core.BasicEventType.ReadOnly;
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EntityId;
 import com.github.thxmasj.backend.core.EntityModel;
@@ -88,7 +87,7 @@ public interface Clients {
       UUID.fromString("a9d4f1c7-3e62-4b8a-9f05-6c2e8d1b4a37"),
       DataType.json(Registration.class)
   );
-  EventType<Void, Registration> ClientLookedUp = new ReadOnly<>(
+  EventType<Void, Registration> ClientLookedUp = BasicEventType.notStored(
       "Client looked up",
       UUID.fromString("e2b7c9a4-58d1-4f6e-a3b0-9d4c1e7f2a86"),
       DataType.none(),

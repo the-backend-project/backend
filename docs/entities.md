@@ -69,7 +69,7 @@ The subject keeps an event type apart from the state it leads to, which is a bar
 | A request found to be invalid       | `<problem> detected`             | `Unknown merchant detected`               |
 | An id of an id entity model         | `<id> claimed`                   | `Client id claimed`, `Message id claimed` |
 | A key of an index entity model      | `<subject> referenced`/`indexed` | `Process referenced`, `Batch indexed`     |
-| A read-only event type              | `<subject> looked up`            | `Merchant looked up`, `Status looked up`  |
+| An entity read, not stored          | `<subject> looked up`            | `Merchant looked up`, `Status looked up`  |
 
 Event types are identified by their id, not by their name, so an event type can be renamed without migrating the
 events stored.
@@ -113,7 +113,7 @@ tested, drawn in the state diagrams and told the [monitoring](monitoring.md), wi
   a delayed event its transition triggers, which fires unless another event is stored first and replaces the delayed
   event pending on the entity, as one of a stored event does. Its transition can't have a conditional trigger, which
   refers to the event, and it can't be a delayed event itself, as a delayed trigger is deleted with the event it
-  fires. A read-only event type (`BasicEventType.ReadOnly`) is one.
+  fires. An event reading an entity, for another entity to assemble from, is one, named `<subject> looked up`.
 * **An entity of the session only** is created by an event which is not stored, i.e. one from `Begin`, or is of an
   entity model whose `stored()` is false, e.g. one of `EntityModel.notStored(name, id, transitions)`. None of its
   events are stored, whatever their types, so its transitions may go to any state, also on events not stored. It is found by the transitions of the session, but not after it, so it can't have delayed or

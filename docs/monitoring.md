@@ -108,7 +108,7 @@ Every accepted event is a line of JSON, here an outbox request which is given up
   entity id and event number of a line find the event there.
 * **Events are written when they have happened.** Delayed events and conditional triggers are not written when they
   are stored, but as events when they fire. Events which are [not stored](entities.md#events-and-entities-not-stored),
-  e.g. read-only events and the events of a request not stored, are written too, with `"stored":false` and no
+  e.g. those reading an entity and the events of a request not stored, are written too, with `"stored":false` and no
   `eventNumber`, as the event log does not have them.
 * **The events of a transaction are written together**, after it is committed, with those of an entity in the order
   of their numbers. They are written whether or not the one who triggered them still waits for them.
