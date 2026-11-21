@@ -55,7 +55,7 @@ public class TransitionModelBuilder<I, T, O> {
       List<Filter<?, ?, ?>> filters,
       TransitionModel<Data, Data> reverseModel,
       Severity severity,
-      BiFunction<TransitionContext<I>, O, O> mask
+      UnaryOperator<O> mask
   ) {
 
     /// The context of a transition on the event type to the state, or to itself if the state is null, with nothing
@@ -84,7 +84,7 @@ public class TransitionModelBuilder<I, T, O> {
       return new ModelContext<>(reversal, to, eventType, triggers, actions, filters, reverseModel, severity, mask);
     }
 
-    ModelContext<I, O> withMask(BiFunction<TransitionContext<I>, O, O> mask) {
+    ModelContext<I, O> withMask(UnaryOperator<O> mask) {
       return new ModelContext<>(reversal, to, eventType, triggers, actions, filters, reverseModel, severity, mask);
     }
 
@@ -267,13 +267,6 @@ public class TransitionModelBuilder<I, T, O> {
     /// A transition which chooses another one stores the event of the chosen transition, with the mask declared on that
     /// one.
     public WithToState<I, O> masked(UnaryOperator<O> mask) {
-      requireNonNull(mask, "mask is null");
-      return masked((_, output) -> mask.apply(output));
-    }
-
-    /// Masks the output of the transition when its event is stored, as [#masked(UnaryOperator)], by a mask which
-    /// depends on the transition, e.g. on the log of the entity
-    public WithToState<I, O> masked(BiFunction<TransitionContext<I>, O, O> mask) {
       return new WithToState<>(modelContext.withMask(requireNonNull(mask, "mask is null")));
     }
 
@@ -877,14 +870,12 @@ public class TransitionModelBuilder<I, T, O> {
   }
 
   /// The event of the transition with the output, stored masked if the transition has a mask
-  @SuppressWarnings("unchecked")
   private Event<O> event(InputStep<?> inputStep, O output) {
     int number = inputStep.log().lastEventNumber() + 1;
     if (modelContext.mask() == null)
       return new Event<>(inputStep.log().entityId(), number, modelContext.eventType(), inputStep.timestamp(), output);
     // Masked when it is stored, so an event which isn't stored is never masked
-    var context = (InputStep<I>) inputStep;
-    return new Event<>(inputStep.log().entityId(), number, modelContext.eventType(), inputStep.timestamp(), output, o -> modelContext.mask().apply(context, o));
+    return new Event<>(inputStep.log().entityId(), number, modelContext.eventType(), inputStep.timestamp(), output, modelContext.mask());
   }
 
   private TransitionModel<I, O> complete() {

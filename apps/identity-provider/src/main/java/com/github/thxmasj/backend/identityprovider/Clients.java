@@ -73,6 +73,11 @@ public interface Clients {
       redirectUris = redirectUris != null ? List.copyOf(redirectUris) : List.of();
     }
 
+    /// The registration on behalf of the client
+    Registration registeredBy(String clientId) {
+      return new Registration(clientId(), subject, secretHash, scopes, clientId, grantTypes, redirectUris);
+    }
+
   }
 
   EventType<String, String> ClientIdClaimed = BasicEventType.of(
@@ -99,7 +104,14 @@ public interface Clients {
   ///
   /// @param secret the secret of the client, or null if the registrar gave the hash of a secret of its own, e.g. of a
   ///               bootstrapped or imported client
-  record RegistrationRequest(Registration registration, String secret) {}
+  record RegistrationRequest(Registration registration, String secret) {
+
+    /// The registration on behalf of the client, the subject its access token is authorized for
+    RegistrationRequest registeredBy(String clientId) {
+      return new RegistrationRequest(registration.registeredBy(clientId), secret);
+    }
+
+  }
 
   EventType<RegistrationRequest, Void> RegistrationRequested = BasicEventType.of(
       "Registration requested",

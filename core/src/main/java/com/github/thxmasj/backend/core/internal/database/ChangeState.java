@@ -221,19 +221,12 @@ public abstract class ChangeState {
           return entityModel().name() + ":" +
               entityId() + ":ev:[" +
               newEvent().typeName() + "]:" +
-              newEvent().eventNumber() + ":data=" +
-              // As stored, so that what is masked isn't written to the debug output
-              (newEvent().getMarshalledData() != null ? capString(new String(newEvent().getMarshalledData(), java.nio.charset.StandardCharsets.UTF_8)) : "N/A") +
+              // Without the data, which may be a secret, and which would be marshalled just for the debug output
+              newEvent().eventNumber() +
               (!newEvent().type().stored() ? " (not stored)" : "");
         }
 
       };
-    }
-
-    private static String capString(String s) {
-      if (s == null) return null;
-      if (s.length() > 50) return s.replace("\n", "↵").substring(0, 50) + "...";
-      return s;
     }
 
     static Change fromDelayedEvent(DelayedEvent<?> delayedEvent) {

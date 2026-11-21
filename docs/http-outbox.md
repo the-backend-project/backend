@@ -237,8 +237,10 @@ HttpOutboxRequest.atMostOnce()
 ```
 
 The request is sent, and its response given to the callbacks, as they are: only the events stored are masked. What
-reads the request from the event log later gets it masked, e.g. a request aware content parser, which parses the
-response in a later session, and the rollback message creator. A body which can't be read as the payload once masked,
+reads the request from the event log later gets it masked: a request aware content parser, which parses the response
+in a later calculation, and the rollback message creator, which must create what is masked itself, e.g. take a new
+access token rather than copy the request's `Authorization`, as the rollback is sent. A body which can't be read as
+the payload once masked,
 e.g. a masked JSON body, is stored as none. An `AtLeastOnce` request is sent again from its event log, so it can't be
 masked ([#305](https://github.com/the-backend-project/backend/issues/305)).
 

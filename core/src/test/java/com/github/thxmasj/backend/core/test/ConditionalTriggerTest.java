@@ -89,7 +89,12 @@ public class ConditionalTriggerTest {
       UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b0d"),
       DataType.uuid()
   );
-  /// Not stored, so its conditional trigger is deleted by a change of its own when it fires
+  static EventType<Void, Void> BatchNoted = BasicEventType.of(
+      "Batch noted",
+      UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b0f")
+  );
+  /// Not stored, so its conditional trigger is deleted by a change of its own when it fires, also as its transition
+  /// stores another event on the batch
   static EventType<Void, Void> BatchChecked = BasicEventType.notStored(
       "Batch checked",
       UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b0e")
@@ -147,7 +152,10 @@ public class ConditionalTriggerTest {
                 .on(Batch)
                 .identifiedBy(entityIdFromSession())
                 .output(),
-            onEvent(BatchChecked).toSelf().output(),
+            onEvent(BatchChecked).toSelf()
+                .trigger(BatchNoted).on(Batch).identifiedBy(entityIdFromSession())
+                .output(),
+            onEvent(BatchNoted).toSelf().output(),
             onEvent(SessionBatchCloseRequestedWhenShipped).to(BatchStates.Waiting)
                 .assemble(c -> c.input())
                 .trigger(BatchClosed)
@@ -176,7 +184,7 @@ public class ConditionalTriggerTest {
   private EventLog batchLog(UUID batchId) {
     return eventsByEntityId.execute(
         Batch,
-        List.of(BatchOpened, BatchCloseRequestedWhenShipped, SessionBatchCloseRequestedWhenShipped, BatchCloseRequestedWhenShippedOrCancelled, BatchCheckRequestedWhenShipped, BatchClosed),
+        List.of(BatchOpened, BatchCloseRequestedWhenShipped, SessionBatchCloseRequestedWhenShipped, BatchCloseRequestedWhenShippedOrCancelled, BatchCheckRequestedWhenShipped, BatchNoted, BatchClosed),
         batchId
     ).block();
   }
@@ -212,8 +220,10 @@ public class ConditionalTriggerTest {
     long deadline = System.currentTimeMillis() + Duration.ofSeconds(10).toMillis();
     while (System.currentTimeMillis() < deadline && conditionalTriggerCount() > 0) Thread.sleep(200);
     assertEquals(0, conditionalTriggerCount());
-    // Batch checked is not stored
-    assertEquals(2, batchEventCount(machine, batch.entityId()));
+    // Batch checked is not stored, but Batch noted, which it triggers, is
+    awaitBatchEvents(machine, batch.entityId(), 3);
+    assertEquals(3, batchEventCount(machine, batch.entityId()));
+    assertEquals(0, conditionalTriggerCount());
   }
 
   @Test

@@ -56,6 +56,20 @@ public class NotStoredTest {
   static EventType<Void, Void> TouchScheduled = BasicEventType.of("Touch scheduled", UUID.fromString("5f7b9d1e-3a4c-4e68-8afc-1e3f5a7b9dd5"));
   static EventType<Void, Void> TouchScheduledQuietly = BasicEventType.notStored("Touch scheduled quietly", UUID.fromString("7b9d1f3a-5c6e-4a8a-ac1e-3f5a7b9dbff7"));
 
+  /// Sets a timeout on its entity, which a watcher of the entity cancels at once, in the same calculation
+  static EventType<Void, Void> TimeoutSet = BasicEventType.of("Timeout set", UUID.fromString("9d1f3b5c-7e8a-4c0e-b2d4-f6a8c0e2a419"));
+  static EventType<Void, Void> AccountTimedOut = BasicEventType.of("Account timed out", UUID.fromString("b1f3d5e7-9a0c-4e2a-84f6-a8c0e2a4c63b"));
+  static EventType<UUID, UUID> WatchStarted = BasicEventType.of("Watch started", UUID.fromString("d3b5f7a9-1c2e-4a4c-a6a8-c0e2a4c6e85d"), DataType.uuid());
+  static EntityModel Watcher = EntityModel.of("Watcher", UUID.fromString("f5d7b9c1-3e4a-4c6e-88ca-e2a4c6e8a07f"), () -> Map.<State, List<TransitionModel<?, ?>>>of(
+      Begin, List.of(
+          onEvent(WatchStarted).to(VisitStates.Open)
+              .assembleInput()
+              .trigger(AccountTouched).on(NotStoredTest.Account).identifiedBy(account -> entityId(account))
+              .output(d -> d.t1())
+      ),
+      VisitStates.Open, List.of()
+  ));
+
   /// Not stored, and schedules a stored event on its entity
   static EventType<Void, Void> ReminderScheduled = BasicEventType.notStored("Reminder scheduled", UUID.fromString("8e2c4a6f-0b1d-4f37-95e9-a3c5e7b9d148"));
   static EventType<String, String> PasswordSet = BasicEventType.of("Password set", UUID.fromString("6a1f3c5e-8b2d-4e90-a7c4-d9e1b3f5a768"), DataType.string());
@@ -113,7 +127,7 @@ public class NotStoredTest {
   );
 
   private static List<EntityModel> entityModels() {
-    return List.of(Account, Views, SignIn, Session, Visit);
+    return List.of(Account, Views, SignIn, Session, Visit, Watcher);
   }
 
   private static Map<State, List<TransitionModel<?, ?>>> accountTransitions() {
@@ -127,6 +141,12 @@ public class NotStoredTest {
                 .assemble(c -> c.log().entityId())
                 .trigger(ViewRecorded).with(id -> id).on(Views).identifiedBy(newEntityId())
                 .output(),
+            onEvent(TimeoutSet).toSelf()
+                .assemble(c -> c.log().entityId())
+                .trigger(AccountTimedOut).after(_ -> Duration.ofMillis(100))
+                .trigger(WatchStarted).with(account -> account).on(Watcher).identifiedBy(newEntityId())
+                .output(),
+            onEvent(AccountTimedOut).toSelf().output(),
             onEvent(TouchScheduled).toSelf()
                 .assembleInput()
                 .trigger(AccountTouched).after(_ -> Duration.ofMillis(100))
@@ -294,5 +314,17 @@ public class NotStoredTest {
       events = events(log(Account, List.of(AccountOpened, AccountTouched), account));
     }
     assertEquals(List.of("1:Account opened", "2:Account touched"), events);
+  }
+
+  /// An event stored on the entity after the transition setting a timeout, in the same calculation, cancels it
+  @Test
+  public void aDelayedEventIsCancelledByAnEventStoredLaterInTheSameCalculation() throws InterruptedException {
+    UUID account = machine.onEvent(trigger(AccountOpened, Account), "a").blockFirst().entityId();
+    machine.onEvent(trigger(TimeoutSet, Account, account), null).blockFirst(Duration.ofSeconds(10));
+
+    for (int i = 0; i < 50 && delayedTriggerCount(account) > 0; i++)
+      Thread.sleep(200);
+    assertEquals(0, delayedTriggerCount(account));
+    assertEquals(List.of("1:Account opened", "2:Timeout set", "3:Account touched"), events(log(Account, List.of(AccountOpened, TimeoutSet, AccountTouched, AccountTimedOut), account)));
   }
 }

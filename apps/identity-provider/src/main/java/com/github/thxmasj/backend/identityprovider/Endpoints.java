@@ -11,6 +11,7 @@ import com.github.thxmasj.backend.http.HttpRequest;
 import com.github.thxmasj.backend.http.HttpRequest.Method;
 import com.github.thxmasj.backend.http.HttpResponse;
 import com.github.thxmasj.backend.http.inbox.AccessTokenVerifier.AccessToken;
+import com.github.thxmasj.backend.http.inbox.Authorization;
 import com.github.thxmasj.backend.http.inbox.Form;
 import com.github.thxmasj.backend.http.inbox.HttpInbox;
 import com.github.thxmasj.backend.http.inbox.OpenIdConnectClient;
@@ -19,15 +20,14 @@ import com.github.thxmasj.backend.identityprovider.Inbox.Reply;
 import java.net.URI;
 import java.time.Duration;
 import java.util.Base64;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.WeakHashMap;
 import java.util.function.Supplier;
+import java.util.function.BiFunction;
 
 /// The endpoints of the identity provider: what the inbox requests do with the credentials of the requests, and the
 /// requests answered at once. Credentials are handled in the session of a request and kept out of the event log:
@@ -67,22 +67,10 @@ final class Endpoints {
     return upstream;
   }
 
-  /// The answers of the requests answered at once, by the request, as the inbox request of the requests answered at once
-  /// asks for it both when matching a request and when parsing it. They are kept while the request is. A request which
-  /// is processed is checked again by its content parser, e.g. its access token verified, so an answer of an equal
-  /// request kept a while longer lets nothing through.
-  private final Map<HttpRequest<byte[]>, Optional<HttpResponse<byte[]>>> answers = Collections.synchronizedMap(new WeakHashMap<>());
-
-  /// The response of a request answered at once, or null for a request for the entities of the identity provider. It
-  /// is computed outside the lock of the answers, as it may verify a token, so requests are answered in parallel, and a
-  /// request asked for twice at once is answered twice, alike.
+  /// The response of a request answered at once, or null for a request for the entities of the identity provider. A
+  /// request with an access token is processed, and its token verified by the authorizer of its inbox request.
   HttpResponse<byte[]> immediate(HttpRequest<byte[]> request) {
-    Optional<HttpResponse<byte[]>> known = answers.get(request);
-    if (known == null) {
-      known = Optional.ofNullable(answer(request));
-      answers.put(request, known);
-    }
-    return known.orElse(null);
+    return answer(request);
   }
 
   /// The access token, if it is valid. It is verified each time, rather than remembered, so that an expired token is
@@ -108,7 +96,7 @@ final class Endpoints {
           return request.method() == Method.GET ? callbackRefusal(request) : methodNotAllowed("GET");
         }
         case "/userinfo" -> {
-          return request.method() == Method.GET ? userInfoRefusal(request) : methodNotAllowed("GET");
+          return request.method() == Method.GET ? withoutToken(request) : methodNotAllowed("GET");
         }
         default -> {}
       }
@@ -118,7 +106,7 @@ final class Endpoints {
       case "/.well-known/jwks.json" -> get(request, () -> response(200, "OK", "application/jwk-set+json", keys.publicKeys()));
       case "/.well-known/oauth-authorization-server" -> get(request, () -> response(200, "OK", "application/json", metadata));
       case "/token" -> request.method() == Method.POST ? tokenRefusal(request) : methodNotAllowed("POST");
-      case "/clients" -> request.method() != Method.POST ? methodNotAllowed("POST") : isInternal(request) ? null : registrationRefusal(request);
+      case "/clients" -> request.method() != Method.POST ? methodNotAllowed("POST") : isInternal(request) ? null : withoutToken(request);
       default -> response(404, "Not Found", null, null);
     };
   }
@@ -245,30 +233,16 @@ final class Endpoints {
 
   // The registration endpoint
 
-  /// The refusal of a registration without an access token with the registration scope, or null
-  private HttpResponse<byte[]> registrationRefusal(HttpRequest<byte[]> request) {
-    String authorization = request.headerValue("Authorization");
-    if (authorization == null || !authorization.regionMatches(true, 0, "Bearer ", 0, 7))
-      return bearerError(401, null, null, null);
-    Optional<AccessToken> principal = verify(authorization.substring(7).trim());
-    if (principal.isEmpty())
-      return bearerError(401, "invalid_token", "The access token is invalid or expired", null);
-    if (!principal.get().scopes().contains(Clients.RegistrationScope))
-      return bearerError(403, "insufficient_scope", "The access token lacks the scope " + Clients.RegistrationScope, Clients.RegistrationScope);
-    return null;
+  /// Authorizes a registration for the client of its access token, which must have the registration scope
+  Authorization registrationAuthorization(HttpRequest<byte[]> request, Clients.RegistrationRequest registration) {
+    return bearer(request, Clients.RegistrationScope, (_, principal) -> Optional.of(principal.clientId()));
   }
 
-  /// A registration on behalf of the client of the access token. The secret of the new client is generated here, so
-  /// only its hash enters the event log, and the secret the response, which the event log masks.
+  /// A registration, on behalf of the client the authorizer authorizes it for. The secret of the new client is
+  /// generated here, so only its hash enters the event log, and the secret the response, which the event log masks.
   Validated<Clients.RegistrationRequest> registration(HttpRequest<byte[]> request) {
-    Optional<AccessToken> verified = verify(request.headerValue("Authorization").substring(7).trim())
-        .filter(token -> token.scopes().contains(Clients.RegistrationScope));
-    // Checked by the answer at once, unless the token has expired since
-    if (verified.isEmpty())
-      return invalid("The access token is invalid or expired");
-    AccessToken principal = verified.get();
     String secret = Secrets.generate();
-    Validated<Clients.Registration> registration = Inbox.registration(request, principal.clientId(), Secrets.hash(secret));
+    Validated<Clients.Registration> registration = Inbox.registration(request, Secrets.hash(secret));
     return registration.isInvalid() ?
         invalid(registration.invalidReason()) :
         valid(new Clients.RegistrationRequest(registration.validValue(), secret));
@@ -376,26 +350,46 @@ final class Endpoints {
     return Form.parse(raw != null ? raw.getBytes(UTF_8) : null);
   }
 
-  /// The refusal of a request to the UserInfo endpoint of OpenID Connect Core section 5.3 without a valid access
-  /// token with the scope `openid`, or null
-  private HttpResponse<byte[]> userInfoRefusal(HttpRequest<byte[]> request) {
-    String authorization = request.headerValue("Authorization");
-    if (authorization == null || !authorization.regionMatches(true, 0, "Bearer ", 0, 7))
-      return bearerError(401, null, null, null);
-    String token = authorization.substring(7).trim();
-    Optional<AccessToken> principal = verify(token);
-    Optional<String> tokenId = principal.flatMap(_ -> Keys.tokenId(token));
-    if (tokenId.isEmpty())
-      return bearerError(401, "invalid_token", "The access token is invalid or expired", null);
-    if (!principal.get().scopes().contains("openid"))
-      return bearerError(403, "insufficient_scope", "The access token lacks the scope openid", "openid");
-    return null;
+  /// Authorizes a request to the UserInfo endpoint of OpenID Connect Core section 5.3 for the `jti` of its access token,
+  /// which must have the scope `openid`
+  Authorization userInfoAuthorization(HttpRequest<byte[]> request, String tokenId) {
+    return bearer(request, "openid", (token, _) -> Keys.tokenId(token));
   }
 
-  /// The `jti` of the verified access token of a UserInfo request, the entity id of the token request which issued it
-  Validated<String> tokenId(HttpRequest<byte[]> request) {
-    String token = request.headerValue("Authorization").substring(7).trim();
-    return verify(token).flatMap(_ -> Keys.tokenId(token)).map(Validated::valid).orElseGet(() -> invalid("Unauthenticated"));
+  /// Authorizes a request with a valid access token with the scope, for the subject of the token, or refuses it as
+  /// RFC 6750 section 3 says
+  private Authorization bearer(HttpRequest<byte[]> request, String scope, BiFunction<String, AccessToken, Optional<String>> subject) {
+    String token = bearerToken(request);
+    if (token == null)
+      return bearerRefusal(401, null, null, null);
+    Optional<AccessToken> principal = verify(token);
+    Optional<String> authorized = principal.flatMap(p -> subject.apply(token, p));
+    if (authorized.isEmpty())
+      return bearerRefusal(401, "invalid_token", "The access token is invalid or expired", null);
+    if (!principal.get().scopes().contains(scope))
+      return bearerRefusal(403, "insufficient_scope", "The access token lacks the scope " + scope, scope);
+    return Authorization.authorized(authorized.get());
+  }
+
+  /// The refusal of RFC 6750 section 3 of a request without an access token, or null if it has one, which the
+  /// authorizer of its inbox request verifies
+  private HttpResponse<byte[]> withoutToken(HttpRequest<byte[]> request) {
+    return bearerToken(request) == null ? bearerError(401, null, null, null) : null;
+  }
+
+  /// The bearer token of the request, or null if it has none
+  private static String bearerToken(HttpRequest<byte[]> request) {
+    String authorization = request.headerValue("Authorization");
+    if (authorization == null || !authorization.regionMatches(true, 0, "Bearer ", 0, 7))
+      return null;
+    return authorization.substring(7).trim();
+  }
+
+  /// The `jti` of the access token of a UserInfo request, the entity id of the token request which issued it, or null
+  /// if it has none. The authorizer verifies the token.
+  static Validated<String> tokenId(HttpRequest<byte[]> request) {
+    String token = bearerToken(request);
+    return valid(token != null ? Keys.tokenId(token).orElse(null) : null);
   }
 
   /// The UserInfo response, or the refusal of a token which is not one of a user, e.g. of the client credentials grant
@@ -502,12 +496,23 @@ final class Endpoints {
   ///
   /// @param scope the scope required, for insufficient_scope
   private HttpResponse<byte[]> bearerError(int status, String error, String description, String scope) {
+    return new HttpResponse<>(status, status == 401 ? "Unauthorized" : "Forbidden", Map.of("WWW-Authenticate", bearerChallenge(error, description, scope)), null);
+  }
+
+  private Authorization bearerRefusal(int status, String error, String description, String scope) {
+    return new Authorization.Refused(status, bearerChallenge(error, description, scope), description != null ? description : "An access token is required");
+  }
+
+  /// The challenge of RFC 6750 section 3
+  ///
+  /// @param scope the scope required, for insufficient_scope
+  private String bearerChallenge(String error, String description, String scope) {
     var challenge = new StringBuilder("Bearer realm=\"" + keys.issuer() + "\"");
     if (error != null)
       challenge.append(", error=\"").append(error).append("\", error_description=\"").append(description).append("\"");
     if (scope != null)
       challenge.append(", scope=\"").append(scope).append("\"");
-    return new HttpResponse<>(status, status == 401 ? "Unauthorized" : "Forbidden", Map.of("WWW-Authenticate", challenge.toString()), null);
+    return challenge.toString();
   }
 
   private static Map<String, String> noStore(Map<String, String> headers) {

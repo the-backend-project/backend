@@ -126,9 +126,9 @@ tested, drawn in the state diagrams and told the [monitoring](monitoring.md), wi
   given to the one who triggered it and is told the listener. It is not written to the event log, so the state of an
   entity must not depend on it: on an entity which is stored, its transitions stay in their state (`toSelf()`), which
   the state machine checks when it is created. The next event stored on the entity takes its event number. A delayed
-  event is numbered after the last event stored on its entity, so one triggered by the transition of an event not
-  stored, also one chosen, fires unless another event is stored first, and replaces the delayed event pending on the
-  entity, as one of a stored event does. Its transition can't have a conditional trigger, which refers to the event.
+  event fires unless another event is stored on its entity first: it is numbered after the event of its transition,
+  or of the transition chosen, if that is stored, and with its number if it isn't, and it replaces the delayed event
+  pending on the entity. Its transition can't have a conditional trigger, which refers to the event.
   A delayed or conditional trigger may fire an event which isn't stored: the trigger is deleted with the changes of
   the event, as it is when the event is stored. An event reading an entity, for another entity to assemble from, is one, named `<subject> looked up`.
 * **An entity of the session only** is created by an event which is not stored, i.e. one from `Begin`, or is of an

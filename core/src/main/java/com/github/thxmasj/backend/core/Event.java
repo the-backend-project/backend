@@ -95,6 +95,15 @@ public final class Event<T> {
     return type.name();
   }
 
+  /// The event as it is stored, e.g. masked, as a later calculation reads it from the event log
+  public Event<T> asStored() {
+    if (storedForm == null)
+      return this;
+    var stored = new Event<>(entityId, eventNumber, type, timestamp);
+    stored.data = getMarshalledData();
+    return stored;
+  }
+
   /// The data as it is stored, see [#getMarshalledData()]
   public byte[] data() {
     return getMarshalledData();

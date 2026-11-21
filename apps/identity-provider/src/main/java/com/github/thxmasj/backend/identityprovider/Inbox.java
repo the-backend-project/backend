@@ -163,8 +163,9 @@ public interface Inbox {
     return HttpInboxRequest
         .matching(m -> m.method() == Method.POST && m.uri().getPath().equals("/clients"))
         .contentParser(endpoints::registration)
+        .authorizer(endpoints::registrationAuthorization)
         .masking(Masking.responseBody())
-        .process(Clients.RegistrationRequested, Clients.ClientRegistration, r -> r.body(), newEntity())
+        .process(Clients.RegistrationRequested, Clients.ClientRegistration, r -> r.body().registeredBy(r.authorizedSubject()), newEntity())
         .response(ReplyCreated, Endpoints::registered)
         .build("RegistrationHttpRequest", UUID.fromString("f7a2c6e9-4d15-4b83-9e0a-1c5d8b3f6e24"));
   }
@@ -198,7 +199,8 @@ public interface Inbox {
   static HttpInboxRequest<String> userInfoHttpRequest(EntityModel tokenRequest, Endpoints endpoints) {
     return HttpInboxRequest
         .matching(m -> m.method() == Method.GET && m.uri().getPath().equals("/userinfo"))
-        .contentParser(endpoints::tokenId)
+        .contentParser(Endpoints::tokenId)
+        .authorizer(endpoints::userInfoAuthorization)
         .process(Tokens.UserInfoRequested, tokenRequest, (_, tokenId) -> HttpInboxRequest.entityId(tokenId))
         .response(ReplyCreated, endpoints::userInfoResponse)
         .build("UserInfoHttpRequest", UUID.fromString("1d6e8f3a-9b2c-4c7d-a5e0-3f8b6d1c9e24"));
@@ -329,7 +331,16 @@ public interface Inbox {
   /// @param registeredBy the client id of the client registering the client
   /// @param secretHash   the hash of the secret of the client
   static Validated<Registration> registration(HttpRequest<byte[]> request, String registeredBy, String secretHash) {
-    if (registeredBy == null || secretHash == null)
+    if (registeredBy == null)
+      return invalid("Unauthenticated");
+    Validated<Registration> registration = registration(request, secretHash);
+    return registration.isInvalid() ? registration : valid(registration.validValue().registeredBy(registeredBy));
+  }
+
+  /// A registration of the request's body, with the hash of the secret generated for the client, on behalf of no client
+  /// yet
+  static Validated<Registration> registration(HttpRequest<byte[]> request, String secretHash) {
+    if (secretHash == null)
       return invalid("Unauthenticated");
     JsonNode body;
     try {
@@ -365,7 +376,7 @@ public interface Inbox {
         subject != null ? subject.asString() : null,
         secretHash,
         scope != null ? Scopes.parse(scope.asString()) : List.of(),
-        registeredBy,
+        null,
         grantTypes,
         redirectUris
     ));
