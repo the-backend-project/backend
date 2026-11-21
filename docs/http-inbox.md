@@ -67,8 +67,11 @@ The `HttpInboxListener` receives HTTP requests with reactor-netty and passes the
 is created for every request, of the inbox's `requestRouting()`, and routes it to a new entity of the first inbox
 request matching it. Its transitions depend on the inbox requests, so each inbox has a routing model of its own, and
 starting a request on it takes the inbox's `trigger()`. The inbox requests give their responses to the routing model of
-the session, whichever inbox it is of. The routing models of all inboxes have the same id, by which their entities are
-stored. A request no inbox request matches is answered with 400 Bad Request. The inbox request validates the request: its body, message id,
+the session, whichever inbox it is of. The routing models of all inboxes have the same id. A `RequestRouting` entity is
+an [entity of the session only](entities.md#events-and-entities-not-stored): it is not stored, as the inbox request
+stores the request and the response, but it is found by every calculation of the session of the request, e.g. the one
+of the callback of an outbox request which the application answers in. A request no inbox request matches is answered
+with 400 Bad Request, and not stored either. The inbox request validates the request: its body, message id,
 authorization and the entity it selects. If it is valid, the inbox request triggers the event on the application's
 entity and waits for the application to respond.
 
@@ -184,15 +187,17 @@ A rollback finds the request, and the request finds the events to roll back, thr
 involved. Here a `DELETE /orders/42` rolls back the `PUT /orders/42` of the `PlaceOrder` inbox request, whose process
 placed an order. Each entity is a box, like a class in a class diagram, with the name of its entity model, and the kind
 of entity as a stereotype unless it is a plain entity model, over its events, the oldest on top. The `MessageIds`
-entity has the same entity id as the `PlaceOrder` entity. An event in italics, with a dashed border, leads to a choice
-and is not stored: only the event of the chosen transition is. Solid arrows are triggers, and dashed arrows the event
-references:
+entity has the same entity id as the `PlaceOrder` entity. An event in italics, with a dashed border, is not stored: it
+leads to a choice, of which only the event of the chosen transition is stored, or is of an entity of the session only,
+a box with a dashed border, as the `RequestRouting` entities are. Solid arrows are triggers, and dashed arrows the
+event references:
 
 <object data="../images/com.github.thxmasj.backend.http.inbox.Rollback.svg" type="image/svg+xml"></object>
 
 [Open the rollback diagram in full size](images/com.github.thxmasj.backend.http.inbox.Rollback.svg)
 
-1. Each HTTP request is received by a `RequestRouting` entity of its own, which routes it to its inbox request.
+1. Each HTTP request is received by a `RequestRouting` entity of its own, of the session only, which routes it to its
+   inbox request.
 2. A valid request claims its message id, the subject and the id its `deduplicateOn` gives, on the `MessageIds` entity
    with the same entity id as the request's own entity, unless an earlier request or rollback has claimed it.
 3. The process of the request triggers its event on the application, here `Order placed` as event `n` of the order.
@@ -328,8 +333,7 @@ event log by [masking](#masking) and by redeeming the code in the transition of 
 
 ## Keeping secrets and bulky data out of the event log
 
-The inbox stores every request it receives, and every response it gives, in the event logs of the `RequestRouting`
-entity and the inbox request. Some of it is better left out: credentials, e.g. a session cookie, an authorization code,
+The inbox stores every request it routes, and every response it gives, in the event log of the inbox request. Some of it is better left out: credentials, e.g. a session cookie, an authorization code,
 an ID token or a client secret, bulky or derived data, e.g. an HTML page rendered from other entities, and requests of
 no interest, e.g. for static files or health checks. Rather than handling them in a filter in front of the inbox, an
 inbox request can mask what it stores, or not store its requests at all, so the work is done in transitions, which are
@@ -370,9 +374,8 @@ The monitoring writes no data of the events, and the [backoffice](backoffice.md)
 
 ### Requests not stored
 
-An inbox request with `notStored()` stores neither its requests nor their `RequestRouting` entities: the request is
-routed by `Request routed, not stored`, an event which is not stored, and the inbox request is an entity model which
-is not stored, so both are [entities of the session only](entities.md#events-and-entities-not-stored). The event its
+An inbox request with `notStored()` doesn't store its requests: it is an entity model which is not stored, so its
+requests, like their `RequestRouting` entities, are [entities of the session only](entities.md#events-and-entities-not-stored). The event its
 process triggers on the application is stored if it is of a stored type, so a request not stored can still change an
 entity which is. It suits requests for static files and health checks, pages rendered from other entities, and the
 like:
@@ -387,11 +390,12 @@ HttpInboxRequest<Void> HealthCheck = HttpInboxRequest
     .build("HealthCheck", UUID.fromString("..."));
 ```
 
-A request not stored can't be found after its session, so:
+A request not stored is found by the calculations of its [session](entities.md#sessions) only, so:
 
 - it can't be deduplicated, as a retry is recognised by the first request stored, so `deduplicateOn` is refused, and
   without it there is no `rollback`;
-- the application must respond in the session of the request, e.g. not by the callback of an outbox request;
+- the application must respond in the session of the request, e.g. by the callback of an outbox request, but not by a
+  delayed or conditional trigger, which fires in a session of its own;
 - it is not indexed by the entity of the application, as the [requests of an entity](#the-requests-of-an-entity) are.
 
 The events of a request not stored are still told the listener, and the [monitoring](monitoring.md#the-lines) writes

@@ -821,26 +821,50 @@ public class StateMachine implements AutoCloseable {
         .switchIfEmpty(Mono.error(() -> new UnknownEntity(entityModel, selector.type(), selector.id())));
   }
 
+  /// The log of the entity of the model the session has, as it was given to its transition, searched in the calculation
+  /// of the step and then in the calculations of the session before it
   private EventLog logFromSteps(TransitionStep<?> context, EntityModel entityModel) {
-    for (var c = context; c != null; c = c.previous()) {
-      if (c instanceof InputStep<?> i && EntityModelGroup.targets(entityModel, i.log().entityModel())) {
-        return i.log();
-      }
-    }
-    InputStep<?> initial = null;
-    for (var c = context; c != null; c = c.previous()) {
-      if (c instanceof InputStep<?> i) initial = i;
-    }
-    for (var c = initial.stage1(); c != null; c = c.previous()) {
-      if (c instanceof InputStep<?> i && EntityModelGroup.targets(entityModel, i.log().entityModel())) {
-        return i.log();
+    for (var calculation = context; calculation != null; calculation = previousCalculation(calculation)) {
+      for (var c = calculation; c != null; c = c.previous()) {
+        if (c instanceof InputStep<?> i && EntityModelGroup.targets(entityModel, i.log().entityModel())) {
+          return i.log();
+        }
       }
     }
     throw new NoSuchElementException(entityModel.name() + " not found in transition step");
   }
 
-  /// An id entity or index entity has the same entity id as its entity, so the entity model is matched too
+  /// The tail of the calculation of the session the calculation of the step follows, i.e. the one whose action gave the
+  /// event it calculates, or null if it is the first calculation of its session. A calculation is stored in a
+  /// transaction of its own, and the calculations of a session are linked by the first step of each, which refers to the
+  /// one before.
+  private static TransitionStep<?> previousCalculation(TransitionStep<?> step) {
+    InputStep<?> initial = null;
+    for (var c = step; c != null; c = c.previous()) {
+      if (c instanceof InputStep<?> i) initial = i;
+    }
+    return initial != null ? initial.stage1() : null;
+  }
+
+  /// The log of the entity as the session has it, with the events accepted in the calculation of the step, or, for an
+  /// entity of the session only, in the calculations of the session before it, or null if the session has no events of
+  /// it. A stored entity is otherwise read from the database, as an earlier calculation's events of it may have been
+  /// followed by those of other sessions. An id entity or index entity has the same entity id as its entity, so the
+  /// entity model is matched too.
   private EventLog logFromNestedChanges(UUID entityId, EntityModel entityModel, TransitionStep<?> transitionStep) {
+    EventLog log = logFromCalculation(entityId, entityModel, transitionStep);
+    if (log != null)
+      return log;
+    for (var calculation = previousCalculation(transitionStep); calculation != null; calculation = previousCalculation(calculation)) {
+      log = logFromCalculation(entityId, entityModel, calculation);
+      if (log != null)
+        return isSessionOnly(log) ? log : null;
+    }
+    return null;
+  }
+
+  /// The log of the entity with the last event accepted on it in the calculation of the step, or null if it has none
+  private static EventLog logFromCalculation(UUID entityId, EntityModel entityModel, TransitionStep<?> transitionStep) {
     for (var c = transitionStep; c != null; c = c.previous()) {
       if (c instanceof OutputStep<?>(TransitionStep<?> previous, ProcessResult<?> stepOutput)
           && stepOutput instanceof Accepted<?>(Event<?> event, EntityModel model, _, _, _)
@@ -889,7 +913,7 @@ public class StateMachine implements AutoCloseable {
   }
 
   /// Fails for a change which is not stored but would have to be: a delayed or conditional trigger of an entity of the
-  /// session only, which fires after the session, or an event fired by a stored trigger, which is deleted with the
+  /// session only, which fires in a session of its own, or an event fired by a stored trigger, which is deleted with the
   /// event
   private static void requireStorable(List<Change> changes, Set<EntityKey> sessionOnly) {
     for (var change : changes) {
@@ -898,7 +922,7 @@ public class StateMachine implements AutoCloseable {
       if (change.delayedEvent() != null || change.conditionalTrigger() != null)
         throw new IllegalStateException(String.format(
             "%s on %s/%s is a delayed or conditional trigger of an entity of the session only, whose events are not " +
-                "stored, but it fires after the session",
+                "stored, but it fires in a session of its own",
             change.delayedEvent() != null ? change.delayedEvent().type().name() : change.conditionalTrigger().type().name(),
             change.entityModel().name(),
             change.entityId()

@@ -207,6 +207,5 @@ organisation's accounts.
   [monitoring](monitoring.md) events.
 - The current state of an entity is not shown, as it is computed by the transitions, not stored. Its last event tells
   it.
-- A `RequestRouting` entity has no reference to the inbox request it routed a request to, so the two aren't linked.
 - An entity of an entity model the application no longer has is listed, but its events are shown with the ids of
   their event types and their data as bytes.

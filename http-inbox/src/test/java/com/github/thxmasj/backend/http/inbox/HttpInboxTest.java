@@ -323,14 +323,21 @@ public class HttpInboxTest {
       .process(InternalProcessingRequested, Lamp, newEntity())
       .build("NotStoredRequest", UUID.fromString("7f3b9d1e-2c6a-4e85-b0d7-e4a8c2f6b519"));
 
-  /// Masks the body of its response, which the routing of the other requests doesn't
+  /// Masks the body of its response
   static HttpInboxRequest<byte[]> BodyMaskedRequest = withBody("PUT .*/body-masked/.*")
       .masking(Masking.responseBody())
       .process(InternalProcessingRequested, Lamp, newEntity())
       .build("BodyMaskedRequest", UUID.fromString("3e9a5c1f-7b2d-4e64-a8f0-c6d2b4e8a135"));
 
+  /// Not stored, and answered by the callback of an outbox request, in a later calculation of the session
+  static HttpInboxRequest<byte[]> NotStoredExternalRequest = withBody("PUT .*/not-stored-external/.*")
+      .notStored()
+      .process(ExternalProcessingRequested, Lamp, _ -> null, newEntity())
+      .build("NotStoredExternalRequest", UUID.fromString("5d1f7b3a-9c2e-4d68-a0b4-e6c8a2f4b971"));
+
   static List<HttpInboxRequest<?>> requests = List.of(
       ContentRequest,
+      NotStoredExternalRequest,
       MaskedRequest,
       BodyMaskedRequest,
       NotStoredRequest,
@@ -494,14 +501,18 @@ public class HttpInboxTest {
     });
   }
 
-  /// The data of the stored event of the type on the entity, or null if there is none
-  private static byte[] storedData(UUID entityId, EventType<?, ?> type) {
-    return Init.client().sql("SELECT Data FROM \"" + schema + "\".\"Event\" WHERE EntityId=:entityId AND Type=:type")
+  /// The data of the stored events of the type on the entities of the model, as text
+  private static List<String> storedData(EntityModel model, EventType<?, ?> type) {
+    return Init.client().sql(
+            "SELECT e.Data FROM \"" + schema + "\".\"Event\" e JOIN \"" + schema + "\".\"Entity\" n ON n.EntityId=e.EntityId" +
+                " WHERE n.EntityModelId=:model AND e.Type=:type"
+        )
         .name("Test.StoredData")
-        .bind("entityId", entityId)
+        .bind("model", model.id())
         .bind("type", type.id())
-        .map(row -> row.get("Data", byte[].class))
-        .one()
+        .map(row -> new String(row.get("Data", byte[].class)))
+        .all()
+        .collectList()
         .block();
   }
 
@@ -516,25 +527,24 @@ public class HttpInboxTest {
 
   @Test
   public void whenRequestIsStoredThenCredentialsAndMaskedParametersAreMasked() throws IOException {
-    Event<?> response = onRequest(inbox.trigger(), maskedRequest(UUID.randomUUID().toString(), "c0de", "t0ken"));
+    String messageId = UUID.randomUUID().toString();
+    Event<?> response = onRequest(inbox.trigger(), maskedRequest(messageId, "c0de", "t0ken"));
     assertEquals(201, HttpResponse.raw(response.getUnmarshalledData()).statusCode());
 
-    HttpRequest<byte[]> stored = HttpMessageParser.parseRequest(storedData(response.entityId(), HttpInbox.RequestRouted));
-    assertEquals("code=***&state=s1", stored.uri().getRawQuery());
-    assertEquals("***", stored.headerValue("Authorization"));
-    assertEquals("***", stored.headerValue("Cookie"));
-    assertEquals("kept", stored.headerValue("X-Other"));
-    // The routing masks the response as the request routed masks it, which is not its body
-    HttpResponse<byte[]> storedResponse = HttpMessageParser.parseResponse(storedData(response.entityId(), HttpInbox.ResponseCreated));
-    assertTrue(new String(storedResponse.body()).contains("Light is on!"));
+    String stored = storedData(MaskedRequest, HttpInbox.RequestAccepted).stream().filter(d -> d.contains(messageId)).findFirst().orElseThrow();
+    assertThat(stored)
+        .contains("/masked/" + messageId + "?code=***&state=s1", "Authorization:***", "Cookie:***", "X-Other:kept")
+        .doesNotContain("c0de", "t0ken");
+    // The routing is of the session only: the inbox request stores the request
+    assertEquals(null, entityModelId(response.entityId()), "The routing is not stored");
   }
 
   @Test
-  public void whenRequestMasksTheBodyOfItsResponseThenItsRoutingDoesToo() {
+  public void whenRequestMasksTheBodyOfItsResponseThenItIsStoredMasked() {
     Event<?> response = onRequest(PUT, URI.create("/body-masked/" + UUID.randomUUID()), asJson(new InternalProcess("Hello", 1)));
     assertTrue(new String(HttpResponse.raw(response.getUnmarshalledData()).body()).contains("Light is on!"));
-    HttpResponse<byte[]> stored = HttpMessageParser.parseResponse(storedData(response.entityId(), HttpInbox.ResponseCreated));
-    assertEquals("***", new String(stored.body()));
+    assertThat(storedData(BodyMaskedRequest, HttpInbox.RequestCompleted)).isNotEmpty()
+        .allSatisfy(data -> assertThat(data).doesNotContain("Light is on!").contains("***"));
   }
 
   @Test
@@ -581,12 +591,22 @@ public class HttpInboxTest {
   }
 
   @Test
-  public void whenRequestIsNotStoredThenNeitherIsItsRouting() {
+  public void whenRequestIsNotStoredThenNothingOfItIs() {
     Event<?> response = onRequest(PUT, URI.create("/not-stored/" + UUID.randomUUID()), asJson(new InternalProcess("Hello", 1)));
     HttpResponse<byte[]> message = HttpResponse.raw(response.getUnmarshalledData());
     assertEquals(201, message.statusCode());
     assertTrue(new String(message.body()).contains("Light is on!"));
-    assertEquals(null, entityModelId(response.entityId()), "The routing is not stored");
+    assertThat(storedData(NotStoredRequest, HttpInbox.RequestCompleted)).isEmpty();
+  }
+
+  /// The request is of the session only, which the callback of the outbox request is a later calculation of
+  @Test
+  public void whenRequestIsNotStoredThenItIsAnsweredInALaterCalculationOfTheSessionToo() {
+    Event<?> response = onRequest(PUT, URI.create("/not-stored-external/" + UUID.randomUUID()), "Hello!".getBytes());
+    HttpResponse<byte[]> message = HttpResponse.raw(response.getUnmarshalledData());
+    assertEquals(201, message.statusCode());
+    assertTrue(new String(message.body()).contains("Light is externally switched on!"));
+    assertThat(storedData(NotStoredExternalRequest, HttpInbox.RequestCompleted)).isEmpty();
   }
 
   @Test

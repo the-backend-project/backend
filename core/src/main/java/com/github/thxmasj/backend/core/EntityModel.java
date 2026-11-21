@@ -18,8 +18,9 @@ public interface EntityModel extends Identifiable {
 
   /// Whether the entities of the model are stored. The entities of a model which is not stored are entities of the
   /// session only: their transitions are taken, and the events they trigger on other entities are stored if those
-  /// are, but none of their own events are stored, and they can't be found after the session. Their transitions may
-  /// therefore go to any state, but they can't have delayed or conditional triggers, which fire after the session.
+  /// are, but none of their own events are stored. They are found by the calculations of the session, the later ones
+  /// among the events of the earlier ones, but not by another session. Their transitions may therefore go to any
+  /// state, but they can't have delayed or conditional triggers, which fire in a session of their own.
   default boolean stored() {
     return true;
   }

@@ -123,9 +123,9 @@ public final class HttpInboxRequest<T> implements EntityModel {
     return name;
   }
 
-  /// Whether the requests are stored. A request which is not stored, and its `RequestRouting` entity, are entities of
-  /// the session only (see [EntityModel#stored()]), while the events its process triggers on the application are
-  /// stored if they are of stored types.
+  /// Whether the requests are stored. A request which is not stored is an entity of the session only, as every
+  /// `RequestRouting` entity is (see [EntityModel#stored()]), while the events its process triggers on the application
+  /// are stored if they are of stored types.
   @Override
   public boolean stored() {
     return stored;
@@ -526,12 +526,12 @@ public final class HttpInboxRequest<T> implements EntityModel {
       return this;
     }
 
-    /// The requests are not stored, nor their `RequestRouting` entities, e.g. requests for static files, health
-    /// checks or pages rendered from other entities, or a request with credentials which its process turns into
-    /// events of its own. The events the process triggers on the application are stored if they are of stored types.
-    /// A request which is not stored can't be deduplicated, so it has no `deduplicateOn`, and the application must
-    /// respond in the session of the request, e.g. not by the callback of an outbox request, as the request can't be
-    /// found after it.
+    /// The requests are not stored, e.g. requests for static files, health checks or pages rendered from other
+    /// entities, or a request with credentials which its process turns into events of its own. The events the process
+    /// triggers on the application are stored if they are of stored types. A request which is not stored can't be
+    /// deduplicated, so it has no `deduplicateOn`, and the application must respond in the session of the request,
+    /// e.g. by the callback of an outbox request, but not by a delayed or conditional trigger, which fires in a session
+    /// of its own, as only the session finds the request.
     public Builder<T> notStored() {
       this.stored = false;
       return this;

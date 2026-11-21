@@ -2,6 +2,7 @@ package com.github.thxmasj.backend.helloworld;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.StateMachine;
@@ -76,9 +77,13 @@ public class HelloWorldTest {
         .extracting(event -> event.get("eventType"))
         .containsExactly("Greeting requested");
     // The events of an entity are written in the order of their numbers
-    assertThat(events).filteredOn(event -> event.get("entityModel").equals("RequestRouting"))
+    assertThat(events).filteredOn(event -> event.get("entityModel").equals("GreetingRequest"))
         .extracting(event -> event.get("eventNumber"))
         .containsExactly(1, 2);
+    // The routing is not stored, so its events have no numbers
+    assertThat(events).filteredOn(event -> event.get("entityModel").equals("RequestRouting"))
+        .extracting(event -> event.get("eventType"), event -> event.get("stored"), event -> event.containsKey("eventNumber"))
+        .containsExactly(tuple("Request routed", false, false), tuple("Response created", false, false));
   }
 
   /// The debug output of the libraries has the requests, which anyone can send

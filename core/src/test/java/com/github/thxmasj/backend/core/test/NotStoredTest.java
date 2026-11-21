@@ -2,6 +2,7 @@ package com.github.thxmasj.backend.core.test;
 
 import static com.github.thxmasj.backend.core.EntityModel.Begin;
 import static com.github.thxmasj.backend.core.EntitySelector.entityId;
+import static com.github.thxmasj.backend.core.EntitySelector.entityIdFromSession;
 import static com.github.thxmasj.backend.core.EntitySelector.newEntityId;
 import static com.github.thxmasj.backend.core.EventTrigger.trigger;
 import static com.github.thxmasj.backend.core.TransitionModelBuilder.WithEvent.onEvent;
@@ -9,6 +10,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.github.thxmasj.backend.core.Action;
+import com.github.thxmasj.backend.core.InputEvent;
 import com.github.thxmasj.backend.core.BasicEventType;
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EntityModel;
@@ -28,6 +31,7 @@ import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import reactor.core.publisher.Mono;
 
 /// Events and entities which are not stored, and events stored masked
 @Tag("database")
@@ -55,6 +59,43 @@ public class NotStoredTest {
   /// A model which is not stored
   static EntityModel Session = EntityModel.notStored("Session", UUID.fromString("0d6b2f8e-4a1c-4b73-95e7-c3a9f5d1b724"), NotStoredTest::sessionTransitions);
 
+  enum VisitStates implements State { Open, Closed }
+  enum DeliveryStates implements State { Dispatched, Delivered }
+
+  static EventType<Void, Void> VisitStarted = BasicEventType.of("Visit started", UUID.fromString("2a4c6e8f-0b1d-4f35-97a9-cbedf1a3b582"));
+  static EventType<Void, Void> VisitClosed = BasicEventType.of("Visit closed", UUID.fromString("4c6e8a0b-2d3f-4a57-b9cb-edf1a3c5d7a4"));
+  static EventType<Void, Void> DeliveryRequested = BasicEventType.of("Delivery requested", UUID.fromString("6e8a0c2d-4f5b-4c79-9bed-f1a3c5e7f9c6"));
+  static EventType<Void, Void> DeliveryArrived = BasicEventType.of("Delivery arrived", UUID.fromString("8a0c2e4f-6b7d-4e9b-bdf1-a3c5e7a9b1e8"));
+
+  /// Gives the delivery its arrival in a later calculation of the session
+  static Action<String> courier = new Action<>() {
+    @Override public String name() {return "Courier";}
+    @Override public Mono<InputEvent<?>> execute(String data) {
+      return Mono.delay(Duration.ofMillis(100)).<InputEvent<?>>map(_ -> new InputEvent<>(DeliveryArrived, null));
+    }
+  };
+
+  /// A visit, which is not stored, waits for a delivery, which is
+  static EntityModel Visit = EntityModel.notStored("Visit", UUID.fromString("a0c2e4a6-8d9f-4ab1-9f13-c5e7a9cbd30a"), () -> Map.<State, List<TransitionModel<?, ?>>>of(
+      Begin, List.of(
+          onEvent(VisitStarted).to(VisitStates.Open)
+              .trigger(DeliveryRequested).on(NotStoredTest.Delivery).identifiedBy(newEntityId())
+              .output()
+      ),
+      VisitStates.Open, List.of(onEvent(VisitClosed).to(VisitStates.Closed).output()),
+      VisitStates.Closed, List.of()
+  ));
+  static EntityModel Delivery = EntityModel.of("Delivery", UUID.fromString("c2e4a6c8-0f1b-4cd3-b135-e7a9cbedf52c"), () -> Map.<State, List<TransitionModel<?, ?>>>of(
+      Begin, List.of(onEvent(DeliveryRequested).to(DeliveryStates.Dispatched).assemble(_ -> "").trigger(courier).with(d -> d).output()),
+      DeliveryStates.Dispatched, List.of(
+          // In a later calculation of the session, which finds the visit among the events of the first one
+          onEvent(DeliveryArrived).to(DeliveryStates.Delivered)
+              .trigger(VisitClosed).on(Visit).identifiedBy(entityIdFromSession())
+              .output()
+      ),
+      DeliveryStates.Delivered, List.of()
+  ));
+
   private static final List<String> lines = new CopyOnWriteArrayList<>();
   private static final String schema = UUID.randomUUID().toString();
   private static final StateMachine machine = Init.stateMachine(
@@ -65,7 +106,7 @@ public class NotStoredTest {
   );
 
   private static List<EntityModel> entityModels() {
-    return List.of(Account, Views, SignIn, Session);
+    return List.of(Account, Views, SignIn, Session, Visit);
   }
 
   private static Map<State, List<TransitionModel<?, ?>>> accountTransitions() {
@@ -187,5 +228,16 @@ public class NotStoredTest {
       events = events(log(Account, List.of(AccountOpened, AccountTouched), account));
     }
     assertEquals(List.of("1:Account opened", "2:Account touched"), events);
+  }
+
+  /// An entity of the session only is found by the later calculations of the session, which an action starts
+  @Test
+  public void anEntityOfTheSessionOnlyIsFoundByTheLaterCalculationsOfTheSession() {
+    var events = machine.onEvent(trigger(VisitStarted, Visit), null).take(2).collectList().block(Duration.ofSeconds(10));
+    assertEquals(List.of("Visit started", "Visit closed"), events.stream().map(Event::typeName).toList());
+
+    var e = assertThrows(Exception.class, () -> log(Visit, List.of(VisitStarted, VisitClosed), events.getFirst().entityId()));
+    assertTrue(e instanceof UnknownEntity || e.getCause() instanceof UnknownEntity, e.toString());
+    assertTrue(lines.stream().anyMatch(l -> l.contains("\"eventType\":\"Delivery arrived\"") && l.contains("\"eventNumber\":2")), lines.toString());
   }
 }

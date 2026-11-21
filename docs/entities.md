@@ -98,6 +98,22 @@ Since side effects only happen after the events causing them are stored, an enti
 If the instance stops before an action completes, a delayed trigger stored with the action, such as the timeout of an
 outbox request, moves the entity on.
 
+## Sessions
+
+A session is all the state machine does for an event entering it through `StateMachine.onEvent`, e.g. a request to the
+[inbox](http-inbox.md). It is one or more calculations, each stored in a transaction of its own:
+
+1. The event is calculated, with the events its transitions trigger on other entities, and stored in one transaction.
+2. The actions of the changes stored run, e.g. sending an [outbox request](http-outbox.md). The event an action gives,
+   e.g. the response of the outbox request, is calculated and stored in a calculation of its own, which follows the
+   one which ran the action. Its actions continue the session in the same way.
+
+Every calculation of a session finds the entities of the earlier ones, e.g. `entityIdFromSession()` the entity the
+session started on, so an outbox request's response can answer the request to the inbox. The events of the entity
+the session started on, in all its calculations, go to the one who triggered the event, e.g. the listener of the
+inbox, which sends the response. A delayed
+or conditional trigger fires in a session of its own, after the session which stored it, even if that hasn't ended.
+
 ## Events and entities not stored
 
 Every event is stored by default, which makes the event log the record of what happened. Some events are better left
@@ -116,8 +132,9 @@ tested, drawn in the state diagrams and told the [monitoring](monitoring.md), wi
   fires. An event reading an entity, for another entity to assemble from, is one, named `<subject> looked up`.
 * **An entity of the session only** is created by an event which is not stored, i.e. one from `Begin`, or is of an
   entity model whose `stored()` is false, e.g. one of `EntityModel.notStored(name, id, transitions)`. None of its
-  events are stored, whatever their types, so its transitions may go to any state, also on events not stored. It is found by the transitions of the session, but not after it, so it can't have delayed or
-  conditional triggers, which fire later: the change fails if it has one. An inbox request which is
+  events are stored, whatever their types, so its transitions may go to any state, also on events not stored. The
+  [session](#sessions) finds it among the events of its calculations, but no other session does, so it can't have
+  delayed or conditional triggers, which fire in a session of their own: the change fails if it has one. An inbox request which is
   [not stored](http-inbox.md#requests-not-stored) is one.
 * **A masked event** is stored with its output masked: `.masked(mask)` on a transition, after `to(...)`, gives the
   output as it is stored. The event in the session has the whole output, which its triggers, the one who triggered it
