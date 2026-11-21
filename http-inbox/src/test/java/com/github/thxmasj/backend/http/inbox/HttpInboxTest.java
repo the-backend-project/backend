@@ -34,8 +34,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.github.thxmasj.backend.core.BasicEventType;
 import com.github.thxmasj.backend.core.BasicEventType.Rollback.Data;
+import com.github.thxmasj.backend.core.BasicEventType;
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.DelaySpecification;
 import com.github.thxmasj.backend.core.EntityModel;
@@ -50,15 +50,16 @@ import com.github.thxmasj.backend.core.TransitionModel;
 import com.github.thxmasj.backend.core.TransitionModelBuilder.TransitionContext;
 import com.github.thxmasj.backend.core.Tuples.Tuple2;
 import com.github.thxmasj.backend.core.Validated.Valid;
-import com.github.thxmasj.backend.http.NettyHttpClient;
-import com.github.thxmasj.backend.http.NettyHttpClientBuilder;
 import com.github.thxmasj.backend.core.internal.EventTypes;
-import com.github.thxmasj.backend.http.HttpMessageParser;
-import com.github.thxmasj.backend.http.HttpRequest;
-import com.github.thxmasj.backend.http.HttpRequest.Method;
-import com.github.thxmasj.backend.http.HttpResponse;
 import com.github.thxmasj.backend.core.test.Init;
 import com.github.thxmasj.backend.diagram.PlantUMLFormatter;
+import com.github.thxmasj.backend.http.HttpMessageParser;
+import com.github.thxmasj.backend.http.HttpRequest.Method;
+import com.github.thxmasj.backend.http.HttpRequest;
+import com.github.thxmasj.backend.http.HttpResponse;
+import com.github.thxmasj.backend.http.Masking;
+import com.github.thxmasj.backend.http.NettyHttpClient;
+import com.github.thxmasj.backend.http.NettyHttpClientBuilder;
 import com.github.thxmasj.backend.http.inbox.HttpInbox.RoutedRequest;
 import com.github.thxmasj.backend.http.inbox.HttpInboxRequest.Rollback;
 import com.github.thxmasj.backend.http.outbox.HttpOutboxRequest;
@@ -79,6 +80,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
+import java.util.function.Function;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
@@ -308,8 +310,37 @@ public class HttpInboxTest {
       .process(InternalProcessingRequested, Lamp, newEntity())
       .build("NormalizedRequest", UUID.fromString("5c2e8b17-4d9a-4f36-b0e1-7a3d6c9f2e58"));
 
+  /// Masks a query parameter besides the credentials every inbox request masks
+  static HttpInboxRequest<byte[]> MaskedRequest = withBody("PUT .*/masked/.*")
+      .deduplicateOn(parseMessageId("PUT .*/masked/([^?]*).*", 1))
+      .masking(Masking.queryParameters("code"))
+      .process(InternalProcessingRequested, Lamp, newEntity())
+      .build("MaskedRequest", UUID.fromString("c1a7e3f9-5b2d-4c80-9e46-a8d2f0b4c613"));
+
+  /// Neither the request nor its routing is stored, while the lamp it switches on is
+  static HttpInboxRequest<byte[]> NotStoredRequest = withBody("PUT .*/not-stored/.*")
+      .notStored()
+      .process(InternalProcessingRequested, Lamp, newEntity())
+      .build("NotStoredRequest", UUID.fromString("7f3b9d1e-2c6a-4e85-b0d7-e4a8c2f6b519"));
+
+  /// Masks the body of its response
+  static HttpInboxRequest<byte[]> BodyMaskedRequest = withBody("PUT .*/body-masked/.*")
+      .masking(Masking.responseBody())
+      .process(InternalProcessingRequested, Lamp, newEntity())
+      .build("BodyMaskedRequest", UUID.fromString("3e9a5c1f-7b2d-4e64-a8f0-c6d2b4e8a135"));
+
+  /// Not stored, and answered by the callback of an outbox request, in a later calculation of the session
+  static HttpInboxRequest<byte[]> NotStoredExternalRequest = withBody("PUT .*/not-stored-external/.*")
+      .notStored()
+      .process(ExternalProcessingRequested, Lamp, _ -> null, newEntity())
+      .build("NotStoredExternalRequest", UUID.fromString("5d1f7b3a-9c2e-4d68-a0b4-e6c8a2f4b971"));
+
   static List<HttpInboxRequest<?>> requests = List.of(
       ContentRequest,
+      NotStoredExternalRequest,
+      MaskedRequest,
+      BodyMaskedRequest,
+      NotStoredRequest,
       NormalizedRequest,
       OwnedRequest,
       ReversibleRequest,
@@ -468,6 +499,125 @@ public class HttpInboxTest {
       assertTrue(requestModelIds.contains(entityModelId(requestId)), "The index entity is that of an inbox request");
       assertEquals(Lamp.id(), entityModelId(processId), "The index key is the entity the request was processed on");
     });
+  }
+
+  /// The data of the stored events of the type on the entities of the model, as text
+  private static List<String> storedData(EntityModel model, EventType<?, ?> type) {
+    return Init.client().sql(
+            "SELECT e.Data FROM \"" + schema + "\".\"Event\" e JOIN \"" + schema + "\".\"Entity\" n ON n.EntityId=e.EntityId" +
+                " WHERE n.EntityModelId=:model AND e.Type=:type"
+        )
+        .name("Test.StoredData")
+        .bind("model", model.id())
+        .bind("type", type.id())
+        .map(row -> new String(row.get("Data", byte[].class)))
+        .all()
+        .collectList()
+        .block();
+  }
+
+  private HttpRequest<byte[]> maskedRequest(String messageId, String code, String token) {
+    return new HttpRequest<>(
+        PUT,
+        URI.create("/masked/" + messageId + "?code=" + code + "&state=s1"),
+        Map.of("Authorization", "Bearer " + token, "Cookie", "session=" + token, "X-Other", "kept"),
+        asJson(new InternalProcess("Hello", 1))
+    );
+  }
+
+  @Test
+  public void whenRequestIsStoredThenCredentialsAndMaskedParametersAreMasked() throws IOException {
+    String messageId = UUID.randomUUID().toString();
+    Event<?> response = onRequest(inbox.trigger(), maskedRequest(messageId, "c0de", "t0ken"));
+    assertEquals(201, HttpResponse.raw(response.getUnmarshalledData()).statusCode());
+
+    String stored = storedData(MaskedRequest, HttpInbox.RequestAccepted).stream().filter(d -> d.contains(messageId)).findFirst().orElseThrow();
+    assertThat(stored)
+        .contains("/masked/" + messageId + "?code=***&state=s1", "Authorization:***", "Cookie:***", "X-Other:kept")
+        .doesNotContain("c0de", "t0ken");
+    // The routing is of the session only: the inbox request stores the request
+    assertEquals(null, entityModelId(response.entityId()), "The routing is not stored");
+  }
+
+  @Test
+  public void whenRequestMasksTheBodyOfItsResponseThenItIsStoredMasked() {
+    Event<?> response = onRequest(PUT, URI.create("/body-masked/" + UUID.randomUUID()), asJson(new InternalProcess("Hello", 1)));
+    assertTrue(new String(HttpResponse.raw(response.getUnmarshalledData()).body()).contains("Light is on!"));
+    assertThat(storedData(BodyMaskedRequest, HttpInbox.RequestCompleted)).isNotEmpty()
+        .allSatisfy(data -> assertThat(data).doesNotContain("Light is on!").contains("***"));
+  }
+
+  @Test
+  public void requestMaskingTheBodyOfItsResponseCantBeDeduplicated() {
+    assertThatThrownBy(() -> withBody("PUT .*/x/.*")
+        .deduplicateOn(parseMessageId("PUT .*/x/(.*)", 1))
+        .masking(Masking.responseBody())
+        .process(InternalProcessingRequested, Lamp, newEntity())
+        .build("X", UUID.randomUUID()))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("masks the body of its response, so it can't be deduplicated");
+  }
+
+  /// The first response sets a cookie, which is masked in the event log, so a retry can't be given it
+  @Test
+  public void whenRetryOfARequestWhoseResponseIsMaskedThenConflict() {
+    var bell = bell(false);
+    var request = HttpInboxRequest.matching(m -> m.requestLine().matches("PUT /bell/.*")).noContent()
+        .deduplicateOn(parseMessageId("PUT /bell/(.*)", 1))
+        .process(BellRung, bell, newEntity())
+        .response(Rang, _ -> new HttpResponse<>(200, "OK", Map.of("Set-Cookie", "session=s3cret"), null))
+        .build("CookieRequest", UUID.fromString("9b1d7f3a-5c2e-4a86-b4d0-e8f6a2c4b917"));
+    var cookieInbox = HttpInbox.of(List.of(request));
+    var machine = Init.stateMachine(UUID.randomUUID().toString(), cookieInbox.entityModels());
+    var message = new HttpRequest<byte[]>(PUT, URI.create("/bell/" + UUID.randomUUID()), Map.of(), null);
+    Function<HttpRequest<byte[]>, HttpResponse<byte[]>> send = m -> HttpResponse.raw(machine.onEvent(UUID.randomUUID().toString(), cookieInbox.trigger(), m)
+        .skip(1).next().block(Duration.ofSeconds(5)).getUnmarshalledData());
+
+    HttpResponse<byte[]> first = send.apply(message);
+    assertEquals(200, first.statusCode());
+    assertEquals("session=s3cret", first.headerValue("Set-Cookie"));
+    HttpResponse<byte[]> retry = send.apply(message);
+    assertEquals(409, retry.statusCode());
+    assertEquals(null, retry.headerValue("Set-Cookie"));
+  }
+
+  @Test
+  public void whenRetryDiffersOnlyInWhatIsMaskedThenItGetsTheFirstResponse() throws IOException {
+    String messageId = UUID.randomUUID().toString();
+    HttpResponse<byte[]> first = HttpResponse.raw(onRequest(inbox.trigger(), maskedRequest(messageId, "c0de", "t0ken")).getUnmarshalledData());
+    HttpResponse<byte[]> retry = HttpResponse.raw(onRequest(inbox.trigger(), maskedRequest(messageId, "0ther", "refreshed")).getUnmarshalledData());
+    assertEquals(201, retry.statusCode());
+    assertArrayEquals(first.body(), retry.body());
+  }
+
+  @Test
+  public void whenRequestIsNotStoredThenNothingOfItIs() {
+    Event<?> response = onRequest(PUT, URI.create("/not-stored/" + UUID.randomUUID()), asJson(new InternalProcess("Hello", 1)));
+    HttpResponse<byte[]> message = HttpResponse.raw(response.getUnmarshalledData());
+    assertEquals(201, message.statusCode());
+    assertTrue(new String(message.body()).contains("Light is on!"));
+    assertThat(storedData(NotStoredRequest, HttpInbox.RequestCompleted)).isEmpty();
+  }
+
+  /// The request is of the session only, which the callback of the outbox request is a later calculation of
+  @Test
+  public void whenRequestIsNotStoredThenItIsAnsweredInALaterCalculationOfTheSessionToo() {
+    Event<?> response = onRequest(PUT, URI.create("/not-stored-external/" + UUID.randomUUID()), "Hello!".getBytes());
+    HttpResponse<byte[]> message = HttpResponse.raw(response.getUnmarshalledData());
+    assertEquals(201, message.statusCode());
+    assertTrue(new String(message.body()).contains("Light is externally switched on!"));
+    assertThat(storedData(NotStoredExternalRequest, HttpInbox.RequestCompleted)).isEmpty();
+  }
+
+  @Test
+  public void notStoredRequestCantBeDeduplicated() {
+    assertThatThrownBy(() -> withBody("PUT .*/x/.*")
+        .notStored()
+        .deduplicateOn(parseMessageId("PUT .*/x/(.*)", 1))
+        .process(InternalProcessingRequested, Lamp, newEntity())
+        .build("X", UUID.randomUUID()))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("is not stored, so it can't be deduplicated");
   }
 
   private static UUID entityModelId(UUID entityId) {

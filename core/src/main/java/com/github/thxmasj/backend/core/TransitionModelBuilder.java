@@ -39,11 +39,13 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 import reactor.core.publisher.Mono;
 
 public class TransitionModelBuilder<I, T, O> {
 
   /// @param severity the severity of the event the transition accepts
+  /// @param mask     masks the output of the transition when its event is stored, or null to store it as it is
   public record ModelContext<I, O>(
       boolean reversal,
       State to,
@@ -52,8 +54,39 @@ public class TransitionModelBuilder<I, T, O> {
       List<Action<?>> actions,
       List<Filter<?, ?, ?>> filters,
       TransitionModel<Data, Data> reverseModel,
-      Severity severity
+      Severity severity,
+      UnaryOperator<O> mask
   ) {
+
+    /// The context of a transition on the event type to the state, or to itself if the state is null, with nothing
+    /// declared yet
+    static <I, O> ModelContext<I, O> of(boolean reversal, State to, EventType<I, O> eventType) {
+      return new ModelContext<>(reversal, to, eventType, List.of(), List.of(), List.of(), null, Severity.Info, null);
+    }
+
+    ModelContext<I, O> withTriggers(List<EventTrigger<?, ?, ?>> triggers) {
+      return new ModelContext<>(reversal, to, eventType, triggers, actions, filters, reverseModel, severity, mask);
+    }
+
+    ModelContext<I, O> withActions(List<Action<?>> actions) {
+      return new ModelContext<>(reversal, to, eventType, triggers, actions, filters, reverseModel, severity, mask);
+    }
+
+    ModelContext<I, O> withFilters(List<Filter<?, ?, ?>> filters) {
+      return new ModelContext<>(reversal, to, eventType, triggers, actions, filters, reverseModel, severity, mask);
+    }
+
+    ModelContext<I, O> withReverseModel(TransitionModel<Data, Data> reverseModel) {
+      return new ModelContext<>(reversal, to, eventType, triggers, actions, filters, reverseModel, severity, mask);
+    }
+
+    ModelContext<I, O> withSeverity(Severity severity) {
+      return new ModelContext<>(reversal, to, eventType, triggers, actions, filters, reverseModel, severity, mask);
+    }
+
+    ModelContext<I, O> withMask(UnaryOperator<O> mask) {
+      return new ModelContext<>(reversal, to, eventType, triggers, actions, filters, reverseModel, severity, mask);
+    }
 
     public String description() {
       if (reversal)
@@ -84,9 +117,7 @@ public class TransitionModelBuilder<I, T, O> {
 
   public static TransitionModel<Void, State> statusOn() {
     return new TransitionModel<>(
-        new ModelContext<>(
-            false, null, BuiltinEventTypes.StatusLookedUp, List.of(), List.of(), List.of(), null, Severity.Info
-        ),
+        ModelContext.of(false, null, BuiltinEventTypes.StatusLookedUp),
         inputStep -> inputStep.flatMap(i -> step(i, () -> Mono.just(new OutputStep<>(
             i,
             ProcessResult.accepted(
@@ -108,7 +139,7 @@ public class TransitionModelBuilder<I, T, O> {
 
   public static TransitionModel<Data, Data> rollbackOn(EventType<Data, Data> eventType) {
     return new TransitionModel<>(
-        new ModelContext<>(false, null, eventType, List.of(), List.of(), List.of(), null, Severity.Info),
+        ModelContext.of(false, null, eventType),
         inputStep -> inputStep.flatMap(i -> {
           int rollbackTo = i.stepOutput().toNumber();
           int actualRollbackTo = rollbackTo;
@@ -203,7 +234,7 @@ public class TransitionModelBuilder<I, T, O> {
 
     public WithToState<I, O> to(State toState) {
       return new WithToState<>(
-          new ModelContext<>(false, toState, eventType, List.of(), List.of(), List.of(), null, Severity.Info)
+          ModelContext.of(false, toState, eventType)
       );
     }
 
@@ -225,16 +256,18 @@ public class TransitionModelBuilder<I, T, O> {
     /// declared. A transition which chooses another one accepts the event of the chosen transition, with the
     /// severity declared on that one.
     public WithToState<I, O> severity(Severity severity) {
-      return new WithToState<>(new ModelContext<>(
-          modelContext.reversal,
-          modelContext.to,
-          modelContext.eventType,
-          modelContext.triggers,
-          modelContext.actions,
-          modelContext.filters,
-          modelContext.reverseModel,
-          requireNonNull(severity, "severity is null")
-      ));
+      return new WithToState<>(modelContext.withSeverity(requireNonNull(severity, "severity is null")));
+    }
+
+    /// Masks the output of the transition when its event is stored, e.g. to keep a secret or bulky data out of the
+    /// event log. The event in the calculation has the whole output: the transition's triggers, the one who triggered
+    /// the event, and the transitions of the same calculation reading the entity's log see it. The event log stores the
+    /// masked output, which is what a later calculation reads of a stored entity, also one of the same session, so the
+    /// state of the entity must not depend on what is masked.
+    /// A transition which chooses another one stores the event of the chosen transition, with the mask declared on that
+    /// one.
+    public WithToState<I, O> masked(UnaryOperator<O> mask) {
+      return new WithToState<>(modelContext.withMask(requireNonNull(mask, "mask is null")));
     }
 
     public <T> TransitionModelBuilder<I, T, O> assemble(BiFunction<I, EventLog, T> assembler) {
@@ -477,16 +510,7 @@ public class TransitionModelBuilder<I, T, O> {
   public record WithAction<I, T, O, I1>(TransitionModelBuilder<I, T, O> builder, Action<I1> action) {
 
     public TransitionModelBuilder<I, T, O> with(Function<T, I1> dataAdapter) {
-      var modelContext = new ModelContext<>(
-          this.builder.modelContext.reversal,
-          this.builder.modelContext.to,
-          this.builder.modelContext.eventType,
-          this.builder.modelContext.triggers,
-          join(this.builder.modelContext.actions, action),
-          this.builder.modelContext.filters,
-          this.builder.modelContext.reverseModel,
-          this.builder.modelContext.severity
-      );
+      var modelContext = this.builder.modelContext.withActions(join(this.builder.modelContext.actions, action));
       return new TransitionModelBuilder<>(
           modelContext,
           builder.builderFunction.andThen(c -> c.flatMap(d -> step(d, () -> Mono.just(new ActionStep<>(
@@ -588,16 +612,7 @@ public class TransitionModelBuilder<I, T, O> {
     }
 
     public <I1, O1> TransitionModelBuilder<I, T, O> complete(Filter<T, I1, O1> filter) {
-      var modelContext = new ModelContext<>(
-          this.builder.modelContext.reversal,
-          this.builder.modelContext.to,
-          this.builder.modelContext.eventType,
-          this.builder.modelContext.triggers,
-          this.builder.modelContext.actions,
-          join(this.builder.modelContext.filters, filter),
-          this.builder.modelContext.reverseModel,
-          this.builder.modelContext.severity
-      );
+      var modelContext = this.builder.modelContext.withFilters(join(this.builder.modelContext.filters, filter));
       return new TransitionModelBuilder<>(
           modelContext,
           this.builder.builderFunction.andThen(transitionStep -> transitionStep
@@ -658,9 +673,7 @@ public class TransitionModelBuilder<I, T, O> {
       BiFunction<TransitionContext<Data>, EventType<Data, Data>, Mono<T>> assembler
   ) {
     return new TransitionModelBuilder<>(
-        new ModelContext<>(
-            true /* !! */, null, BuiltinEventTypes.EventsRolledBack, List.of(), List.of(), List.of(), null, Severity.Info
-        ),
+        ModelContext.of(true /* !! */, null, BuiltinEventTypes.EventsRolledBack),
         inputStep -> inputStep.flatMap(
             i -> step(i, () -> {
               // TODO
@@ -678,16 +691,7 @@ public class TransitionModelBuilder<I, T, O> {
 
   public TransitionModelBuilder<I, T, O> reversible(TransitionModelBuilder<Data, ?, Data> reverseModel) {
     return new TransitionModelBuilder<>(
-        new ModelContext<>(
-            modelContext.reversal,
-            modelContext.to,
-            modelContext.eventType,
-            modelContext.triggers,
-            modelContext.actions,
-            modelContext.filters,
-            reverseModel.complete(),
-            modelContext.severity
-        ),
+        modelContext.withReverseModel(reverseModel.complete()),
         builderFunction
     );
   }
@@ -733,20 +737,14 @@ public class TransitionModelBuilder<I, T, O> {
             ));
     var eventTriggers = join(modelContext.triggers, eventTrigger);
     return new TransitionModelBuilder<>(
-        new ModelContext<>(
-            modelContext.reversal,
-            modelContext.to,
-            modelContext.eventType,
-            eventTriggers,
-            modelContext.actions,
-            modelContext.filters,
-            modelContext.reverseModel,
-            modelContext.severity
-        ),
+        modelContext.withTriggers(eventTriggers),
         builderFunction.andThen(f)
     );
   }
 
+  /// The delayed event fires unless another event is stored on the entity first. It is created with the number after
+  /// the transition's event, and numbered when the changes are stored after the last event actually stored on the
+  /// entity, as the transition chosen may not be stored.
   private <I1, O1> TransitionModelBuilder<I, T, O> triggerDelayed(EventType<I1, O1> eventType, Function<T, I1> dataAdapter, Function<T, Duration> delay) {
     Function<Mono<TransitionStep<T>>, Mono<TransitionStep<T>>> f =
         transitionStep -> transitionStep
@@ -771,6 +769,12 @@ public class TransitionModelBuilder<I, T, O> {
       EventTrigger<T, I1, O1> conditionalTrigger,
       Function<T, Mono<I1>> reactiveDataAdapter
   ) {
+    // The conditional trigger refers to the event of the transition, which must therefore be stored
+    if (modelContext.eventType() != null && !modelContext.eventType().stored())
+      throw new IllegalArgumentException(String.format(
+          "%s is not stored, so its transition can't have a conditional trigger, which refers to its event",
+          modelContext.eventType().name()
+      ));
     Function<Mono<TransitionStep<T>>, Mono<TransitionStep<T>>> f =
         transitionStep -> transitionStep
             // The event is always stored as a ConditionalTrigger. If its condition is already met it is fired right after
@@ -799,16 +803,7 @@ public class TransitionModelBuilder<I, T, O> {
             })));
     var eventTriggers = join(modelContext.triggers, conditionalTrigger);
     return new TransitionModelBuilder<>(
-        new ModelContext<>(
-            modelContext.reversal,
-            modelContext.to,
-            modelContext.eventType,
-            eventTriggers,
-            modelContext.actions,
-            modelContext.filters,
-            modelContext.reverseModel,
-            modelContext.severity
-        ),
+        modelContext.withTriggers(eventTriggers),
         builderFunction.andThen(f)
     );
   }
@@ -864,13 +859,7 @@ public class TransitionModelBuilder<I, T, O> {
         builderFunction.andThen(a -> a.flatMap(b -> step(b, () -> Mono.just(new OutputStep<>(
             b,
             ProcessResult.accepted(
-                new Event<>(
-                    b.inputStep().log().entityId(),
-                    b.inputStep().log().lastEventNumber() + 1,
-                    modelContext.eventType(),
-                    b.inputStep().timestamp(),
-                    f.apply(b.stepOutput())
-                ),
+                event(b.inputStep(), f.apply(b.stepOutput())),
                 b.inputStep().log().entityModel(),
                 modelContext.severity(),
                 b.inputStep().triggerType(),
@@ -878,6 +867,15 @@ public class TransitionModelBuilder<I, T, O> {
             )
         )))))
     );
+  }
+
+  /// The event of the transition with the output, stored masked if the transition has a mask
+  private Event<O> event(InputStep<?> inputStep, O output) {
+    int number = inputStep.log().lastEventNumber() + 1;
+    if (modelContext.mask() == null)
+      return new Event<>(inputStep.log().entityId(), number, modelContext.eventType(), inputStep.timestamp(), output);
+    // Masked when it is stored, so an event which isn't stored is never masked
+    return new Event<>(inputStep.log().entityId(), number, modelContext.eventType(), inputStep.timestamp(), output, modelContext.mask());
   }
 
   private TransitionModel<I, O> complete() {

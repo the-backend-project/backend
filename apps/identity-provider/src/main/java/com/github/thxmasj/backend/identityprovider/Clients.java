@@ -8,7 +8,6 @@ import static com.github.thxmasj.backend.core.Tuples.tuple;
 import static com.github.thxmasj.backend.http.inbox.HttpInbox.Request;
 
 import com.github.thxmasj.backend.core.BasicEventType;
-import com.github.thxmasj.backend.core.BasicEventType.ReadOnly;
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EntityId;
 import com.github.thxmasj.backend.core.EntityModel;
@@ -74,6 +73,11 @@ public interface Clients {
       redirectUris = redirectUris != null ? List.copyOf(redirectUris) : List.of();
     }
 
+    /// The registration on behalf of the client
+    Registration registeredBy(String clientId) {
+      return new Registration(clientId(), subject, secretHash, scopes, clientId, grantTypes, redirectUris);
+    }
+
   }
 
   EventType<String, String> ClientIdClaimed = BasicEventType.of(
@@ -88,20 +92,34 @@ public interface Clients {
       UUID.fromString("a9d4f1c7-3e62-4b8a-9f05-6c2e8d1b4a37"),
       DataType.json(Registration.class)
   );
-  EventType<Void, Registration> ClientLookedUp = new ReadOnly<>(
+  EventType<Void, Registration> ClientLookedUp = BasicEventType.notStored(
       "Client looked up",
       UUID.fromString("e2b7c9a4-58d1-4f6e-a3b0-9d4c1e7f2a86"),
       DataType.none(),
       DataType.json(Registration.class)
   );
 
-  EventType<Registration, Void> RegistrationRequested = BasicEventType.of(
+  /// A registration requested, with the secret generated for the client, which is only in the session: the
+  /// registration has its hash, and the response the secret, which the event log masks
+  ///
+  /// @param secret the secret of the client, or null if the registrar gave the hash of a secret of its own, e.g. of a
+  ///               bootstrapped or imported client
+  record RegistrationRequest(Registration registration, String secret) {
+
+    /// The registration on behalf of the client, the subject its access token is authorized for
+    RegistrationRequest registeredBy(String clientId) {
+      return new RegistrationRequest(registration.registeredBy(clientId), secret);
+    }
+
+  }
+
+  EventType<RegistrationRequest, Void> RegistrationRequested = BasicEventType.of(
       "Registration requested",
       UUID.fromString("3c9f6e1b-7a24-4d58-b1e3-0f5a8c2d6e94"),
-      DataType.json(Registration.class),
+      DataType.json(RegistrationRequest.class),
       DataType.none()
   );
-  EventType<Tuple2<Registration, EntityId>, Registration> RegistrationAccepted = BasicEventType.of(
+  EventType<Tuple2<RegistrationRequest, EntityId>, Registration> RegistrationAccepted = BasicEventType.of(
       "Registration accepted",
       UUID.fromString("8d2a5f7c-4b91-4e36-a0c8-1e7f3b9d5a24"),
       DataType.unknown(),
@@ -182,20 +200,20 @@ public interface Clients {
             // The client gets a new entity id, which its id entity is created with
             onEvent(RegistrationRequested).to(States.Accepted)
                 .assemble(c -> tuple(c.input(), EntityId.newId()))
-                .trigger(ClientIdClaimed).with(d -> d.t1().clientId()).on(ClientIds).identifiedBy(d -> newEntityId(d.t2()))
+                .trigger(ClientIdClaimed).with(d -> d.t1().registration().clientId()).on(ClientIds).identifiedBy(d -> newEntityId(d.t2()))
                 .when(d -> d.t2().isIdExists()).then(
                     onEvent(RegistrationRejected).to(States.Rejected)
                         .assembleInput()
                         .trigger(Inbox.ReplyCreated).with(d -> Reply.error(409, "invalid_client_metadata", "Client id " + d.clientId() + " is taken")).on(Request).identifiedBy(entityIdFromSession())
                         .output(Tuple2::t1),
-                    d -> d.t1().t1()
+                    d -> d.t1().t1().registration()
                 )
                 .otherwise(
                     onEvent(RegistrationAccepted).to(States.Accepted)
                         .assemble(c -> tuple(c.input(), c.timestamp().toEpochSecond()))
-                        .trigger(ClientRegistered).with(d -> d.t1().t1()).on(Client).identifiedBy(d -> newEntityId(d.t1().t2()))
-                        .trigger(Inbox.ReplyCreated).with(d -> Reply.json(201, registered(d.t1().t1().t1(), d.t1().t2()))).on(Request).identifiedBy(entityIdFromSession())
-                        .output(d -> d.t1().t1().t1().t1()),
+                        .trigger(ClientRegistered).with(d -> d.t1().t1().registration()).on(Client).identifiedBy(d -> newEntityId(d.t1().t2()))
+                        .trigger(Inbox.ReplyCreated).with(d -> Reply.json(201, registered(d.t1().t1().t1().registration(), d.t1().t1().t1().secret(), d.t1().t2()))).on(Request).identifiedBy(entityIdFromSession())
+                        .output(d -> d.t1().t1().t1().t1().registration()),
                     Tuple2::t1
                 )
         ),
@@ -204,9 +222,8 @@ public interface Clients {
     );
   }
 
-  /// The client information response of RFC 7591 section 3.2.1, without the secret, which is added outside the state
-  /// machine
-  private static Map<String, Object> registered(Registration registration, long issuedAt) {
+  /// The client information response of RFC 7591 section 3.2.1, with the secret generated for the client, if any
+  private static Map<String, Object> registered(Registration registration, String secret, long issuedAt) {
     var response = new LinkedHashMap<String, Object>();
     response.put("client_id", registration.clientId());
     if (registration.subject() != null)
@@ -219,6 +236,11 @@ public interface Clients {
       response.put("redirect_uris", registration.redirectUris());
     }
     response.put("token_endpoint_auth_method", "client_secret_basic");
+    if (secret != null) {
+      response.put("client_secret", secret);
+      // The secret does not expire, RFC 7591 section 3.2.1
+      response.put("client_secret_expires_at", 0);
+    }
     return response;
   }
 

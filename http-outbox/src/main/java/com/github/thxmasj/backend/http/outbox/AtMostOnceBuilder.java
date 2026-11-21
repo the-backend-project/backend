@@ -12,7 +12,9 @@ import com.github.thxmasj.backend.core.Validated;
 import com.github.thxmasj.backend.http.HttpClient;
 import com.github.thxmasj.backend.http.HttpRequest;
 import com.github.thxmasj.backend.http.HttpResponse;
+import com.github.thxmasj.backend.http.Masking;
 import java.time.Duration;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -162,8 +164,16 @@ public final class AtMostOnceBuilder {
     );
   }
 
-  /// Optional: the rollback on accepted model defaults to none.
+  /// Optional: the masking defaults to [Masking#CREDENTIALS], and the rollback on accepted model to none.
   public interface RollbackOnAcceptedModelStep<RQ> extends BuildStep<RQ, Void> {
+
+    /// Masks what the masking gives of the request and the response in the event log, besides [Masking#CREDENTIALS],
+    /// which every at-most-once request masks, e.g. the form fields of a token request and the body of its response.
+    /// The request is sent and the response handled as they are: only the events stored are masked. An at-most-once
+    /// request is never sent again, but what reads it from the event log later gets it masked: a request aware content
+    /// parser, which parses the response in a later calculation, and the rollback message creator, which must then
+    /// create what is masked itself, e.g. take a new access token rather than copy the request's `Authorization`.
+    RollbackOnAcceptedModelStep<RQ> masking(Masking masking);
 
     <RRQ> RollbackOnUnknownModelStep<RQ, RRQ> rollbackOnAcceptedModel(AtLeastOnce<RRQ> rollbackOnAcceptedModel);
 
@@ -360,6 +370,7 @@ public final class AtMostOnceBuilder {
     private Predicate<HttpResponse<RS>> isAccepted;
     private Predicate<HttpResponse<RS>> isRejected;
     private Predicate<Tuple2<HttpResponse<byte[]>, String>> isRejectedByInvalidResponse;
+    private Masking masking = Masking.NONE;
 
     private WithContentParser(
         DataType<RQ> requestPayloadType,
@@ -453,29 +464,33 @@ public final class AtMostOnceBuilder {
         AtLeastOnce<RRQ> rollbackOnAcceptedModel,
         AtLeastOnce<RRQ> rollbackOnUnknownModel
     ) {
-      return (name, id) -> new AtMostOnce<>(
-          name,
-          id,
-          requestPayloadType,
-          responsePayloadType,
-          forwarder,
-          inflightTimeout,
-          processModel,
+      var callbacks = new AtMostOnce.Callbacks<>(
           onPeerUnavailable,
           onMissingResponse,
           onSuccess,
           onFailure,
           onValidResponseUnknown,
           onInvalidResponseRejection,
-          onInvalidResponseUnknown,
-          contentParser,
-          requestAwareContentParser,
-          isAccepted,
-          isRejected,
-          isRejectedByInvalidResponse,
-          rollbackOnAcceptedModel,
-          rollbackOnUnknownModel
+          onInvalidResponseUnknown
       );
+      var rules = new AtMostOnce.ResponseRules<>(contentParser, requestAwareContentParser, isAccepted, isRejected, isRejectedByInvalidResponse);
+      var shape = new AtMostOnce.Shape<>(
+          requestPayloadType,
+          responsePayloadType,
+          new ForwardAction(forwarder),
+          inflightTimeout,
+          processModel,
+          callbacks,
+          rules,
+          Masking.CREDENTIALS.and(masking)
+      );
+      return (name, id) -> new AtMostOnce<>(name, id, shape, _ -> rollbackOnAcceptedModel, _ -> rollbackOnUnknownModel);
+    }
+
+    @Override
+    public RollbackOnAcceptedModelStep<RQ> masking(Masking masking) {
+      this.masking = this.masking.and(Objects.requireNonNull(masking));
+      return this;
     }
 
     @Override

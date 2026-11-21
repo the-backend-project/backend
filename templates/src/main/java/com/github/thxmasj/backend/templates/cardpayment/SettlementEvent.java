@@ -1,7 +1,6 @@
 package com.github.thxmasj.backend.templates.cardpayment;
 
 import com.github.thxmasj.backend.core.BasicEventType;
-import com.github.thxmasj.backend.core.BasicEventType.ReadOnly;
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.templates.cardpayment.AcquirerResponse.ReconciliationValues;
@@ -39,13 +38,13 @@ public interface SettlementEvent {
   EventType<Long, Long> MerchantDebitReversed =
       BasicEventType.of("Merchant debit reversed", UUID.fromString("9b51bf01-bdaa-4284-a853-bdceab8d8c04"), DataType.json(Long.class));
   EventType<MerchantId, AcquirerBatchNumber> AcquirerBatchNumberLookedUp =
-      new ReadOnly<>("Acquirer batch number looked up", UUID.fromString("01700fc1-fa15-4142-a673-ba0e9a2768b6"), DataType.json(MerchantId.class), DataType.json(AcquirerBatchNumber.class));
+      BasicEventType.notStored("Acquirer batch number looked up", UUID.fromString("01700fc1-fa15-4142-a673-ba0e9a2768b6"), DataType.json(MerchantId.class), DataType.json(AcquirerBatchNumber.class));
   /// Looks up the batch number of a settlement without assigning the acquirer's batch number to it.
   EventType<MerchantId, BatchNumber> CurrentBatchNumberLookedUp =
-      new ReadOnly<>("Current batch number looked up", UUID.fromString("e2f3a0a4-6c1d-4a58-8f57-2b6f9c1d7a35"), DataType.json(MerchantId.class), DataType.json(BatchNumber.class));
+      BasicEventType.notStored("Current batch number looked up", UUID.fromString("e2f3a0a4-6c1d-4a58-8f57-2b6f9c1d7a35"), DataType.json(MerchantId.class), DataType.json(BatchNumber.class));
   /// Looks up the batch number of a settlement.
   EventType<AcquirerBatchNumber, BatchNumber> BatchNumberLookedUp =
-      new ReadOnly<>("Batch number looked up", UUID.fromString("ad4a9ec8-d0e6-44ce-bef3-d2bd20709005"), DataType.json(AcquirerBatchNumber.class), DataType.json(BatchNumber.class));
+      BasicEventType.notStored("Batch number looked up", UUID.fromString("ad4a9ec8-d0e6-44ce-bef3-d2bd20709005"), DataType.json(AcquirerBatchNumber.class), DataType.json(BatchNumber.class));
 
   record Opened(BatchNumber batchNumber, AcquirerBatchNumber acquirerBatchNumber) {}
   record CutOff(String merchantId, long batchNumber, String merchantAggregatorId, String merchantAggregatorBaseUrl) {}

@@ -84,9 +84,27 @@ public class ConditionalTriggerTest {
       UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b09")
   );
 
+  static EventType<UUID, UUID> BatchCheckRequestedWhenShipped = BasicEventType.of(
+      "Batch check requested when shipped",
+      UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b0d"),
+      DataType.uuid()
+  );
+  static EventType<Void, Void> BatchNoted = BasicEventType.of(
+      "Batch noted",
+      UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b0f")
+  );
+  /// Not stored, so its conditional trigger is deleted by a change of its own when it fires, also as its transition
+  /// stores another event on the batch
+  static EventType<Void, Void> BatchChecked = BasicEventType.notStored(
+      "Batch checked",
+      UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b0e")
+  );
+
+  private String schema;
   private EventsByEntityId eventsByEntityId;
 
   private StateMachine stateMachine(String schema) {
+    this.schema = schema;
     eventsByEntityId = Init.storage(schema, entityModels()).eventsByEntityId();
     return Init.stateMachine(schema, entityModels());
   }
@@ -125,6 +143,19 @@ public class ConditionalTriggerTest {
                 .on(Batch)
                 .identifiedBy(t -> entityId((UUID) t.t2()))
                 .output(),
+            onEvent(BatchCheckRequestedWhenShipped).toSelf()
+                .assemble(c -> c.input())
+                .trigger(BatchChecked)
+                .when(orderReferenced, t -> t)
+                .is(OrderShipped)
+                .with(_ -> null)
+                .on(Batch)
+                .identifiedBy(entityIdFromSession())
+                .output(),
+            onEvent(BatchChecked).toSelf()
+                .trigger(BatchNoted).on(Batch).identifiedBy(entityIdFromSession())
+                .output(),
+            onEvent(BatchNoted).toSelf().output(),
             onEvent(SessionBatchCloseRequestedWhenShipped).to(BatchStates.Waiting)
                 .assemble(c -> c.input())
                 .trigger(BatchClosed)
@@ -153,7 +184,7 @@ public class ConditionalTriggerTest {
   private EventLog batchLog(UUID batchId) {
     return eventsByEntityId.execute(
         Batch,
-        List.of(BatchOpened, BatchCloseRequestedWhenShipped, SessionBatchCloseRequestedWhenShipped, BatchCloseRequestedWhenShippedOrCancelled, BatchClosed),
+        List.of(BatchOpened, BatchCloseRequestedWhenShipped, SessionBatchCloseRequestedWhenShipped, BatchCloseRequestedWhenShippedOrCancelled, BatchCheckRequestedWhenShipped, BatchNoted, BatchClosed),
         batchId
     ).block();
   }
@@ -165,6 +196,34 @@ public class ConditionalTriggerTest {
   private void awaitBatchEvents(StateMachine machine, UUID batchId, int expected) throws InterruptedException {
     long deadline = System.currentTimeMillis() + Duration.ofSeconds(10).toMillis();
     while (System.currentTimeMillis() < deadline && batchEventCount(machine, batchId) < expected) Thread.sleep(200);
+  }
+
+  private int conditionalTriggerCount() {
+    return Init.client().sql("SELECT CAST(COUNT(*) AS INT) AS N FROM \"" + schema + "\".\"ConditionalTrigger\"")
+        .name("Test.ConditionalTriggers")
+        .map(row -> row.get("N", Integer.class))
+        .one()
+        .block();
+  }
+
+  /// A conditional trigger which fires an event not stored is deleted as it fires, rather than firing again
+  @Test
+  public void conditionalTriggerFiringAnEventNotStoredIsDeleted() throws Exception {
+    var machine = stateMachine(UUID.randomUUID().toString());
+    UUID key = UUID.randomUUID();
+    var order = machine.onEvent(trigger(OrderCreated, Order), key).blockFirst();
+    var batch = machine.onEvent(trigger(BatchOpened, Batch)).blockFirst();
+    machine.onEvent(trigger(BatchCheckRequestedWhenShipped, Batch, batch.entityId()), key).blockFirst();
+    assertEquals(1, conditionalTriggerCount());
+
+    machine.onEvent(trigger(OrderShipped, Order, order.entityId())).blockFirst();
+    long deadline = System.currentTimeMillis() + Duration.ofSeconds(10).toMillis();
+    while (System.currentTimeMillis() < deadline && conditionalTriggerCount() > 0) Thread.sleep(200);
+    assertEquals(0, conditionalTriggerCount());
+    // Batch checked is not stored, but Batch noted, which it triggers, is
+    awaitBatchEvents(machine, batch.entityId(), 3);
+    assertEquals(3, batchEventCount(machine, batch.entityId()));
+    assertEquals(0, conditionalTriggerCount());
   }
 
   @Test

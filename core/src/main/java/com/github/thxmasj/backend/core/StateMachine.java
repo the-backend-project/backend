@@ -60,10 +60,13 @@ import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
@@ -158,7 +161,7 @@ public class StateMachine implements AutoCloseable {
     List<EntityModel> models = resolved.entityModels();
     this.models = resolved;
     Debug.log("Supported entity models:\n" + models.stream().map(EntityModel::name).collect(joining("\n")));
-    this.traversers = models.stream().collect(toMap(m -> m, m -> new Traverser(m.transitions())));
+    this.traversers = models.stream().collect(toMap(m -> m, m -> new Traverser(m.transitions(), m.stored())));
     this.eventTypesByEntityModel = resolved.eventTypesByEntityModel();
     this.delayer = delayer != null ? delayer : _ -> Mono.empty();
     if (schemaDataSource != null) {
@@ -246,12 +249,7 @@ public class StateMachine implements AutoCloseable {
                 "Invalid event log: " + eventLog.events().stream().map(Event::typeName).collect(joining(","))));
           InputEvent<?> event = inputEvent(delayedTrigger);
           Debug.log("resolveState with: " + event);
-          return onEvent(
-              delayedTrigger.correlationId(),
-              event,
-              eventLog,
-              null
-          )
+          return firedByDelayedTrigger(delayedTrigger.correlationId(), event, eventLog)
               .flatMap(processResult -> switch (processResult) {
                     // State is resolved and delayed trigger already deleted by the change triggered by this event.
                     case Accepted<?> _ -> Mono.just(ResolverStatus.Ok);
@@ -477,15 +475,29 @@ public class StateMachine implements AutoCloseable {
     return onEvent(correlationId, inputEvent.eventType(), inputEvent.data(), eventLog, requestStep, null, null, null);
   }
 
+  /// The event of a delayed trigger, whose trigger is deleted with the change of the event
+  private <I> Mono<ProcessResult<?>> firedByDelayedTrigger(String correlationId, InputEvent<I> event, EventLog eventLog) {
+    return onEvent(correlationId, event.eventType(), event.data(), eventLog, null, TriggerType.DELAYED, null, null);
+  }
+
+  /// The changes to store, collected from the last step to the first. A delayed event is numbered after the event of
+  /// the transition triggering it, if that is stored, and with its number otherwise, which the next event stored on the
+  /// entity takes: it fires unless another event is stored first. The event of the transition, or of the one it
+  /// chooses, is the first one accepted on the entity after the delayed trigger, as the events it triggers on its own
+  /// entity are calculated after it.
   private List<Change> changes(@NotNull TransitionStep<?> tail) {
     ArrayList<Change> changes = new ArrayList<>();
+    var nextEvents = new HashMap<EntityKey, Event<?>>();
     for (var c = tail; c != null; c = c.previous()) {
       switch (c) {
         case OutputStep<?> occ
-            when occ.stepOutput().isAccepted() && !(occ.previous() instanceof ChoiceStep<?>) ->
-            changes.add(Change.fromAcceptedEvent(occ.stepOutput().accepted()));
+            when occ.stepOutput().isAccepted() && !(occ.previous() instanceof ChoiceStep<?>) -> {
+          var accepted = occ.stepOutput().accepted();
+          nextEvents.put(new EntityKey(accepted.entityModel().id(), accepted.event().entityId()), accepted.event());
+          changes.add(Change.fromAcceptedEvent(accepted));
+        }
         case OutputStep<?> _ -> {}
-        case DelayedTriggerStep<?, ?> dtcc -> changes.add(Change.fromDelayedEvent(dtcc.delayedEvent()));
+        case DelayedTriggerStep<?, ?> dtcc -> changes.add(Change.fromDelayedEvent(numbered(dtcc.delayedEvent(), nextEvents)));
         case ConditionalTriggerStep<?, ?> ctcc -> changes.add(Change.fromConditionalTrigger(ctcc.conditionalTrigger()));
         case AssembleStep<?> _ -> {}
         case ChoiceStep<?> _ -> {}
@@ -501,6 +513,24 @@ public class StateMachine implements AutoCloseable {
     return changes;
   }
 
+  /// The delayed event numbered after the event of its transition, the next one accepted on its entity, if that is
+  /// stored, or with its number if it isn't
+  private static <T> DelayedEvent<T> numbered(DelayedEvent<T> delayedEvent, Map<EntityKey, Event<?>> nextEvents) {
+    Event<?> transitionsEvent = nextEvents.get(new EntityKey(delayedEvent.entityModel().id(), delayedEvent.entityId()));
+    if (transitionsEvent == null)
+      return delayedEvent;
+    return delayedEvent.withEventNumber(transitionsEvent.eventNumber() + (transitionsEvent.type().stored() ? 1 : 0));
+  }
+
+  /// The action trigger with the log of its entity as the calculation of the action's result reads it, a later one: with
+  /// the event of the transition as stored, e.g. masked, and without it if it isn't stored, as the next event stored
+  /// follows. An entity of the session only has its events in the session, as they are.
+  private static ActionTrigger<?> withEventAsRead(ActionTrigger<?> actionTrigger, Event<?> event) {
+    if (isSessionOnly(actionTrigger.eventLog(), event))
+      return actionTrigger.withEvent(event);
+    return event.type().stored() ? actionTrigger.withEvent(event.asStored()) : actionTrigger;
+  }
+
   private List<ActionTrigger<?>> actionTriggers(@NotNull TransitionStep<?> tail) {
     ArrayList<ActionTrigger<?>> actionTriggers = new ArrayList<>();
     OutputStep<?> lastOutput = null;
@@ -509,9 +539,7 @@ public class StateMachine implements AutoCloseable {
         case OutputStep<?> occ -> lastOutput = occ;
         case ActionStep<?, ?> acc -> {
           if (lastOutput != null && lastOutput.stepOutput().isAccepted()) {
-            actionTriggers.add(
-                acc.actionTrigger().withEvent(lastOutput.stepOutput().accepted().event())
-            );
+            actionTriggers.add(withEventAsRead(acc.actionTrigger(), lastOutput.stepOutput().accepted().event()));
           }
         }
         default -> {}
@@ -814,36 +842,149 @@ public class StateMachine implements AutoCloseable {
         .switchIfEmpty(Mono.error(() -> new UnknownEntity(entityModel, selector.type(), selector.id())));
   }
 
+  /// The log of the entity of the model the session has, as it was given to its transition, searched in the calculation
+  /// of the step and then in the calculations of the session before it
   private EventLog logFromSteps(TransitionStep<?> context, EntityModel entityModel) {
-    for (var c = context; c != null; c = c.previous()) {
-      if (c instanceof InputStep<?> i && EntityModelGroup.targets(entityModel, i.log().entityModel())) {
-        return i.log();
-      }
-    }
-    InputStep<?> initial = null;
-    for (var c = context; c != null; c = c.previous()) {
-      if (c instanceof InputStep<?> i) initial = i;
-    }
-    for (var c = initial.stage1(); c != null; c = c.previous()) {
-      if (c instanceof InputStep<?> i && EntityModelGroup.targets(entityModel, i.log().entityModel())) {
-        return i.log();
+    for (var calculation = context; calculation != null; calculation = previousCalculation(calculation)) {
+      for (var c = calculation; c != null; c = c.previous()) {
+        if (c instanceof InputStep<?> i && EntityModelGroup.targets(entityModel, i.log().entityModel())) {
+          return i.log();
+        }
       }
     }
     throw new NoSuchElementException(entityModel.name() + " not found in transition step");
   }
 
-  /// An id entity or index entity has the same entity id as its entity, so the entity model is matched too
+  /// The tail of the calculation of the session the calculation of the step follows, i.e. the one whose action gave the
+  /// event it calculates, or null if it is the first calculation of its session. A calculation is stored in a
+  /// transaction of its own, and the calculations of a session are linked by the first step of each, which refers to the
+  /// one before.
+  private static TransitionStep<?> previousCalculation(TransitionStep<?> step) {
+    InputStep<?> initial = initial(step);
+    return initial != null ? initial.stage1() : null;
+  }
+
+  /// The log of the entity as the session has it, with the events accepted in the calculation of the step, or, for an
+  /// entity of the session only, in the calculations of the session before it, or null if the session has no events of
+  /// it. A stored entity is otherwise read from the database, as an earlier calculation's events of it may have been
+  /// followed by those of other sessions. An id entity or index entity has the same entity id as its entity, so the
+  /// entity model is matched too.
   private EventLog logFromNestedChanges(UUID entityId, EntityModel entityModel, TransitionStep<?> transitionStep) {
+    EventLog log = logFromCalculation(entityId, entityModel, transitionStep);
+    if (log != null || !hasEntitiesOfTheSessionOnly(entityModel))
+      return log;
+    for (var calculation = previousCalculation(transitionStep); calculation != null; calculation = previousCalculation(calculation)) {
+      log = logFromCalculation(entityId, entityModel, calculation);
+      if (log != null)
+        return isSessionOnly(log) ? log : null;
+    }
+    return null;
+  }
+
+  /// The log of the entity with the last event accepted on it in the calculation of the step, or null if it has none
+  private static EventLog logFromCalculation(UUID entityId, EntityModel entityModel, TransitionStep<?> transitionStep) {
     for (var c = transitionStep; c != null; c = c.previous()) {
       if (c instanceof OutputStep<?>(TransitionStep<?> previous, ProcessResult<?> stepOutput)
           && stepOutput instanceof Accepted<?>(Event<?> event, EntityModel model, _, _, _)
           && event.entityId().equals(entityId)
           && model.equals(entityModel)
           && !(previous instanceof ChoiceStep)) {
-        return c.inputStep().log().withNewEvent(event);
+        EventLog log = c.inputStep().log();
+        // An event which is not stored is not in the log of a stored entity, which the next event stored follows
+        if (!event.type().stored() && !isSessionOnly(log, event))
+          continue;
+        return log.withNewEvent(event);
       }
     }
     return null;
+  }
+
+  /// Whether the entity of the log is one of the session only, whose events are not stored: of a model which is not
+  /// stored, or created by an event which is not stored
+  private static boolean isSessionOnly(EventLog log) {
+    return !log.entityModel().stored() || (!log.events().isEmpty() && !log.events().getFirst().type().stored());
+  }
+
+  /// Whether the entity of the log would be one of the session only with the event, as [#isSessionOnly(EventLog)] of
+  /// the log with it, without copying the log
+  private static boolean isSessionOnly(EventLog log, Event<?> event) {
+    Event<?> first = log.events().isEmpty() ? event : log.events().getFirst();
+    return !log.entityModel().stored() || !first.type().stored();
+  }
+
+  /// Whether entities of the session only are of the model, which a group is not
+  private boolean hasEntitiesOfTheSessionOnly(EntityModel entityModel) {
+    Traverser traverser = traversers.get(entityModel);
+    return traverser == null || traverser.hasEntitiesOfTheSessionOnly();
+  }
+
+  private record EntityKey(UUID entityModelId, UUID entityId) {
+    static EntityKey of(Change change) {
+      return new EntityKey(change.entityModel().id(), change.entityId());
+    }
+  }
+
+  /// The entities of the session only among those the transition step accepted events on
+  private static Set<EntityKey> sessionOnlyEntities(TransitionStep<?> tail) {
+    var keys = new HashSet<EntityKey>();
+    for (var c = tail; c != null; c = c.previous()) {
+      if (c instanceof OutputStep<?>(TransitionStep<?> previous, ProcessResult<?> stepOutput)
+          && stepOutput instanceof Accepted<?>(Event<?> event, EntityModel model, _, _, _)
+          && !(previous instanceof ChoiceStep)
+          && isSessionOnly(c.inputStep().log(), event))
+        keys.add(new EntityKey(model.id(), event.entityId()));
+    }
+    return keys;
+  }
+
+  /// The changes with the deletion of the stored trigger which fired the event of the calculation, if one did. It comes
+  /// first, as a delayed event the calculation triggers on the entity replaces the trigger. The change of a stored event
+  /// deletes the trigger too, but the event may not be stored, e.g. as the transition chosen isn't, and the change of a
+  /// transition chosen doesn't know the trigger.
+  private static List<Change> withFiredTrigger(List<Change> changes, TransitionStep<?> tail) {
+    InputStep<?> initial = initial(tail);
+    if (initial == null || initial.triggerType() == null)
+      return changes;
+    var withDeletion = new ArrayList<Change>(changes.size() + 1);
+    withDeletion.add(Change.fromFiredTrigger(
+        initial.log().entityModel(),
+        initial.log().entityId(),
+        new Change.FiredTrigger(initial.triggerType(), initial.triggerId(), initial.eventNumber())
+    ));
+    withDeletion.addAll(changes);
+    return withDeletion;
+  }
+
+  /// The first step of the calculation of the step, of the event it calculates
+  private static InputStep<?> initial(TransitionStep<?> step) {
+    InputStep<?> initial = null;
+    for (var c = step; c != null; c = c.previous()) {
+      if (c instanceof InputStep<?> i) initial = i;
+    }
+    return initial;
+  }
+
+  private static boolean isStored(Change change, Set<EntityKey> sessionOnly) {
+    if (sessionOnly.contains(EntityKey.of(change)))
+      return false;
+    return change.newEvent() == null || change.newEvent().type().stored();
+  }
+
+  /// Fails for a change which is not stored but would have to be: a delayed or conditional trigger of an entity of the
+  /// session only, which fires in a session of its own
+  private static void requireStorable(List<Change> changes, Set<EntityKey> sessionOnly) {
+    for (var change : changes) {
+      if (isStored(change, sessionOnly))
+        continue;
+      if (change.delayedEvent() != null || change.conditionalTrigger() != null)
+        throw new IllegalStateException(String.format(
+            "%s on %s/%s is a delayed or conditional trigger of an entity of the session only, whose events are not " +
+                "stored, but it fires in a session of its own",
+            change.delayedEvent() != null ? change.delayedEvent().type().name() : change.conditionalTrigger().type().name(),
+            change.entityModel().name(),
+            change.entityId()
+        ));
+    }
   }
 
   private void checkCircular(TransitionStep<?> tail, EntityModel entityModel, UUID entityId, InputEvent<?> inputEvent) {
@@ -1082,8 +1223,11 @@ public class StateMachine implements AutoCloseable {
 
   /// The changes for the listener, in the order they were calculated, which is the reverse of the order they are
   /// collected in. The accepted events of an entity are thereby in the order of their numbers.
-  private List<Listener.Change> toListenerFormat(List<Change> changes) {
+  /// The changes for the listener: the events and the delayed events and conditional triggers created, not the deletion
+  /// of the trigger which fired the calculation
+  private List<Listener.Change> toListenerFormat(List<Change> changes, Set<EntityKey> sessionOnly) {
     return changes.reversed().stream()
+        .filter(change -> change.firedTrigger() == null)
         .map(change -> new Listener.Change(
                 new Listener.Change.Entity(
                     change.entityModel().name(),
@@ -1093,7 +1237,8 @@ public class StateMachine implements AutoCloseable {
                     change.newEvent().eventNumber(),
                     change.newEvent().type().name(),
                     change.severity(),
-                    change.newEvent().timestamp()
+                    change.newEvent().timestamp(),
+                    isStored(change, sessionOnly)
                 ) : (change.delayedEvent() != null ? new Listener.Change.DelayedEvent(
                     change.delayedEvent().eventNumber(),
                     change.delayedEvent().type().name(),
@@ -1109,9 +1254,11 @@ public class StateMachine implements AutoCloseable {
       String correlationId,
       TransitionStep<?> transitionStep
   ) {
-    List<Change> changes = changes(transitionStep);
+    var sessionOnly = sessionOnlyEntities(transitionStep);
+    List<Change> changes = withFiredTrigger(changes(transitionStep), transitionStep);
     Debug.log("Changes to store:\n" + changes.stream().map(Object::toString).collect(joining("\n")));
-    return Mono.just("")
+    return Mono.fromRunnable(() -> requireStorable(changes, sessionOnly))
+        .thenReturn("")
         .delayUntil(_ -> delayer.apply(changes.stream()
             .filter(change -> change.newEvent() != null)
             .map(change -> correlationId + "-" + change.newEvent().type().id())
@@ -1121,7 +1268,7 @@ public class StateMachine implements AutoCloseable {
                     timestamp,
                     correlationId,
                     changes.stream()
-                        .filter(c -> c.newEvent() == null || !(c.newEvent().type() instanceof BasicEventType.ReadOnly))
+                        .filter(c -> isStored(c, sessionOnly))
                         .toList()
                 )
                 .collectList()
@@ -1129,7 +1276,7 @@ public class StateMachine implements AutoCloseable {
                 // that one has stopped listening, e.g. after the first event or a timeout
                 .doOnNext(_ -> {
                   if (!changes.isEmpty() && listener != null) {
-                    listener.changeAccepted(correlationId, toListenerFormat(changes));
+                    listener.changeAccepted(correlationId, toListenerFormat(changes, sessionOnly));
                   }
                 })
                 .flatMap(x -> Mono.just("")
@@ -1141,7 +1288,10 @@ public class StateMachine implements AutoCloseable {
                                   toList()
                               ))
                               .forEach((entityId, changeList) -> {
-                                changeList.sort(comparing(change -> change.newEvent().eventNumber()));
+                                // An event not stored and the event stored after it on the entity have the same number, so the one not
+                                // stored comes first
+                                changeList.sort(Comparator.<Change, Integer>comparing(change -> change.newEvent().eventNumber())
+                                    .thenComparing(change -> isStored(change, sessionOnly)));
                                 Optional<Many<Event<?>>> responseSink = ctx.getOrEmpty("RS/" + entityId);
                                 if (responseSink.isPresent()) {
                                   Debug.log("Found response sink for " + changeList.stream().map(c -> c.entityModel().name() + "/" + c.entityId() + "/" + c.newEvent().typeName()).toList());
