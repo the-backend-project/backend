@@ -406,6 +406,10 @@ public final class HttpInboxRequest<T> implements EntityModel {
     /// The message id of a request, e.g. from its path, by which a retried request is recognised and gets the response
     /// of the first one, and by which a request is rolled back. Without it, requests are not deduplicated: each one is
     /// dispatched to the application, and the request can't be rolled back.
+    ///
+    /// The message id is the authorized subject's, so with an [#authorizer(BiFunction)] two clients never share one. A
+    /// retry is compared with the first request without their credentials, which are masked, so without an authorizer
+    /// another client sending a request with the message id and the body of an earlier one gets its response.
     public DeduplicatedBuilder<T> deduplicateOn(BiFunction<HttpRequest<byte[]>, T, Validated<String>> deduplicateOn) {
       return new DeduplicatedBuilder<>(this, Objects.requireNonNull(deduplicateOn));
     }

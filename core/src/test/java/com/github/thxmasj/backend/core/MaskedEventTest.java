@@ -1,6 +1,8 @@
 package com.github.thxmasj.backend.core;
 
 import static com.github.thxmasj.backend.core.TransitionModelBuilder.WithEvent.onEvent;
+import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -13,6 +15,8 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 public class MaskedEventTest {
+
+  enum States implements State {Open}
 
   static EventType<String, String> PasswordSet = BasicEventType.of("Password set", UUID.fromString("1f3a5c7e-9b2d-4e46-a8c0-d2e4f6a8b013"), DataType.string());
   static EventType<Void, Void> Viewed = BasicEventType.notStored("Viewed", UUID.fromString("5b7d9f1a-3c4e-4a68-b0d2-e4f6a8c0d235"));
@@ -33,14 +37,36 @@ public class MaskedEventTest {
 
   @Test
   public void aTransitionOnAnEventNotStoredCantHaveAConditionalTrigger() {
-    var e = assertThrows(IllegalArgumentException.class, () -> onEvent(Viewed).toSelf()
+    var conditional = onEvent(Viewed).toSelf()
         .assemble(c -> c.log().entityId())
         .trigger(Touched).when(PasswordSet, id -> id).is(Touched).with(_ -> null).on(Account).identifiedBy(EntitySelector::entityId)
-        .output());
-    assertTrue(e.getMessage().startsWith("Viewed is not stored, so its transition can't have a conditional trigger"), e.getMessage());
+        .output();
+    var e = assertThrows(IllegalArgumentException.class, () -> new Traverser(Map.of(Begin, List.of(), States.Open, List.of(conditional))));
+    assertTrue(e.getMessage().startsWith("The transition on Viewed has a conditional trigger, which refers to its event"), e.getMessage());
   }
 
-  /// A mask giving null stores no data, rather than the data unmasked
+  /// A transition on a stored event which chooses one which isn't can't have a conditional trigger either
+  @Test
+  public void aTransitionChoosingOneNotStoredCantHaveAConditionalTrigger() {
+    var choosing = onEvent(Touched).toSelf()
+        .assemble(c -> c.log().entityId())
+        .trigger(Touched).when(PasswordSet, id -> id).is(Touched).with(_ -> null).on(Account).identifiedBy(EntitySelector::entityId)
+        .when(_ -> true).then(onEvent(Viewed).toSelf().output(), _ -> null)
+        .otherwise(onEvent(Touched).toSelf().output(), _ -> null);
+    var e = assertThrows(IllegalArgumentException.class, () -> new Traverser(Map.of(Begin, List.of(), States.Open, List.of(choosing))));
+    assertTrue(e.getMessage().contains("but the transition on Viewed, which it may choose, is not stored"), e.getMessage());
+  }
+
+  /// An entity of the session only can't have delayed triggers, which fire in a session of their own, while a stored
+  /// one can
+  @Test
+  public void aTransitionOfAnEntityOfTheSessionOnlyCantHaveADelayedTrigger() {
+    var delaying = onEvent(Touched).to(States.Open).trigger(Touched).after(_ -> java.time.Duration.ofMinutes(1)).output();
+    var e = assertThrows(IllegalArgumentException.class, () -> new Traverser(Map.of(Begin, List.of(delaying), States.Open, List.of()), false));
+    assertTrue(e.getMessage().contains("can't have a delayed trigger"), e.getMessage());
+    assertDoesNotThrow(() -> new Traverser(Map.of(Begin, List.of(delaying), States.Open, List.of()), true));
+  }
+
   @Test
   public void aMaskGivingNullStoresNoData() {
     var event = new Event<>(UUID.randomUUID(), 1, PasswordSet, ZonedDateTime.now(), "hunter2", _ -> null);

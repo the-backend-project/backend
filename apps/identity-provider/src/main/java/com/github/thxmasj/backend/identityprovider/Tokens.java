@@ -135,6 +135,8 @@ public interface Tokens {
   private static Map<State, List<TransitionModel<?, ?>>> transitions(Duration lifetime) {
     return Map.of(
         Begin, List.of(
+            // A request refused at the endpoint, e.g. without client authentication
+            refuse(),
             onEvent(TokenRequested).to(States.Issued)
                 .assemble(c -> tuple(c.input(), c.log().entityId(), c.timestamp()))
                 .trigger(Clients.ClientLookedUp).on(Client).identifiedBy(d -> idEvent(ClientIdClaimed, d.t1().clientId()))

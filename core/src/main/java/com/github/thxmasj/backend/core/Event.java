@@ -50,6 +50,13 @@ public final class Event<T> {
     this.unmarshalledData = data;
   }
 
+  /// An event with the data, which is marshalled when it is first asked for, e.g. when the event is stored
+  public static <T> Event<T> marshalledWhenAskedFor(UUID entityId, int eventNumber, EventType<?, T> type, ZonedDateTime timestamp, T data) {
+    var event = new Event<>(entityId, eventNumber, type, timestamp);
+    event.unmarshalledData = data;
+    return event;
+  }
+
   /// An event whose data in the session differs from the data stored, e.g. masked. [#getUnmarshalledData()] gives the
   /// data, while [#getMarshalledData()], which is what is stored, has the stored form of the data, which is made when
   /// it is first asked for, as an event which is not stored never is.

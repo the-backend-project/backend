@@ -38,13 +38,60 @@ class Traverser {
         .flatMap(transition -> leaves(transition).stream())
         .anyMatch(leaf -> !leaf.eventType().stored());
     transitions.forEach(this::requireUniquePaths);
-    if (stored) {
-      var reached = statesOfStoredEntities();
-      transitions.forEach((from, fromState) -> {
-        if (reached.contains(from))
-          requireNotStoredToSelf(from, fromState);
-      });
+    var reached = stored ? statesOfStoredEntities() : Set.<State>of();
+    transitions.forEach((from, fromState) -> {
+      if (reached.contains(from))
+        requireNotStoredToSelf(from, fromState);
+      for (var transition : fromState) {
+        requireStoredEventOfConditionalTrigger(transition);
+        if (mayBeOfAnEntityOfTheSessionOnly(stored, reached, from, transition))
+          requireNoLaterTrigger(transition);
+      }
+    });
+  }
+
+  /// Whether the transition may be taken by an entity of the session only: any transition of a model which is not
+  /// stored, and of a stored model one from `Begin` which may choose an event not stored, or one from a state only
+  /// entities of the session only reach
+  private boolean mayBeOfAnEntityOfTheSessionOnly(boolean stored, Set<State> reached, State from, TransitionModel<?, ?> transition) {
+    if (!stored)
+      return true;
+    if (from == Begin)
+      return leaves(transition).stream().anyMatch(leaf -> !leaf.eventType().stored());
+    return !reached.contains(from);
+  }
+
+  /// A conditional trigger refers to the event of its transition, so the transition, and every transition it may
+  /// choose, must be of an event which is stored
+  private void requireStoredEventOfConditionalTrigger(TransitionModel<?, ?> transition) {
+    if (transition.triggers().stream().anyMatch(trigger -> trigger.condition() != null)) {
+      for (var leaf : leaves(transition)) {
+        if (!leaf.eventType().stored())
+          throw new IllegalArgumentException(String.format(
+              "The transition on %s has a conditional trigger, which refers to its event, but the transition on %s, which " +
+                  "it may choose, is not stored",
+              transition.eventType().name(),
+              leaf.eventType().name()
+          ));
+      }
     }
+    for (var filter : transition.filters())
+      requireStoredEventOfConditionalTrigger(filter.alternative().model());
+  }
+
+  /// An entity of the session only is not found after its session, so its transitions, and those they may choose, can't
+  /// have delayed or conditional triggers, which fire in a session of their own
+  private void requireNoLaterTrigger(TransitionModel<?, ?> transition) {
+    boolean conditional = transition.triggers().stream().anyMatch(trigger -> trigger.condition() != null);
+    if (conditional || !transition.delayedEventTypes().isEmpty())
+      throw new IllegalArgumentException(String.format(
+          "The transition on %s may be of an entity of the session only, which is not found after its session, so it " +
+              "can't have a %s trigger, which fires in a session of its own",
+          transition.eventType().name(),
+          conditional ? "conditional" : "delayed"
+      ));
+    for (var filter : transition.filters())
+      requireNoLaterTrigger(filter.alternative().model());
   }
 
   /// The states an entity which is stored reaches: from `Begin` by the events stored, as one created by an event not

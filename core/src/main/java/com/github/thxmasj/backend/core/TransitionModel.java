@@ -109,6 +109,11 @@ public class TransitionModel<I, O> {
     return modelContext.triggers();
   }
 
+  /// The types of the delayed events the transition triggers
+  List<EventType<?, ?>> delayedEventTypes() {
+    return modelContext.delayedEventTypes();
+  }
+
   public List<Action<?>> actions() {
     return modelContext.actions();
   }

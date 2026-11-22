@@ -169,8 +169,13 @@ public record EventLog(
     return typed.isMasked() ? typed.getUnmarshalledData() : Event.unmarshal(typed.type(), typed.data());
   }
 
-  /// Whether the entity would be one of the session only with the event as its next: of a model which is not stored,
-  /// or created by an event which is not stored
+  /// Whether the entity is one of the session only, whose events are not stored: of a model which is not stored, or
+  /// created by an event which is not stored
+  boolean isSessionOnly() {
+    return !entityModel.stored() || (!events.isEmpty() && !events.getFirst().type().stored());
+  }
+
+  /// Whether the entity would be one of the session only with the event as its next, see [#isSessionOnly()]
   boolean isSessionOnlyWith(Event<?> next) {
     Event<?> first = events.isEmpty() ? next : events.getFirst();
     return !entityModel.stored() || !first.type().stored();

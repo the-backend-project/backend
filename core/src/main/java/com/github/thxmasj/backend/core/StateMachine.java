@@ -527,7 +527,7 @@ public class StateMachine implements AutoCloseable {
   /// the event of the transition as stored, e.g. masked, and without it if it isn't stored, as the next event stored
   /// follows. An entity of the session only has its events in the session, as they are.
   private static ActionTrigger<?> withEventAsRead(ActionTrigger<?> actionTrigger, Event<?> event) {
-    if (isSessionOnly(actionTrigger.eventLog(), event))
+    if (actionTrigger.eventLog().isSessionOnlyWith(event))
       return actionTrigger.withEvent(event);
     return event.type().stored() ? actionTrigger.withEvent(event.asStored()) : actionTrigger;
   }
@@ -844,24 +844,21 @@ public class StateMachine implements AutoCloseable {
   }
 
   /// The log of the entity of the model the session has, as it was given to its transition, searched in the transaction
-  /// of the step and then in the transactions of the session before it
+  /// of the step and then in the transactions of the session before it, each walked once. The transactions of a session
+  /// are linked by the first step of each, which refers to the tail of the one before.
   private EventLog logFromSteps(TransitionStep<?> context, EntityModel entityModel) {
-    for (var transaction = context; transaction != null; transaction = previousTransaction(transaction)) {
+    for (var transaction = context; transaction != null; ) {
+      InputStep<?> initial = null;
       for (var c = transaction; c != null; c = c.previous()) {
-        if (c instanceof InputStep<?> i && EntityModelGroup.targets(entityModel, i.log().entityModel())) {
-          return i.log();
+        if (c instanceof InputStep<?> i) {
+          if (EntityModelGroup.targets(entityModel, i.log().entityModel()))
+            return i.log();
+          initial = i;
         }
       }
+      transaction = initial != null ? initial.stage1() : null;
     }
     throw new NoSuchElementException(entityModel.name() + " not found in transition step");
-  }
-
-  /// The tail of the transaction of the session which the transaction of the step follows, i.e. the one whose action
-  /// gave its event, or null if it is the first transaction of its session. The transactions of a session are linked by
-  /// the first step of each, which refers to the one before.
-  private static TransitionStep<?> previousTransaction(TransitionStep<?> step) {
-    InputStep<?> initial = initial(step);
-    return initial != null ? initial.stage1() : null;
   }
 
   /// The log of the entity as the session has it, with the events accepted in the transaction of the step, or, for an
@@ -870,19 +867,24 @@ public class StateMachine implements AutoCloseable {
   /// followed by those of other sessions. An id entity or index entity has the same entity id as its entity, so the
   /// entity model is matched too.
   private EventLog logFromNestedChanges(UUID entityId, EntityModel entityModel, TransitionStep<?> transitionStep) {
-    EventLog log = logFromTransaction(entityId, entityModel, transitionStep);
-    if (log != null || !hasEntitiesOfTheSessionOnly(entityModel))
-      return log;
-    for (var transaction = previousTransaction(transitionStep); transaction != null; transaction = previousTransaction(transaction)) {
-      log = logFromTransaction(entityId, entityModel, transaction);
-      if (log != null)
-        return isSessionOnly(log) ? log : null;
+    var found = inTransaction(entityId, entityModel, transitionStep);
+    if (found.log() != null || !hasEntitiesOfTheSessionOnly(entityModel))
+      return found.log();
+    while (found.previousTransaction() != null) {
+      found = inTransaction(entityId, entityModel, found.previousTransaction());
+      if (found.log() != null)
+        return found.log().isSessionOnly() ? found.log() : null;
     }
     return null;
   }
 
-  /// The log of the entity with the last event accepted on it in the transaction of the step, or null if it has none
-  private static EventLog logFromTransaction(UUID entityId, EntityModel entityModel, TransitionStep<?> transitionStep) {
+  /// What a walk of a transaction found: the log of the entity with the last event accepted on it, or, if it has none,
+  /// the tail of the transaction before it in the session, if any
+  private record InTransaction(EventLog log, TransitionStep<?> previousTransaction) {}
+
+  /// Walks the transaction of the step once, from its tail, for the last event accepted on the entity
+  private static InTransaction inTransaction(UUID entityId, EntityModel entityModel, TransitionStep<?> transitionStep) {
+    InputStep<?> initial = null;
     for (var c = transitionStep; c != null; c = c.previous()) {
       if (c instanceof OutputStep<?>(TransitionStep<?> previous, ProcessResult<?> stepOutput)
           && stepOutput instanceof Accepted<?>(Event<?> event, EntityModel model, _, _, _)
@@ -891,23 +893,13 @@ public class StateMachine implements AutoCloseable {
           && !(previous instanceof ChoiceStep)) {
         EventLog log = c.inputStep().log();
         // An event which is not stored is not in the log of a stored entity, which the next event stored follows
-        if (!event.type().stored() && !isSessionOnly(log, event))
-          continue;
-        return log.withNewEvent(event);
+        if (event.type().stored() || log.isSessionOnlyWith(event))
+          return new InTransaction(log.withNewEvent(event), null);
       }
+      if (c instanceof InputStep<?> i)
+        initial = i;
     }
-    return null;
-  }
-
-  /// Whether the entity of the log is one of the session only, whose events are not stored: of a model which is not
-  /// stored, or created by an event which is not stored
-  private static boolean isSessionOnly(EventLog log) {
-    return !log.entityModel().stored() || (!log.events().isEmpty() && !log.events().getFirst().type().stored());
-  }
-
-  /// Whether the entity of the log would be one of the session only with the event
-  private static boolean isSessionOnly(EventLog log, Event<?> event) {
-    return log.isSessionOnlyWith(event);
+    return new InTransaction(null, initial != null ? initial.stage1() : null);
   }
 
   /// Whether entities of the session only are of the model, which a group is not
@@ -929,7 +921,7 @@ public class StateMachine implements AutoCloseable {
       if (c instanceof OutputStep<?>(TransitionStep<?> previous, ProcessResult<?> stepOutput)
           && stepOutput instanceof Accepted<?>(Event<?> event, EntityModel model, _, _, _)
           && !(previous instanceof ChoiceStep)
-          && isSessionOnly(c.inputStep().log(), event))
+          && c.inputStep().log().isSessionOnlyWith(event))
         keys.add(new EntityKey(model.id(), event.entityId()));
     }
     return keys;

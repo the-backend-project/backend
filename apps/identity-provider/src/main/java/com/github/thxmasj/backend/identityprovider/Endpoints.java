@@ -20,14 +20,12 @@ import com.github.thxmasj.backend.identityprovider.Inbox.Reply;
 import java.net.URI;
 import java.time.Duration;
 import java.util.Base64;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.WeakHashMap;
 import java.util.function.Supplier;
 import java.util.function.BiFunction;
 
@@ -69,24 +67,12 @@ final class Endpoints {
     return upstream;
   }
 
-  /// The answers of the requests answered at once, by the request, as their inbox request asks for the answer both when
-  /// matching a request and when parsing it. An answer is a function of the request alone, so an equal request has the
-  /// same answer. They are kept while the request is, and computed outside the lock of the map, as they may parse the
-  /// request.
-  private final Map<HttpRequest<byte[]>, Optional<HttpResponse<byte[]>>> answers = Collections.synchronizedMap(new WeakHashMap<>());
-
-  /// The response of a request answered at once, or null for a request for the entities of the identity provider. A
-  /// request with an access token is processed, and its token verified by the authorizer of its inbox request.
+  /// The response of a request answered at once, or null for a request for the entities of the identity provider. It
+  /// is asked for both when the inbox request of the requests answered at once matches a request and when it parses it,
+  /// which takes little, as a request with an access token or to the token endpoint is answered by the other inbox
+  /// requests: their authorizers verify the tokens, and the token requests refuse invalid requests to the token
+  /// endpoint.
   HttpResponse<byte[]> immediate(HttpRequest<byte[]> request) {
-    Optional<HttpResponse<byte[]>> known = answers.get(request);
-    if (known == null) {
-      known = Optional.ofNullable(answer(request));
-      answers.put(request, known);
-    }
-    return known.orElse(null);
-  }
-
-  private HttpResponse<byte[]> answer(HttpRequest<byte[]> request) {
     String path = request.uri().getPath();
     if (upstream != null) {
       switch (path) {
@@ -112,7 +98,7 @@ final class Endpoints {
       case "/health" -> get(request, () -> response(200, "OK", "text/plain", "OK"));
       case "/.well-known/jwks.json" -> get(request, () -> response(200, "OK", "application/jwk-set+json", keys.publicKeys()));
       case "/.well-known/oauth-authorization-server" -> get(request, () -> response(200, "OK", "application/json", metadata));
-      case "/token" -> request.method() == Method.POST ? tokenRefusal(request) : methodNotAllowed("POST");
+      case "/token" -> request.method() == Method.POST ? null : methodNotAllowed("POST");
       case "/clients" -> request.method() != Method.POST ? methodNotAllowed("POST") : isInternal(request) ? null : withoutToken(request);
       default -> response(404, "Not Found", null, null);
     };
@@ -120,74 +106,70 @@ final class Endpoints {
 
   // The token endpoint
 
-  /// The refusal of a request to the token endpoint of RFC 6749 section 3.2 which is invalid or isn't authenticated by
-  /// HTTP Basic, which RFC 6749 section 2.3.1 requires every server to support, or null if it is to be processed
-  private HttpResponse<byte[]> tokenRefusal(HttpRequest<byte[]> request) {
+  /// A request to the token endpoint of RFC 6749 section 3.2, parsed once: refused at the endpoint, a token request of
+  /// the client credentials grant, or a code redemption of the authorization code grant, of which one is not null
+  ///
+  /// @param refusal           why the request is refused, if it is invalid or isn't authenticated by HTTP Basic,
+  ///                          which RFC 6749 section 2.3.1 requires every server to support
+  /// @param clientCredentials a token request, with the hash of the secret of the client
+  /// @param codeRedemption    a code redemption, with the hashes of the secret of the client, the code and the code
+  ///                          verifier, which is the S256 challenge of the verifier
+  record TokenEndpointRequest(Tokens.Refusal refusal, Tokens.Request clientCredentials, Tokens.CodeRequest codeRedemption) {
+
+    static TokenEndpointRequest refused(String clientId, String error, String description) {
+      return new TokenEndpointRequest(new Tokens.Refusal(clientId, error, description), null, null);
+    }
+
+  }
+
+  /// The request to the token endpoint, which is always valid, as a refusal is answered by the token requests
+  Validated<TokenEndpointRequest> tokenEndpointRequest(HttpRequest<byte[]> request) {
     String contentType = request.headerValue("Content-Type");
     if (contentType == null || !contentType.toLowerCase().startsWith("application/x-www-form-urlencoded"))
-      return tokenError(400, "invalid_request", "Content-Type must be application/x-www-form-urlencoded");
+      return valid(TokenEndpointRequest.refused(null, "invalid_request", "Content-Type must be application/x-www-form-urlencoded"));
     Map<String, String> form;
     try {
       form = Form.parse(request.body());
     } catch (IllegalArgumentException e) {
-      return tokenError(400, "invalid_request", e.getMessage());
+      return valid(TokenEndpointRequest.refused(null, "invalid_request", e.getMessage()));
     }
-    // Only the Authorization header is masked in the event log, not a secret in the body
     if (form.containsKey("client_secret") || form.containsKey("client_assertion"))
-      return tokenError(400, "invalid_request", "Clients must authenticate with HTTP Basic");
+      return valid(TokenEndpointRequest.refused(null, "invalid_request", "Clients must authenticate with HTTP Basic"));
     Optional<String[]> credentials = basicCredentials(request.headerValue("Authorization"));
     if (credentials.isEmpty())
-      return tokenError(401, "invalid_client", "Clients must authenticate with HTTP Basic");
+      return valid(TokenEndpointRequest.refused(null, "invalid_client", "Clients must authenticate with HTTP Basic"));
     String clientId = credentials.get()[0];
+    String secret = credentials.get()[1];
+    return valid(tokenEndpointRequest(form, clientId, secret));
+  }
+
+  private TokenEndpointRequest tokenEndpointRequest(Map<String, String> form, String clientId, String secret) {
     if (form.containsKey("client_id") && !form.get("client_id").equals(clientId))
-      return tokenError(400, "invalid_request", "client_id does not match the authenticated client");
+      return TokenEndpointRequest.refused(clientId, "invalid_request", "client_id does not match the authenticated client");
     String grantType = form.get("grant_type");
     if (grantType == null)
-      return tokenError(400, "invalid_request", "grant_type is missing");
+      return TokenEndpointRequest.refused(clientId, "invalid_request", "grant_type is missing");
     if (!grantType.equals(Clients.ClientCredentials) && !grantType.equals(Clients.AuthorizationCode))
-      return tokenError(400, "unsupported_grant_type", "Only the client_credentials and authorization_code grants are supported");
-    if (grantType.equals(Clients.ClientCredentials) && form.containsKey("scope") && !Scopes.isValid(form.get("scope")))
-      return tokenError(400, "invalid_scope", "scope must be a space separated list of scopes");
-    if (grantType.equals(Clients.AuthorizationCode)) {
-      String code = form.get("code");
-      String verifier = form.get("code_verifier");
-      if (code == null || code.isEmpty())
-        return tokenError(400, "invalid_request", "code is missing");
-      if (form.get("redirect_uri") == null)
-        return tokenError(400, "invalid_request", "redirect_uri is missing");
-      if (verifier != null && !Inbox.codeChallengePattern.matcher(verifier).matches())
-        return tokenError(400, "invalid_request", "code_verifier is invalid");
-    }
+      return TokenEndpointRequest.refused(clientId, "unsupported_grant_type", "Only the client_credentials and authorization_code grants are supported");
     if (!Clients.isValidClientId(clientId))
-      return tokenError(401, "invalid_client", "Client authentication failed");
-    return null;
-  }
-
-  /// Whether a request to the token endpoint, which [#tokenRefusal(HttpRequest)] has let through, redeems a code
-  static boolean isCodeRequest(HttpRequest<byte[]> request) {
-    try {
-      return Clients.AuthorizationCode.equals(Form.parse(request.body()).get("grant_type"));
-    } catch (IllegalArgumentException e) {
-      return false;
+      return TokenEndpointRequest.refused(null, "invalid_client", "Client authentication failed");
+    if (grantType.equals(Clients.ClientCredentials)) {
+      if (form.containsKey("scope") && !Scopes.isValid(form.get("scope")))
+        return TokenEndpointRequest.refused(clientId, "invalid_scope", "scope must be a space separated list of scopes");
+      return new TokenEndpointRequest(null, new Tokens.Request(clientId, secretHash(clientId, secret), form.get("scope")), null);
     }
-  }
-
-  /// A token request of the client credentials grant, with the hash of the secret of the client
-  Validated<Tokens.Request> tokenRequest(HttpRequest<byte[]> request) {
-    String[] credentials = basicCredentials(request.headerValue("Authorization")).orElseThrow();
-    return valid(new Tokens.Request(credentials[0], secretHash(credentials[0], credentials[1]), Form.parse(request.body()).get("scope")));
-  }
-
-  /// A token request of the authorization code grant, with the hashes of the secret of the client, the code and the
-  /// code verifier, which is the S256 challenge of the verifier
-  Validated<Tokens.CodeRequest> codeRequest(HttpRequest<byte[]> request) {
-    String[] credentials = basicCredentials(request.headerValue("Authorization")).orElseThrow();
-    Map<String, String> form = Form.parse(request.body());
+    String code = form.get("code");
     String verifier = form.get("code_verifier");
-    return valid(new Tokens.CodeRequest(
-        credentials[0],
-        secretHash(credentials[0], credentials[1]),
-        Secrets.hash(form.get("code")),
+    if (code == null || code.isEmpty())
+      return TokenEndpointRequest.refused(clientId, "invalid_request", "code is missing");
+    if (form.get("redirect_uri") == null)
+      return TokenEndpointRequest.refused(clientId, "invalid_request", "redirect_uri is missing");
+    if (verifier != null && !Inbox.codeChallengePattern.matcher(verifier).matches())
+      return TokenEndpointRequest.refused(clientId, "invalid_request", "code_verifier is invalid");
+    return new TokenEndpointRequest(null, null, new Tokens.CodeRequest(
+        clientId,
+        secretHash(clientId, secret),
+        Secrets.hash(code),
         form.get("redirect_uri"),
         verifier != null ? Secrets.hash(verifier) : null
     ));
@@ -200,43 +182,35 @@ final class Endpoints {
     return bcryptHash != null ? ImportedClients.secretHash(secret, bcryptHash) : Secrets.hash(secret);
   }
 
-  /// The access token response of RFC 6749 section 5.1, with the token signed from the claims the state machine
-  /// issued, or the error response with the challenge of HTTP Basic if the client failed to authenticate
-  HttpResponse<byte[]> tokenResponse(TransitionContext<Reply> c) {
+  /// The response of the token endpoint: the access token response of RFC 6749 section 5.1, with the tokens signed from
+  /// the claims the state machine issued, and with the ID token of OpenID Connect Core section 3.1.3.3 for a code
+  /// redemption, or the error response of section 5.2, with the challenge of HTTP Basic for a failed client
+  /// authentication
+  HttpResponse<byte[]> tokenEndpointResponse(TransitionContext<Reply> c) {
     HttpResponse<byte[]> issued = Inbox.reply(c);
     return switch (issued.statusCode()) {
-      case 200 -> {
-        var token = DataType.objectMapper.readValue(issued.body(), Tokens.IssuedToken.class);
-        var body = new LinkedHashMap<String, Object>();
-        body.put("access_token", keys.sign(token));
-        body.put("token_type", "Bearer");
-        body.put("expires_in", token.expiresAt() - token.issuedAt());
-        body.put("scope", token.scope());
-        yield new HttpResponse<>(200, "OK", noStore(issued.headers()), DataType.objectMapper.writeValueAsBytes(body));
-      }
+      case 200 -> new HttpResponse<>(200, "OK", noStore(issued.headers()), DataType.objectMapper.writeValueAsBytes(signed(issued.body())));
       case 401 -> withHeader(issued, "WWW-Authenticate", basicChallenge());
       default -> issued;
     };
   }
 
-  /// The access token response of RFC 6749 section 5.1 with the ID token of OpenID Connect Core section 3.1.3.3
-  HttpResponse<byte[]> userTokensResponse(TransitionContext<Reply> c) {
-    HttpResponse<byte[]> issued = Inbox.reply(c);
-    return switch (issued.statusCode()) {
-      case 200 -> {
-        var tokens = DataType.objectMapper.readValue(issued.body(), Tokens.UserTokens.class);
-        var body = new LinkedHashMap<String, Object>();
-        body.put("access_token", keys.sign(tokens.accessToken()));
-        body.put("token_type", "Bearer");
-        body.put("expires_in", tokens.accessToken().expiresAt() - tokens.accessToken().issuedAt());
-        body.put("scope", tokens.accessToken().scope());
-        body.put("id_token", keys.sign(tokens.idToken()));
-        yield new HttpResponse<>(200, "OK", noStore(issued.headers()), DataType.objectMapper.writeValueAsBytes(body));
-      }
-      case 401 -> withHeader(issued, "WWW-Authenticate", basicChallenge());
-      default -> issued;
-    };
+  /// The body of the access token response of the tokens issued, of a code redemption if they have an ID token
+  private Map<String, Object> signed(byte[] issued) {
+    boolean userTokens = DataType.objectMapper.readTree(issued).has("idToken");
+    Tokens.IssuedToken accessToken = userTokens ?
+        DataType.objectMapper.readValue(issued, Tokens.UserTokens.class).accessToken() :
+        DataType.objectMapper.readValue(issued, Tokens.IssuedToken.class);
+    var body = new LinkedHashMap<String, Object>();
+    body.put("access_token", keys.sign(accessToken));
+    body.put("token_type", "Bearer");
+    body.put("expires_in", accessToken.expiresAt() - accessToken.issuedAt());
+    body.put("scope", accessToken.scope());
+    if (userTokens)
+      body.put("id_token", keys.sign(DataType.objectMapper.readValue(issued, Tokens.UserTokens.class).idToken()));
+    return body;
   }
+
 
   // The registration endpoint
 
@@ -483,16 +457,6 @@ final class Endpoints {
 
   private static HttpResponse<byte[]> methodNotAllowed(String allowed) {
     return new HttpResponse<>(405, "Method Not Allowed", Map.of("Allow", allowed), null);
-  }
-
-  private HttpResponse<byte[]> tokenError(int status, String error, String description) {
-    var body = new LinkedHashMap<String, String>();
-    body.put("error", error);
-    body.put("error_description", description);
-    var headers = noStore(Map.of());
-    if (status == 401)
-      headers.put("WWW-Authenticate", basicChallenge());
-    return new HttpResponse<>(status, status == 401 ? "Unauthorized" : "Bad Request", headers, DataType.objectMapper.writeValueAsBytes(body));
   }
 
   private String basicChallenge() {

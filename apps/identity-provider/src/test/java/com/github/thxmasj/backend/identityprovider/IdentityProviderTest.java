@@ -336,10 +336,22 @@ public class IdentityProviderTest {
     assertThat(get("/.well-known/jwks.json").statusCode()).isEqualTo(200);
     assertThat(get("/unknown").statusCode()).isEqualTo(404);
     assertThat(get("/token").statusCode()).isEqualTo(405);
-    assertThat(post("/token", Map.of("Content-Type", "application/x-www-form-urlencoded"), "grant_type=client_credentials").statusCode()).isEqualTo(401);
     assertThat(post("/clients", Map.of("Content-Type", "application/json"), "{}").statusCode()).isEqualTo(401);
 
     assertThat(eventLog().split("\n").length).isEqualTo(events);
+  }
+
+  /// A request refused at the token endpoint is a token request of its own, which is refused, without its secret
+  @Test
+  public void requestRefusedAtTheTokenEndpointIsRecordedWithoutItsSecret() throws Exception {
+    var withoutBasic = post("/token", Map.of("Content-Type", "application/x-www-form-urlencoded"), "grant_type=client_credentials");
+    assertThat(withoutBasic.statusCode()).isEqualTo(401);
+    assertThat(withoutBasic.headers().firstValue("WWW-Authenticate")).hasValueSatisfying(v -> assertThat(v).startsWith("Basic realm="));
+    var secretInBody = post("/token", Map.of("Content-Type", "application/x-www-form-urlencoded"), "grant_type=client_credentials&client_id=c&client_secret=s3cr3t-in-body");
+    assertThat(secretInBody.statusCode()).isEqualTo(400);
+    assertThat(json(secretInBody).get("error").asString()).isEqualTo("invalid_request");
+
+    assertThat(eventLog()).contains("Clients must authenticate with HTTP Basic").doesNotContain("s3cr3t-in-body");
   }
 
   @Test

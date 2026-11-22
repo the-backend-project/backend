@@ -99,4 +99,12 @@ public class MaskingTest {
     assertEquals(true, Masking.queryParameters("code").appliesTo(new HttpRequest<byte[]>(Method.GET, URI.create("/x?code=1"), Map.of(), null)));
     assertEquals(false, Masking.responseBody().appliesTo(new HttpResponse<byte[]>(204, "No Content", Map.of(), null)));
   }
+
+  /// A form field is masked if it is one of the fields masked, with the value of the mask, not any field with that value
+  @Test
+  public void onlyAMaskedFieldWithTheValueOfTheMaskIsMasked() {
+    var masking = Masking.formFields("token");
+    assertEquals(false, masking.hasMasked(new HttpResponse<>(200, "OK", form, "status=ok&note=***".getBytes(UTF_8))));
+    assertEquals(true, masking.hasMasked(new HttpResponse<>(200, "OK", form, "status=ok&token=***".getBytes(UTF_8))));
+  }
 }

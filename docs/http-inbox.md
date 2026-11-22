@@ -361,7 +361,15 @@ transitions see the whole request: the content parser, the authorizer and the pr
 and the application's response is sent to the client as it gave it, with its `Set-Cookie`.
 
 As the event log only has the masked request, a retried request with the same message id is compared with the first
-one after masking both: a retry may differ from the first request in what is masked, e.g. in a refreshed access token.
+one after masking both: a retry may differ from the first request in its credentials, e.g. in a refreshed access token.
+An inbox request which masks more of its requests than their credentials, e.g. a query parameter, can't have
+`deduplicateOn`, which `build` refuses, as a request differing from the first one in what is masked couldn't be told
+from a retry. As the credentials aren't compared, it is the authorizer which tells clients apart: with one, the message
+id is the authorized subject's, so another client's request with the same id is of another message id. Without an
+authorizer, e.g. when the process checks a token itself, the message ids are shared by all clients, and another client
+sending a request with the message id and the body of an earlier one gets its response. Authenticate the requests of a
+deduplicated inbox request with an authorizer, unless its clients may share their responses.
+
 A retry gets the response of the first one as stored, which can't give what is masked of it. So an inbox request which
 masks the body of its responses can't have `deduplicateOn`, which `build` refuses, and a retry of a request whose
 first response has a masked header, e.g. a `Set-Cookie`, is answered with 409 Conflict and the detail

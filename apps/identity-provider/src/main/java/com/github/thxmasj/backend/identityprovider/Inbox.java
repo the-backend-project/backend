@@ -5,6 +5,7 @@ import static com.github.thxmasj.backend.core.TransitionModelBuilder.WithEvent.o
 import static com.github.thxmasj.backend.core.Validated.invalid;
 import static com.github.thxmasj.backend.core.Validated.valid;
 import static com.github.thxmasj.backend.http.inbox.HttpInboxRequest.newEntity;
+import static com.github.thxmasj.backend.http.inbox.HttpInboxRequest.when;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.github.thxmasj.backend.core.BasicEventType;
@@ -119,28 +120,20 @@ public interface Inbox {
         .build("ImmediateHttpRequest", UUID.fromString("8a4c2e6f-1d9b-4f73-a5e0-3c7b9d1f2e84"));
   }
 
-  /// A request redeeming an authorization code, `POST /token` with the grant type `authorization_code`, processed on
-  /// the token requests. The code and the code verifier are masked in the event log, and the response, with the
-  /// tokens signed.
-  static HttpInboxRequest<Tokens.CodeRequest> codeHttpRequest(EntityModel tokenRequest, Endpoints endpoints) {
-    return HttpInboxRequest
-        .matching(m -> m.method() == Method.POST && m.uri().getPath().equals("/token") && Endpoints.isCodeRequest(m))
-        .contentParser(endpoints::codeRequest)
-        .masking(Masking.formFields("code", "code_verifier").andResponseBody())
-        .process(Tokens.CodeRedemptionRequested, tokenRequest, r -> r.body(), newEntity())
-        .response(ReplyCreated, endpoints::userTokensResponse)
-        .build("CodeHttpRequest", UUID.fromString("53b447da-38bc-43d6-a9f2-ea3ed7e1b3fa"));
-  }
-
-  /// A token request, `POST /token`, processed on the token requests. The response, with the token signed, is masked
-  /// in the event log.
-  static HttpInboxRequest<Tokens.Request> tokenHttpRequest(EntityModel tokenRequest, Endpoints endpoints) {
+  /// A request to the token endpoint, `POST /token`, processed on the token requests: one refused at the endpoint, e.g.
+  /// without client authentication, a code redemption of the grant type `authorization_code`, or a token request of
+  /// the grant type `client_credentials`. Its form and credentials are parsed once, by its content parser, whose result
+  /// chooses the process. The code, the code verifier and a client secret wrongly in the form are masked in the event
+  /// log, and the response, with the tokens signed.
+  static HttpInboxRequest<Endpoints.TokenEndpointRequest> tokenHttpRequest(EntityModel tokenRequest, Endpoints endpoints) {
     return HttpInboxRequest
         .matching(m -> m.method() == Method.POST && m.uri().getPath().equals("/token"))
-        .contentParser(endpoints::tokenRequest)
-        .masking(Masking.responseBody())
-        .process(Tokens.TokenRequested, tokenRequest, r -> r.body(), newEntity())
-        .response(ReplyCreated, endpoints::tokenResponse)
+        .contentParser(endpoints::tokenEndpointRequest)
+        .masking(Masking.formFields("code", "code_verifier", "client_secret", "client_assertion").andResponseBody())
+        .process(when("refused", r -> r.refusal() != null), Tokens.TokenRefused, tokenRequest, r -> r.body().refusal(), newEntity())
+        .process(when("grant_type == authorization_code", r -> r.codeRedemption() != null), Tokens.CodeRedemptionRequested, tokenRequest, r -> r.body().codeRedemption(), newEntity())
+        .process(Tokens.TokenRequested, tokenRequest, r -> r.body().clientCredentials(), newEntity())
+        .response(ReplyCreated, endpoints::tokenEndpointResponse)
         .build("TokenHttpRequest", UUID.fromString("d1c8f5a2-3e97-4b06-a4d1-5f2b8e7c9a63"));
   }
 
@@ -241,7 +234,6 @@ public interface Inbox {
     // In the order they are matched in, as the first matching one takes a request
     var requests = new ArrayList<HttpInboxRequest<?>>(List.of(
         immediateHttpRequest(endpoints),
-        codeHttpRequest(tokenRequest, endpoints),
         tokenHttpRequest(tokenRequest, endpoints),
         InternalRegistrationHttpRequest,
         registrationHttpRequest(endpoints)

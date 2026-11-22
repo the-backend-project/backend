@@ -160,9 +160,7 @@ public record Masking(Set<String> headers, Set<String> queryParameters, Set<Stri
       return true;
     if (formFields.isEmpty() || stored.body() == null || !isForm(stored))
       return false;
-    return Stream.of(new String(stored.body(), UTF_8).split("&", -1))
-        // By the value, as the name of a field is kept as written, which may be encoded
-        .anyMatch(pair -> pair.equals(MASK) || pair.endsWith("=" + MASK));
+    return Stream.of(new String(stored.body(), UTF_8).split("&", -1)).anyMatch(this::isMaskedField);
   }
 
   private Map<String, String> maskHeaders(Map<String, String> original) {
@@ -200,6 +198,21 @@ public record Masking(Set<String> headers, Set<String> queryParameters, Set<Stri
   private static boolean isForm(HttpMessage<?> message) {
     String contentType = message.headerValue("Content-Type");
     return contentType != null && contentType.toLowerCase(Locale.ROOT).startsWith("application/x-www-form-urlencoded");
+  }
+
+  /// Whether the parameter, as written, is a field this masking masks with the value [#MASK], or one masked as a whole
+  /// as its name can't be decoded
+  private boolean isMaskedField(String pair) {
+    if (pair.equals(MASK))
+      return true;
+    int i = pair.indexOf('=');
+    if (i < 0 || !pair.substring(i + 1).equals(MASK))
+      return false;
+    try {
+      return formFields.contains(URLDecoder.decode(pair.substring(0, i), UTF_8));
+    } catch (IllegalArgumentException e) {
+      return false;
+    }
   }
 
   /// The parameters, as written, with the values of those with the names masked. A parameter whose name can't be
