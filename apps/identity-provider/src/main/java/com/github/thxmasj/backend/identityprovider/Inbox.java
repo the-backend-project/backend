@@ -145,7 +145,7 @@ public interface Inbox {
   }
 
   /// A registration of the identity provider itself, e.g. of the bootstrap client, with the hash of a secret of its
-  /// own, see [#internalRegistration(String, String, byte\[\])]
+  /// own, see [Endpoints#internalRegistration(String, String, byte\[\])]
   HttpInboxRequest<Clients.RegistrationRequest> InternalRegistrationHttpRequest = HttpInboxRequest
       .matching(m -> m.method() == Method.POST && m.uri().getPath().equals("/clients") && Endpoints.isInternal(m))
       .contentParser(m -> {
@@ -253,12 +253,6 @@ public interface Inbox {
           userInfoHttpRequest(tokenRequest, endpoints)
       ));
     return HttpInbox.of(requests);
-  }
-
-  /// A registration of the identity provider itself, as the registrar, with the hash of the secret of the client,
-  /// e.g. of the bootstrap client
-  static HttpRequest<byte[]> internalRegistration(String registeredBy, String secretHash, byte[] body) {
-    return Endpoints.internalRegistration(registeredBy, secretHash, body);
   }
 
   /// An authorization request of RFC 6749 section 4.1.1 and OpenID Connect Core section 3.1.2.1. A request without a

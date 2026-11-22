@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.ZonedDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -62,5 +63,20 @@ public class MaskedEventTest {
     assertEquals("***", new String(event.getMarshalledData()));
     assertEquals("***", new String(event.data()));
     assertEquals(1, masked.get());
+  }
+
+  @SuppressWarnings({"unchecked", "rawtypes"})
+  static EventType<ArrayList<String>, ArrayList<String>> Scanned = BasicEventType.of("Scanned", UUID.fromString("2b4d6f8a-0c1e-4a3c-95e7-a9cbedf10b46"), (DataType) DataType.json(ArrayList.class));
+
+  /// Each reader of the log gets the data of its own, which it may change, except of a masked event of the
+  /// transaction, whose whole data is only the one the transaction has
+  @Test
+  public void eachReaderOfTheLogGetsTheDataOfItsOwn() {
+    var event = new Event<>(UUID.randomUUID(), 1, Scanned, ZonedDateTime.now(), new ArrayList<>(List.of("a")));
+    var log = new EventLog(Account, event.entityId(), List.of(event));
+    log.one(Scanned).add("b");
+    assertEquals(List.of("a"), log.one(Scanned));
+    var masked = new Event<>(UUID.randomUUID(), 1, PasswordSet, ZonedDateTime.now(), "hunter2", _ -> "***");
+    assertEquals("hunter2", new EventLog(Account, masked.entityId(), List.of(masked)).one(PasswordSet));
   }
 }

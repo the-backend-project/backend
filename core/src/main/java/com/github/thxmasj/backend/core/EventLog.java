@@ -161,11 +161,20 @@ public record EventLog(
   }
 
 
-  /// The data of the event: as the session has it for an event of the session, which may be stored masked, and as it is
-  /// stored otherwise
+  /// The data of the event, as it is stored, unmarshalled for each reader, except for a masked event of the transaction,
+  /// whose whole data is only the one the transaction has
   @SuppressWarnings("unchecked")
   private static <T> T data(Event<?> event) {
-    return ((Event<T>) event).getUnmarshalledData();
+    Event<T> typed = (Event<T>) event;
+    return typed.isMasked() ? typed.getUnmarshalledData() : Event.unmarshal(typed.type(), typed.data());
   }
+
+  /// Whether the entity would be one of the session only with the event as its next: of a model which is not stored,
+  /// or created by an event which is not stored
+  boolean isSessionOnlyWith(Event<?> next) {
+    Event<?> first = events.isEmpty() ? next : events.getFirst();
+    return !entityModel.stored() || !first.type().stored();
+  }
+
 
 }

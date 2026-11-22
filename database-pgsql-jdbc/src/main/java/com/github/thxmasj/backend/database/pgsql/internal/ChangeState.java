@@ -56,7 +56,6 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
     Event<?> event = change.newEvent();
     DelayedEvent<?> delayedEvent = change.delayedEvent();
     ConditionalTrigger<?> conditionalTrigger = change.conditionalTrigger();
-    TriggerType triggerType = change.triggerType();
     FiredTrigger firedTrigger = change.firedTrigger();
     String sql = "";
     if (event != null && (entityModel instanceof IndexEntityModel || entityModel instanceof IdEntityModel)) {
@@ -105,13 +104,6 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
             :eventNumber,:type,:timestamp,:data
           );
           """.replace("{Event}", table(schema, "Event"));
-      if (triggerType == TriggerType.CONDITIONAL) {
-        sql +=
-            """
-            DELETE FROM {ConditionalTrigger}
-            WHERE Id=:triggerId;
-            """.replace("{ConditionalTrigger}", table(schema, "ConditionalTrigger"));
-      }
     }
 
     if (firedTrigger != null) {

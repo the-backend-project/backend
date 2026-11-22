@@ -62,6 +62,7 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -904,11 +905,9 @@ public class StateMachine implements AutoCloseable {
     return !log.entityModel().stored() || (!log.events().isEmpty() && !log.events().getFirst().type().stored());
   }
 
-  /// Whether the entity of the log would be one of the session only with the event, as [#isSessionOnly(EventLog)] of
-  /// the log with it, without copying the log
+  /// Whether the entity of the log would be one of the session only with the event
   private static boolean isSessionOnly(EventLog log, Event<?> event) {
-    Event<?> first = log.events().isEmpty() ? event : log.events().getFirst();
-    return !log.entityModel().stored() || !first.type().stored();
+    return log.isSessionOnlyWith(event);
   }
 
   /// Whether entities of the session only are of the model, which a group is not
@@ -936,13 +935,17 @@ public class StateMachine implements AutoCloseable {
     return keys;
   }
 
-  /// The changes with the deletion of the stored trigger which fired the event of the transaction, if one did. It comes
-  /// first, as a delayed event the transaction triggers on the entity replaces the trigger. The change of a stored event
-  /// deletes the trigger too, but the event may not be stored, e.g. as the transition chosen isn't, and the change of a
-  /// transition chosen doesn't know the trigger.
-  private static List<Change> withFiredTrigger(List<Change> changes, TransitionStep<?> tail) {
+  /// The changes with the deletion of the stored trigger which fired the event of the transaction, if one did. A
+  /// conditional trigger is deleted only by this. A delayed trigger is deleted by the change of an event stored on its
+  /// entity too, which deletes the delayed triggers it follows, so this is only needed if no event is stored on it, e.g.
+  /// as the transition chosen isn't. It comes first, as a delayed event the transaction triggers on the entity
+  /// replaces the trigger.
+  private static List<Change> withFiredTrigger(List<Change> changes, TransitionStep<?> tail, Set<EntityKey> sessionOnly) {
     InputStep<?> initial = initial(tail);
     if (initial == null || initial.triggerType() == null)
+      return changes;
+    var entity = new EntityKey(initial.log().entityModel().id(), initial.log().entityId());
+    if (initial.triggerType() == TriggerType.DELAYED && hasStoredEvent(changes, entity, sessionOnly))
       return changes;
     var withDeletion = new ArrayList<Change>(changes.size() + 1);
     withDeletion.add(Change.fromFiredTrigger(
@@ -952,6 +955,28 @@ public class StateMachine implements AutoCloseable {
     ));
     withDeletion.addAll(changes);
     return withDeletion;
+  }
+
+  private static boolean hasStoredEvent(List<Change> changes, EntityKey entity, Set<EntityKey> sessionOnly) {
+    return changes.stream().anyMatch(change -> change.newEvent() != null && EntityKey.of(change).equals(entity) && isStored(change, sessionOnly));
+  }
+
+  /// The changes of the events with an entity id, in the order the events are emitted to the one who triggered the
+  /// event: by number, those of the entity model coming first among the changes first, as an id or index entity, which
+  /// has the entity id of its entity, follows the entity, and the events with the same number on an entity, of which
+  /// all but the last aren't stored, in the order they were calculated, the reverse of the order they are collected in
+  private static List<Change> inEmitOrder(List<Change> collected) {
+    var position = new IdentityHashMap<Change, Integer>();
+    var modelRank = new HashMap<UUID, Integer>();
+    for (Change change : collected) {
+      position.put(change, position.size());
+      modelRank.putIfAbsent(change.entityModel().id(), modelRank.size());
+    }
+    return collected.stream()
+        .sorted(Comparator.<Change>comparingInt(change -> change.newEvent().eventNumber())
+            .thenComparingInt(change -> modelRank.get(change.entityModel().id()))
+            .thenComparingInt(change -> -position.get(change)))
+        .toList();
   }
 
   /// The first step of the transaction of the step, of the event it calculates
@@ -1254,7 +1279,7 @@ public class StateMachine implements AutoCloseable {
       TransitionStep<?> transitionStep
   ) {
     var sessionOnly = sessionOnlyEntities(transitionStep);
-    List<Change> changes = withFiredTrigger(changes(transitionStep), transitionStep);
+    List<Change> changes = withFiredTrigger(changes(transitionStep), transitionStep, sessionOnly);
     Debug.log("Changes to store:\n" + changes.stream().map(Object::toString).collect(joining("\n")));
     return Mono.fromRunnable(() -> requireStorable(changes, sessionOnly))
         .thenReturn("")
@@ -1286,11 +1311,8 @@ public class StateMachine implements AutoCloseable {
                                   Change::entityId,
                                   toList()
                               ))
-                              .forEach((entityId, changeList) -> {
-                                // An event not stored and the event stored after it on the entity have the same number, so the one not
-                                // stored comes first
-                                changeList.sort(Comparator.<Change, Integer>comparing(change -> change.newEvent().eventNumber())
-                                    .thenComparing(change -> isStored(change, sessionOnly)));
+                              .forEach((entityId, collected) -> {
+                                var changeList = inEmitOrder(collected);
                                 Optional<Many<Event<?>>> responseSink = ctx.getOrEmpty("RS/" + entityId);
                                 if (responseSink.isPresent()) {
                                   Debug.log("Found response sink for " + changeList.stream().map(c -> c.entityModel().name() + "/" + c.entityId() + "/" + c.newEvent().typeName()).toList());

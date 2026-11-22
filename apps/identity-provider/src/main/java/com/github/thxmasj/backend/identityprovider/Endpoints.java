@@ -20,12 +20,14 @@ import com.github.thxmasj.backend.identityprovider.Inbox.Reply;
 import java.net.URI;
 import java.time.Duration;
 import java.util.Base64;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.WeakHashMap;
 import java.util.function.Supplier;
 import java.util.function.BiFunction;
 
@@ -67,16 +69,21 @@ final class Endpoints {
     return upstream;
   }
 
+  /// The answers of the requests answered at once, by the request, as their inbox request asks for the answer both when
+  /// matching a request and when parsing it. An answer is a function of the request alone, so an equal request has the
+  /// same answer. They are kept while the request is, and computed outside the lock of the map, as they may parse the
+  /// request.
+  private final Map<HttpRequest<byte[]>, Optional<HttpResponse<byte[]>>> answers = Collections.synchronizedMap(new WeakHashMap<>());
+
   /// The response of a request answered at once, or null for a request for the entities of the identity provider. A
   /// request with an access token is processed, and its token verified by the authorizer of its inbox request.
   HttpResponse<byte[]> immediate(HttpRequest<byte[]> request) {
-    return answer(request);
-  }
-
-  /// The access token, if it is valid. It is verified each time, rather than remembered, so that an expired token is
-  /// never taken as valid.
-  private Optional<AccessToken> verify(String token) {
-    return keys.verify(token);
+    Optional<HttpResponse<byte[]>> known = answers.get(request);
+    if (known == null) {
+      known = Optional.ofNullable(answer(request));
+      answers.put(request, known);
+    }
+    return known.orElse(null);
   }
 
   private HttpResponse<byte[]> answer(HttpRequest<byte[]> request) {
@@ -362,7 +369,7 @@ final class Endpoints {
     String token = bearerToken(request);
     if (token == null)
       return bearerRefusal(401, null, null, null);
-    Optional<AccessToken> principal = verify(token);
+    Optional<AccessToken> principal = keys.verify(token);
     Optional<String> authorized = principal.flatMap(p -> subject.apply(token, p));
     if (authorized.isEmpty())
       return bearerRefusal(401, "invalid_token", "The access token is invalid or expired", null);

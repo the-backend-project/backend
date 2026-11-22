@@ -98,6 +98,8 @@ public final class HttpInboxRequest<T> implements EntityModel {
     this.stored = builder.stored;
     if (deduplicateOn != null && masking.wholeResponseBody())
       throw new IllegalArgumentException("The request " + name + " masks the body of its response, so it can't be deduplicated, as a retry gets the response of the first request as stored");
+    if (deduplicateOn != null && masking.masksMoreOfRequestsThan(Masking.CREDENTIALS))
+      throw new IllegalArgumentException("The request " + name + " masks more of its requests than their credentials, so it can't be deduplicated, as a request differing from the first one in what is masked couldn't be told from a retry");
     if (!stored && deduplicateOn != null)
       throw new IllegalArgumentException("The request " + name + " is not stored, so it can't be deduplicated, as a retry is recognised by the request stored");
     this.transitions = TransitionModels.requestTransitions(this);
@@ -518,9 +520,12 @@ public final class HttpInboxRequest<T> implements EntityModel {
     /// [Masking#CREDENTIALS], which every inbox request masks. The transitions see the whole request and response.
     ///
     /// A retried request is compared with the first one as stored, so the two are masked before they are compared: a
-    /// retry may differ from the first request in what is masked. A retry gets the response of the first one as
-    /// stored, so a request which masks the body of its response can't be deduplicated, and a retry whose first
-    /// response has a masked header, e.g. a `Set-Cookie`, is answered with 409 Conflict, as it can't be repeated.
+    /// retry may differ from the first request in its credentials, e.g. a refreshed access token. A request which
+    /// masks more of its requests than [Masking#CREDENTIALS] can't be deduplicated, as a request differing from the
+    /// first one in what is masked couldn't be told from a retry. A retry gets the response of the first one as
+    /// stored, so a request which masks the body of its response can't be deduplicated either, and a retry whose
+    /// first response has a masked header, e.g. a `Set-Cookie`, is answered with 409 Conflict, as it can't be
+    /// repeated.
     public Builder<T> masking(Masking masking) {
       this.masking = this.masking.and(Objects.requireNonNull(masking));
       return this;

@@ -83,4 +83,20 @@ public class MaskingTest {
     assertEquals("client%5Fsecret=***&x=1", new String(stored.body(), UTF_8));
     assertEquals(true, masking.hasMasked(stored));
   }
+
+  /// A response stored before it was masked has its values as they were, which a retry can be given
+  @Test
+  public void aResponseStoredBeforeItWasMaskedHasNothingMasked() {
+    var stored = new HttpResponse<byte[]>(200, "OK", Map.of("Set-Cookie", "s=1"), null);
+    assertEquals(false, Masking.CREDENTIALS.hasMasked(stored));
+  }
+
+  @Test
+  public void maskingAppliesOnlyToMessagesWithSomethingToMask() {
+    var plain = new HttpRequest<byte[]>(Method.POST, URI.create("/x"), Map.of("Content-Type", "application/json"), "{}".getBytes(UTF_8));
+    assertEquals(false, Masking.CREDENTIALS.and(Masking.formFields("code")).appliesTo(plain));
+    assertEquals(true, Masking.CREDENTIALS.appliesTo(new HttpRequest<byte[]>(Method.GET, URI.create("/x"), Map.of("Cookie", "c"), null)));
+    assertEquals(true, Masking.queryParameters("code").appliesTo(new HttpRequest<byte[]>(Method.GET, URI.create("/x?code=1"), Map.of(), null)));
+    assertEquals(false, Masking.responseBody().appliesTo(new HttpResponse<byte[]>(204, "No Content", Map.of(), null)));
+  }
 }

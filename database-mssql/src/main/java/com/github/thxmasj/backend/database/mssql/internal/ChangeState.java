@@ -55,7 +55,6 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
     Event<?> event = change.newEvent();
     DelayedEvent<?> delayedEvent = change.delayedEvent();
     ConditionalTrigger<?> conditionalTrigger = change.conditionalTrigger();
-    TriggerType triggerType = change.triggerType();
     FiredTrigger firedTrigger = change.firedTrigger();
     String sql =
         """
@@ -113,13 +112,6 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
           )
           """.replace("{schema}", schema)
               .replace("{changeIndex}", String.valueOf(changeIndex));
-      if (triggerType == TriggerType.CONDITIONAL) {
-        sql +=
-            """
-            DELETE [{schema}].[ConditionalTrigger]
-            WHERE Id=:triggerId;
-            """.replace("{schema}", schema);
-      }
     }
 
     if (firedTrigger != null) {

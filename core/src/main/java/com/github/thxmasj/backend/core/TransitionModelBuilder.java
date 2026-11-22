@@ -874,8 +874,12 @@ public class TransitionModelBuilder<I, T, O> {
     int number = inputStep.log().lastEventNumber() + 1;
     if (modelContext.mask() == null)
       return new Event<>(inputStep.log().entityId(), number, modelContext.eventType(), inputStep.timestamp(), output);
-    // Masked when it is stored, so an event which isn't stored is never masked
-    return new Event<>(inputStep.log().entityId(), number, modelContext.eventType(), inputStep.timestamp(), output, modelContext.mask());
+    var event = new Event<>(inputStep.log().entityId(), number, modelContext.eventType(), inputStep.timestamp(), output, modelContext.mask());
+    // An event which is stored is masked and marshalled in the step, so that a failure of either is one of the
+    // transition, while one which isn't stored is never masked
+    if (modelContext.eventType().stored() && !inputStep.log().isSessionOnlyWith(event))
+      event.getMarshalledData();
+    return event;
   }
 
   private TransitionModel<I, O> complete() {

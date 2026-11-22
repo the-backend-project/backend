@@ -312,7 +312,6 @@ public class HttpInboxTest {
 
   /// Masks a query parameter besides the credentials every inbox request masks
   static HttpInboxRequest<byte[]> MaskedRequest = withBody("PUT .*/masked/.*")
-      .deduplicateOn(parseMessageId("PUT .*/masked/([^?]*).*", 1))
       .masking(Masking.queryParameters("code"))
       .process(InternalProcessingRequested, Lamp, newEntity())
       .build("MaskedRequest", UUID.fromString("c1a7e3f9-5b2d-4c80-9e46-a8d2f0b4c613"));
@@ -582,12 +581,32 @@ public class HttpInboxTest {
   }
 
   @Test
-  public void whenRetryDiffersOnlyInWhatIsMaskedThenItGetsTheFirstResponse() throws IOException {
+  public void whenRetryDiffersOnlyInItsCredentialsThenItGetsTheFirstResponse() throws IOException {
     String messageId = UUID.randomUUID().toString();
-    HttpResponse<byte[]> first = HttpResponse.raw(onRequest(inbox.trigger(), maskedRequest(messageId, "c0de", "t0ken")).getUnmarshalledData());
-    HttpResponse<byte[]> retry = HttpResponse.raw(onRequest(inbox.trigger(), maskedRequest(messageId, "0ther", "refreshed")).getUnmarshalledData());
+    HttpResponse<byte[]> first = HttpResponse.raw(onRequest(inbox.trigger(), internalRequest(messageId, "t0ken")).getUnmarshalledData());
+    HttpResponse<byte[]> retry = HttpResponse.raw(onRequest(inbox.trigger(), internalRequest(messageId, "refreshed")).getUnmarshalledData());
     assertEquals(201, retry.statusCode());
     assertArrayEquals(first.body(), retry.body());
+  }
+
+  private HttpRequest<byte[]> internalRequest(String messageId, String token) {
+    return new HttpRequest<>(
+        PUT,
+        URI.create("/internal/" + messageId),
+        Map.of("Authorization", "Bearer " + token, "Cookie", "session=" + token),
+        asJson(new InternalProcess("Hello", 1))
+    );
+  }
+
+  @Test
+  public void requestMaskingMoreThanCredentialsCantBeDeduplicated() {
+    assertThatThrownBy(() -> withBody("PUT .*/x/.*")
+        .deduplicateOn(parseMessageId("PUT .*/x/(.*)", 1))
+        .masking(Masking.queryParameters("code"))
+        .process(InternalProcessingRequested, Lamp, newEntity())
+        .build("X", UUID.randomUUID()))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("masks more of its requests than their credentials, so it can't be deduplicated");
   }
 
   @Test

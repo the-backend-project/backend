@@ -202,7 +202,7 @@ public final class IdentityProvider {
 
   /// Registers a client as the registrar, by a registration of the identity provider itself
   private static HttpResponse<byte[]> register(StateMachine stateMachine, HttpInbox inbox, String correlationId, Map<String, ?> body, String registrar, String secretHash) {
-    var request = Inbox.internalRegistration(registrar, secretHash, DataType.objectMapper.writeValueAsBytes(body));
+    var request = Endpoints.internalRegistration(registrar, secretHash, DataType.objectMapper.writeValueAsBytes(body));
     return stateMachine.onEvent(correlationId, inbox.trigger(), request)
         // First event is the triggered event, second is the response event
         .skip(1)

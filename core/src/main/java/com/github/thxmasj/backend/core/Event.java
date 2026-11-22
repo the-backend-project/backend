@@ -95,6 +95,11 @@ public final class Event<T> {
     return type.name();
   }
 
+  /// Whether the event is stored masked, so that its data in the transaction differs from the data stored
+  public boolean isMasked() {
+    return storedForm != null;
+  }
+
   /// The event as it is stored, e.g. masked, as a later transaction reads it from the event log
   public Event<T> asStored() {
     if (storedForm == null)

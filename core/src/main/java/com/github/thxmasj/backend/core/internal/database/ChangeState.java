@@ -42,9 +42,6 @@ public abstract class ChangeState {
           .bind("type", event.type().id())
           .bindNullable("data", byte[].class, event.getMarshalledData());
     }
-    if (change.triggerType() == TriggerType.CONDITIONAL) {
-      spec.bind("triggerId", change.triggerId());
-    }
     if (change.firedTrigger() != null) {
       if (change.firedTrigger().type() == TriggerType.CONDITIONAL)
         spec.bind("triggerId", change.firedTrigger().id());
@@ -127,21 +124,6 @@ public abstract class ChangeState {
       };
     }
 
-    /**
-     * The type of the stored trigger that caused this change's new event, if any.
-     */
-    default TriggerType triggerType() {
-      return null;
-    }
-
-    /**
-     * The id of the stored trigger that caused this change's new event. The trigger is deleted together with the new
-     * event, so that it will not be triggered again.
-     */
-    default UUID triggerId() {
-      return null;
-    }
-
     static Change fromConditionalTrigger(ConditionalTrigger<?> conditionalTrigger) {
       return new Change() {
         @Override
@@ -201,15 +183,6 @@ public abstract class ChangeState {
           return acceptedEvent.severity();
         }
 
-        @Override
-        public TriggerType triggerType() {
-          return acceptedEvent.triggerType();
-        }
-
-        @Override
-        public UUID triggerId() {
-          return acceptedEvent.triggerId();
-        }
 
         @Override
         public DelayedEvent<?> delayedEvent() {

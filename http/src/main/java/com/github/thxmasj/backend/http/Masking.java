@@ -107,27 +107,56 @@ public record Masking(Set<String> headers, Set<String> queryParameters, Set<Stri
 
   /// The request as it is stored, with what is masked replaced by [#MASK]
   public HttpRequest<byte[]> mask(HttpRequest<byte[]> request) {
-    if (request == null)
-      return null;
+    if (request == null || !appliesTo(request))
+      return request;
     return new HttpRequest<>(request.method(), maskQuery(request.uri()), maskHeaders(request.headers()), maskForm(request));
   }
 
   /// The response as it is stored, with what is masked replaced by [#MASK]
   public HttpResponse<byte[]> mask(HttpResponse<byte[]> response) {
-    if (response == null)
-      return null;
+    if (response == null || !appliesTo(response))
+      return response;
     byte[] body = wholeResponseBody && response.body() != null ? MASK.getBytes(UTF_8) : maskForm(response);
     return new HttpResponse<>(response.statusCode(), response.reasonPhrase(), maskHeaders(response.headers()), body);
   }
 
-  /// Whether the response, as stored, has something masked: a header or form field this masking masks, or its body if
-  /// this masking masks the body of a response
+  /// Whether masking the request may change it, which is told without its body: it has a header this masking masks, a
+  /// query with parameters to mask, or a form body with fields to mask
+  public boolean appliesTo(HttpRequest<?> request) {
+    return hasMaskedHeader(request.headers())
+        || (!queryParameters.isEmpty() && request.uri().getRawQuery() != null)
+        || (!formFields.isEmpty() && request.body() != null && isForm(request));
+  }
+
+  /// Whether masking the response may change it, which is told without its body: it has a header this masking masks, a
+  /// body which is masked as a whole, or a form body with fields to mask
+  public boolean appliesTo(HttpResponse<?> response) {
+    return hasMaskedHeader(response.headers())
+        || (wholeResponseBody && response.body() != null)
+        || (!formFields.isEmpty() && response.body() != null && isForm(response));
+  }
+
+  /// Whether this masking masks more of requests than the other one does: other headers, or query parameters or form
+  /// fields, which a request may differ in from another one stored, unseen
+  public boolean masksMoreOfRequestsThan(Masking other) {
+    return !other.headers.containsAll(headers)
+        || !other.queryParameters.containsAll(queryParameters)
+        || !other.formFields.containsAll(formFields);
+  }
+
+  private boolean hasMaskedHeader(Map<String, String> original) {
+    return !headers.isEmpty() && original.keySet().stream().anyMatch(this::isMaskedHeader);
+  }
+
+  /// Whether the response, as stored, has something masked: a header or form field with the value [#MASK] which this
+  /// masking masks, or a body which is [#MASK] if it masks the body of a response. A response stored before it was
+  /// masked has the values as they were.
   public boolean hasMasked(HttpResponse<byte[]> stored) {
     if (stored == null)
       return false;
-    if (wholeResponseBody && stored.body() != null)
+    if (wholeResponseBody && stored.body() != null && MASK.equals(new String(stored.body(), UTF_8)))
       return true;
-    if (stored.headers().keySet().stream().anyMatch(this::isMaskedHeader))
+    if (stored.headers().entrySet().stream().anyMatch(header -> isMaskedHeader(header.getKey()) && MASK.equals(header.getValue())))
       return true;
     if (formFields.isEmpty() || stored.body() == null || !isForm(stored))
       return false;
@@ -137,7 +166,7 @@ public record Masking(Set<String> headers, Set<String> queryParameters, Set<Stri
   }
 
   private Map<String, String> maskHeaders(Map<String, String> original) {
-    if (headers.isEmpty() || original.keySet().stream().noneMatch(this::isMaskedHeader))
+    if (!hasMaskedHeader(original))
       return original;
     var masked = new LinkedHashMap<String, String>();
     original.forEach((name, value) -> masked.put(name, isMaskedHeader(name) ? MASK : value));
@@ -168,7 +197,7 @@ public record Masking(Set<String> headers, Set<String> queryParameters, Set<Stri
     return maskParameters(new String(body, UTF_8), formFields).getBytes(UTF_8);
   }
 
-  private static boolean isForm(HttpMessage<byte[]> message) {
+  private static boolean isForm(HttpMessage<?> message) {
     String contentType = message.headerValue("Content-Type");
     return contentType != null && contentType.toLowerCase(Locale.ROOT).startsWith("application/x-www-form-urlencoded");
   }
