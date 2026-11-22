@@ -240,7 +240,11 @@ public abstract class ChangeState {
 
   public record OutboxElement(int changeIndex, int messageIndex, UUID requestId, byte[] elementId) {}
 
+  /// Stores the changes in one transaction. A transaction with nothing to store, e.g. of events which are not stored,
+  /// doesn't reach the database.
   public Flux<OutboxElement> execute(ZonedDateTime timestamp, String correlationId, List<Change> changes) {
+    if (changes.isEmpty())
+      return Flux.empty();
     Builder spec = databaseClient.sql(sql(changes)).name("ChangeState");
     for (int i = 0; i < changes.size(); i++) {bind(spec.parameterPrefix("p" + i + "_"), timestamp, correlationId, changes.get(i));}
     return spec.map(row -> new OutboxElement(

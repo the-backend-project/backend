@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Predicate;
 
 class Traverser {
 
@@ -39,26 +40,24 @@ class Traverser {
         .anyMatch(leaf -> !leaf.eventType().stored());
     transitions.forEach(this::requireUniquePaths);
     var reached = stored ? statesOfStoredEntities() : Set.<State>of();
+    var reachedBySessionOnly = stored ? statesOfEntitiesOfTheSessionOnly() : transitions.keySet();
     transitions.forEach((from, fromState) -> {
       if (reached.contains(from))
         requireNotStoredToSelf(from, fromState);
       for (var transition : fromState) {
         requireStoredEventOfConditionalTrigger(transition);
-        if (mayBeOfAnEntityOfTheSessionOnly(stored, reached, from, transition))
+        if (mayBeOfAnEntityOfTheSessionOnly(reachedBySessionOnly, from, transition))
           requireNoLaterTrigger(transition);
       }
     });
   }
 
-  /// Whether the transition may be taken by an entity of the session only: any transition of a model which is not
-  /// stored, and of a stored model one from `Begin` which may choose an event not stored, or one from a state only
-  /// entities of the session only reach
-  private boolean mayBeOfAnEntityOfTheSessionOnly(boolean stored, Set<State> reached, State from, TransitionModel<?, ?> transition) {
-    if (!stored)
+  /// Whether the transition may be taken by an entity of the session only: one from a state such an entity reaches, or
+  /// one from `Begin` which may choose an event not stored, which creates one
+  private boolean mayBeOfAnEntityOfTheSessionOnly(Set<State> reachedBySessionOnly, State from, TransitionModel<?, ?> transition) {
+    if (reachedBySessionOnly.contains(from))
       return true;
-    if (from == Begin)
-      return leaves(transition).stream().anyMatch(leaf -> !leaf.eventType().stored());
-    return !reached.contains(from);
+    return from == Begin && leaves(transition).stream().anyMatch(leaf -> !leaf.eventType().stored());
   }
 
   /// A conditional trigger refers to the event of its transition, so the transition, and every transition it may
@@ -98,11 +97,22 @@ class Traverser {
   /// stored is an entity of the session only, and from there by any event. The states only entities of the session
   /// reach may be left by events not stored.
   private Set<State> statesOfStoredEntities() {
+    return statesReachedFromBegin(EventType::stored);
+  }
+
+  /// The states an entity of the session only of a stored model reaches: from `Begin` by the events not stored, which
+  /// create one, and from there by any event
+  private Set<State> statesOfEntitiesOfTheSessionOnly() {
+    return statesReachedFromBegin(eventType -> !eventType.stored());
+  }
+
+  /// The states reached from the leaves from `Begin` whose event types are of the kind, and from there by any event
+  private Set<State> statesReachedFromBegin(Predicate<EventType<?, ?>> kind) {
     var reached = new HashSet<State>();
     var toVisit = new ArrayDeque<State>();
     for (var transition : transitions.getOrDefault(Begin, List.of()))
       for (var leaf : leaves(transition))
-        if (leaf.eventType().stored() && leaf.toState() != null && reached.add(leaf.toState()))
+        if (kind.test(leaf.eventType()) && leaf.toState() != null && reached.add(leaf.toState()))
           toVisit.add(leaf.toState());
     while (!toVisit.isEmpty()) {
       State state = toVisit.removeFirst();

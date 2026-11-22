@@ -10,8 +10,10 @@ import com.github.thxmasj.backend.core.Validated;
 import com.github.thxmasj.backend.http.HttpRequest;
 import com.github.thxmasj.backend.http.HttpRequest.Method;
 import com.github.thxmasj.backend.http.HttpResponse;
+import com.github.thxmasj.backend.http.Masking;
 import com.github.thxmasj.backend.http.inbox.AccessTokenVerifier.AccessToken;
 import com.github.thxmasj.backend.http.inbox.Authorization;
+import com.github.thxmasj.backend.http.inbox.Cookies;
 import com.github.thxmasj.backend.http.inbox.Form;
 import com.github.thxmasj.backend.http.inbox.HttpInbox;
 import com.github.thxmasj.backend.http.inbox.OpenIdConnectClient;
@@ -124,8 +126,7 @@ final class Endpoints {
 
   /// The request to the token endpoint, which is always valid, as a refusal is answered by the token requests
   Validated<TokenEndpointRequest> tokenEndpointRequest(HttpRequest<byte[]> request) {
-    String contentType = request.headerValue("Content-Type");
-    if (contentType == null || !contentType.toLowerCase().startsWith("application/x-www-form-urlencoded"))
+    if (!Masking.isForm(request))
       return valid(TokenEndpointRequest.refused(null, "invalid_request", "Content-Type must be application/x-www-form-urlencoded"));
     Map<String, String> form;
     try {
@@ -297,7 +298,7 @@ final class Endpoints {
     } catch (IllegalArgumentException e) {
       return errorPage("The response of the identity provider is invalid");
     }
-    if (cookie(request.headerValue("Cookie"), cookiePrefix + authorization) == null)
+    if (Cookies.value(request.headerValue("Cookie"), cookiePrefix + authorization) == null)
       return errorPage("The sign-in has expired, or was started in another browser. Please sign in again.");
     return null;
   }
@@ -310,8 +311,8 @@ final class Endpoints {
     return valid(new Authorizations.Callback(
         UUID.fromString(authorization),
         query.get("code"),
-        query.containsKey("error") ? query.get("error") : null,
-        cookie(request.headerValue("Cookie"), cookiePrefix + authorization),
+        query.get("error"),
+        Cookies.value(request.headerValue("Cookie"), cookiePrefix + authorization),
         Secrets.generate()
     ));
   }
@@ -439,20 +440,6 @@ final class Endpoints {
     return cookiePrefix + authorization + "=" + secret
         + "; Path=/callback; Max-Age=" + maxAge.toSeconds() + "; HttpOnly; SameSite=Lax"
         + ("https".equals(keys.issuer().getScheme()) ? "; Secure" : "");
-  }
-
-  /// The value of a cookie of a Cookie header, or null
-  private static String cookie(String cookies, String name) {
-    if (cookies == null)
-      return null;
-    for (String cookie : cookies.split(";")) {
-      int i = cookie.indexOf('=');
-      if (i > 0 && cookie.substring(0, i).trim().equals(name)) {
-        String value = cookie.substring(i + 1).trim();
-        return value.isEmpty() ? null : value;
-      }
-    }
-    return null;
   }
 
   private static HttpResponse<byte[]> methodNotAllowed(String allowed) {

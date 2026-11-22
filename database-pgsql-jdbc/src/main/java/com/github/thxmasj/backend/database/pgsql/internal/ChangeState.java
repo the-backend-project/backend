@@ -13,11 +13,9 @@ import com.github.thxmasj.backend.core.internal.DelayedEvent;
 import com.github.thxmasj.backend.core.internal.database.ChangeState.Change.FiredTrigger;
 import com.github.thxmasj.backend.core.internal.database.ConditionalTrigger;
 import java.time.Clock;
-import java.time.ZonedDateTime;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.stream.IntStream;
-import reactor.core.publisher.Flux;
 
 /// Stores the changes in a single round trip without an explicit transaction. PostgreSQL then executes them in a
 /// single implicit transaction, which is rolled back if any of them fails.
@@ -29,12 +27,6 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
   ChangeState(DatabaseClient databaseClient, String schema, Clock clock) {
     super(databaseClient, clock);
     this.schema = schema;
-  }
-
-  /// Stores nothing if there are no changes, as PostgreSQL would get no statements
-  @Override
-  public Flux<OutboxElement> execute(ZonedDateTime timestamp, String correlationId, List<Change> changes) {
-    return changes.isEmpty() ? Flux.empty() : super.execute(timestamp, correlationId, changes);
   }
 
   @Override

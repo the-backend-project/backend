@@ -125,11 +125,18 @@ public interface Inbox {
   /// the grant type `client_credentials`. Its form and credentials are parsed once, by its content parser, whose result
   /// chooses the process. The code, the code verifier and a client secret wrongly in the form are masked in the event
   /// log, and the response, with the tokens signed.
+  /// The masking of a token request: its credentials in the form, in a body which isn't one and in the query, where a
+  /// client may put them by mistake, and the tokens of its response
+  private static Masking tokenMasking() {
+    String[] credentials = {"code", "code_verifier", "client_secret", "client_assertion"};
+    return Masking.formFields(credentials).andQueryParameters(credentials).andResponseBody();
+  }
+
   static HttpInboxRequest<Endpoints.TokenEndpointRequest> tokenHttpRequest(EntityModel tokenRequest, Endpoints endpoints) {
     return HttpInboxRequest
         .matching(m -> m.method() == Method.POST && m.uri().getPath().equals("/token"))
         .contentParser(endpoints::tokenEndpointRequest)
-        .masking(Masking.formFields("code", "code_verifier", "client_secret", "client_assertion").andResponseBody())
+        .masking(tokenMasking())
         .process(when("refused", r -> r.refusal() != null), Tokens.TokenRefused, tokenRequest, r -> r.body().refusal(), newEntity())
         .process(when("grant_type == authorization_code", r -> r.codeRedemption() != null), Tokens.CodeRedemptionRequested, tokenRequest, r -> r.body().codeRedemption(), newEntity())
         .process(Tokens.TokenRequested, tokenRequest, r -> r.body().clientCredentials(), newEntity())

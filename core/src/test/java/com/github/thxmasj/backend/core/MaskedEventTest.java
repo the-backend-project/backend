@@ -67,6 +67,13 @@ public class MaskedEventTest {
     assertDoesNotThrow(() -> new Traverser(Map.of(Begin, List.of(delaying), States.Open, List.of()), true));
   }
 
+  /// A stored model whose entities are created elsewhere, without transitions from `Begin`, may have delayed triggers
+  @Test
+  public void aStoredModelWithoutTransitionsFromBeginMayHaveDelayedTriggers() {
+    var delaying = onEvent(Touched).toSelf().trigger(Touched).after(_ -> java.time.Duration.ofMinutes(1)).output();
+    assertDoesNotThrow(() -> new Traverser(Map.of(States.Open, List.of(delaying)), true));
+  }
+
   @Test
   public void aMaskGivingNullStoresNoData() {
     var event = new Event<>(UUID.randomUUID(), 1, PasswordSet, ZonedDateTime.now(), "hunter2", _ -> null);

@@ -354,6 +354,17 @@ public class IdentityProviderTest {
     assertThat(eventLog()).contains("Clients must authenticate with HTTP Basic").doesNotContain("s3cr3t-in-body");
   }
 
+  /// A token request whose body isn't declared a form, or with credentials in its query, is stored without them
+  @Test
+  public void tokenRequestNotOfAFormIsStoredWithoutItsCredentials() throws Exception {
+    var notAForm = post("/token", Map.of("Content-Type", "text/plain"), "grant_type=authorization_code&code=c0de-in-text&client_secret=s3cr3t-in-text");
+    assertThat(notAForm.statusCode()).isEqualTo(400);
+    var inQuery = post("/token?client_secret=s3cr3t-in-query", Map.of("Content-Type", "application/x-www-form-urlencoded"), "grant_type=client_credentials");
+    assertThat(inQuery.statusCode()).isEqualTo(401);
+
+    assertThat(eventLog()).doesNotContain("c0de-in-text", "s3cr3t-in-text", "s3cr3t-in-query");
+  }
+
   @Test
   public void theKeyOfTheRegistrationsOfTheIdentityProviderItselfIsMasked() throws Exception {
     // The bootstrap client and the imported clients are registered with it

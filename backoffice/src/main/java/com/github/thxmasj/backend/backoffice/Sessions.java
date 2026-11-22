@@ -27,6 +27,7 @@ import com.github.thxmasj.backend.http.HttpRequest.Method;
 import com.github.thxmasj.backend.http.HttpRequest;
 import com.github.thxmasj.backend.http.HttpResponse;
 import com.github.thxmasj.backend.http.Masking;
+import com.github.thxmasj.backend.http.inbox.Cookies;
 import com.github.thxmasj.backend.http.inbox.Form;
 import com.github.thxmasj.backend.http.inbox.HttpInbox;
 import com.github.thxmasj.backend.http.inbox.HttpInboxRequest;
@@ -604,7 +605,7 @@ final class Sessions {
   /// The session of the cookie of a request, by the hash of its token, or a new one if it has no cookie or the cookie
   /// is of no session
   private static EntitySelector session(HttpRequest<byte[]> request) {
-    String token = cookie(request.headerValue("Cookie"), sessionCookie);
+    String token = Cookies.value(request.headerValue("Cookie"), sessionCookie);
     return token != null ? idEvent(TokenClaimed, Secrets.hash(token), EntitySelector.newEntity()) : EntitySelector.newEntity();
   }
 
@@ -624,7 +625,7 @@ final class Sessions {
     String state = query.get("state");
     if (Graph.uuid(state) == null)
       return invalid("The response of the identity provider is invalid");
-    return valid(new Callback(state, query.get("code"), query.get("error"), cookie(request.headerValue("Cookie"), signInCookiePrefix + state)));
+    return valid(new Callback(state, query.get("code"), query.get("error"), Cookies.value(request.headerValue("Cookie"), signInCookiePrefix + state)));
   }
 
   private static Map<String, String> query(String rawQuery) {
@@ -711,20 +712,6 @@ final class Sessions {
   /// both remove it and set the cookie of the session.
   private String signInCookie(String session, String secret) {
     return signInCookiePrefix + session + "=" + secret + "; Path=" + Path + "/callback; Max-Age=" + signInLifetime.toSeconds() + "; HttpOnly; SameSite=Lax" + (config.secure() ? "; Secure" : "");
-  }
-
-  /// The value of a cookie of a Cookie header, or null
-  static String cookie(String cookies, String name) {
-    if (cookies == null)
-      return null;
-    for (String cookie : cookies.split(";")) {
-      int i = cookie.indexOf('=');
-      if (i > 0 && cookie.substring(0, i).trim().equals(name)) {
-        String value = cookie.substring(i + 1).trim();
-        return value.isEmpty() ? null : value;
-      }
-    }
-    return null;
   }
 
   private static Reply html(int status, String html) {

@@ -39,8 +39,9 @@ public class MaskingTest {
     var masking = Masking.formFields("client_secret", "code");
     var request = new HttpRequest<>(Method.POST, URI.create("/token"), form, "grant_type=authorization_code&code=abc&client_secret=xyz".getBytes(UTF_8));
     assertEquals("grant_type=authorization_code&code=***&client_secret=***", new String(masking.mask(request).body(), UTF_8));
+    // A body which isn't declared a form may have the fields all the same, so it is masked as a whole
     var json = new HttpRequest<>(Method.POST, URI.create("/token"), Map.of("Content-Type", "application/json"), "{\"code\":\"abc\"}".getBytes(UTF_8));
-    assertEquals("{\"code\":\"abc\"}", new String(masking.mask(json).body(), UTF_8));
+    assertEquals("***", new String(masking.mask(json).body(), UTF_8));
   }
 
   @Test
@@ -94,7 +95,8 @@ public class MaskingTest {
   @Test
   public void maskingAppliesOnlyToMessagesWithSomethingToMask() {
     var plain = new HttpRequest<byte[]>(Method.POST, URI.create("/x"), Map.of("Content-Type", "application/json"), "{}".getBytes(UTF_8));
-    assertEquals(false, Masking.CREDENTIALS.and(Masking.formFields("code")).appliesTo(plain));
+    assertEquals(false, Masking.CREDENTIALS.appliesTo(plain));
+    assertEquals(true, Masking.formFields("code").appliesTo(plain));
     assertEquals(true, Masking.CREDENTIALS.appliesTo(new HttpRequest<byte[]>(Method.GET, URI.create("/x"), Map.of("Cookie", "c"), null)));
     assertEquals(true, Masking.queryParameters("code").appliesTo(new HttpRequest<byte[]>(Method.GET, URI.create("/x?code=1"), Map.of(), null)));
     assertEquals(false, Masking.responseBody().appliesTo(new HttpResponse<byte[]>(204, "No Content", Map.of(), null)));

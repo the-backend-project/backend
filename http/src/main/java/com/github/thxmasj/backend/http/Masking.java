@@ -30,7 +30,8 @@ import java.util.stream.Stream;
 ///                        without case
 /// @param queryParameters the names of the query parameters of a request whose values are masked
 /// @param formFields      the names of the fields of an `application/x-www-form-urlencoded` body whose values are
-///                        masked, in requests and responses
+///                        masked, in requests and responses. A body which isn't declared a form is masked as a
+///                        whole, as it may have the fields all the same.
 /// @param wholeResponseBody whether the body of a response is masked as a whole, e.g. one with a token
 public record Masking(Set<String> headers, Set<String> queryParameters, Set<String> formFields, boolean wholeResponseBody) {
 
@@ -125,7 +126,7 @@ public record Masking(Set<String> headers, Set<String> queryParameters, Set<Stri
   public boolean appliesTo(HttpRequest<?> request) {
     return hasMaskedHeader(request.headers())
         || (!queryParameters.isEmpty() && request.uri().getRawQuery() != null)
-        || (!formFields.isEmpty() && request.body() != null && isForm(request));
+        || (!formFields.isEmpty() && request.body() != null);
   }
 
   /// Whether masking the response may change it, which is told without its body: it has a header this masking masks, a
@@ -133,7 +134,7 @@ public record Masking(Set<String> headers, Set<String> queryParameters, Set<Stri
   public boolean appliesTo(HttpResponse<?> response) {
     return hasMaskedHeader(response.headers())
         || (wholeResponseBody && response.body() != null)
-        || (!formFields.isEmpty() && response.body() != null && isForm(response));
+        || (!formFields.isEmpty() && response.body() != null);
   }
 
   /// Whether this masking masks more of requests than the other one does: other headers, or query parameters or form
@@ -188,14 +189,19 @@ public record Masking(Set<String> headers, Set<String> queryParameters, Set<Stri
     );
   }
 
+  /// The body with the form fields masked. A body which isn't declared a form is masked as a whole, as it may have the
+  /// fields all the same, e.g. sent with another content type by mistake.
   private byte[] maskForm(HttpMessage<byte[]> message) {
     byte[] body = message.body();
-    if (formFields.isEmpty() || body == null || !isForm(message))
+    if (formFields.isEmpty() || body == null)
       return body;
+    if (!isForm(message))
+      return MASK.getBytes(UTF_8);
     return maskParameters(new String(body, UTF_8), formFields).getBytes(UTF_8);
   }
 
-  private static boolean isForm(HttpMessage<?> message) {
+  /// Whether the message is declared a form, i.e. its content type is `application/x-www-form-urlencoded`
+  public static boolean isForm(HttpMessage<?> message) {
     String contentType = message.headerValue("Content-Type");
     return contentType != null && contentType.toLowerCase(Locale.ROOT).startsWith("application/x-www-form-urlencoded");
   }
