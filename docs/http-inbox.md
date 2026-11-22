@@ -248,7 +248,7 @@ application's entity as key. The inbox requests of an entity are thereby found b
 
 ## Access tokens
 
-Inbox requests requiring an access token, e.g. one issued by the [identity provider](identity-provider.md), take
+Inbox requests requiring an access token, e.g. one issued by the [identity provider](identity-provider.md#signing-users-in), take
 `HttpInbox.bearerToken(verifier, scopes...)` as their authorizer, which authorizes the `sub` of the bearer token if the
 verifier finds it valid and it has the scopes. The `AccessTokenVerifier` is given the keys of the issuer, its issuer
 URI and optionally the audience the tokens must have:
@@ -284,7 +284,7 @@ with a new key may be refused, an issuer should publish a new key before signing
 ## Signing users in with OpenID Connect
 
 `OpenIdConnectClient` signs users of a web app in with an OpenID Connect provider, e.g. Microsoft Entra ID or the
-[identity provider](identity-provider.md), with the
+[identity provider](identity-provider.md#signing-users-in), with the
 [authorization code flow](https://openid.net/specs/openid-connect-core-1_0.html#CodeFlowAuth). The
 [identity provider](identity-provider.md#signing-users-in) signs its users in with its upstream provider by it, and the
 [backoffice](backoffice.md#signing-in) its users. It builds the requests and verifies the responses, while the app
@@ -408,6 +408,23 @@ A request not stored is found by the transactions of its [session](entities.md#s
 
 The events of a request not stored are still told the listener, and the [monitoring](monitoring.md#the-lines) writes
 them with `"stored":false`.
+
+### Requests which aren't authenticated
+
+A request whose sender isn't authenticated is best not stored: anyone can send it, as many times as they like, so
+storing it lets anyone fill the event log, and what it carries, e.g. a secret sent where it shouldn't be, is of no use
+to keep. Answer it at once instead, by an inbox request with `notStored()` which matches a request without the
+credentials it needs, and refuses it as the standard of the endpoint says, e.g. RFC 6749 or RFC 6750. Its refusal is still told the listener, so the
+[monitoring](monitoring.md#the-lines) sees attempts to guess a secret. Store a request once its sender has given
+credentials to check, so that what an authenticated client did, or tried, is in the event log.
+
+The exception is state which must outlive the session, which can only be stored: a sign-in begun before the user is
+authenticated, e.g. that of the [backoffice](backoffice.md#signing-in) or the authorization
+request of the [identity provider](identity-provider.md#signing-users-in), must be found again when the user returns.
+
+An inbox request with an authorizer stores a request which the authorizer refuses, as it does every request it routes,
+so a request with credentials that are wrong, e.g. an expired access token, is stored, without the credentials, while one
+without credentials is answered before it reaches the inbox request.
 
 ## State diagrams
 

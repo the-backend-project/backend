@@ -336,25 +336,51 @@ public class IdentityProviderTest {
     assertThat(get("/.well-known/jwks.json").statusCode()).isEqualTo(200);
     assertThat(get("/unknown").statusCode()).isEqualTo(404);
     assertThat(get("/token").statusCode()).isEqualTo(405);
+    assertThat(post("/token", Map.of("Content-Type", "application/x-www-form-urlencoded"), "grant_type=client_credentials").statusCode()).isEqualTo(401);
+    assertThat(post("/token", Map.of("Content-Type", "text/plain"), "grant_type=client_credentials").statusCode()).isEqualTo(400);
     assertThat(post("/clients", Map.of("Content-Type", "application/json"), "{}").statusCode()).isEqualTo(401);
 
     assertThat(eventLog().split("\n").length).isEqualTo(events);
   }
 
-  /// A request refused at the token endpoint is a token request of its own, which is refused, without its secret
+  /// A request to the token endpoint without client authentication is answered at once as RFC 6749 says, and not stored
   @Test
-  public void requestRefusedAtTheTokenEndpointIsRecordedWithoutItsSecret() throws Exception {
+  public void unauthenticatedRequestRefusedAtTheTokenEndpointIsNotStored() throws Exception {
+    int events = eventLog().split("\n").length;
+
     var withoutBasic = post("/token", Map.of("Content-Type", "application/x-www-form-urlencoded"), "grant_type=client_credentials");
     assertThat(withoutBasic.statusCode()).isEqualTo(401);
     assertThat(withoutBasic.headers().firstValue("WWW-Authenticate")).hasValueSatisfying(v -> assertThat(v).startsWith("Basic realm="));
+    assertThat(withoutBasic.headers().firstValue("Cache-Control")).hasValue("no-store");
+    assertThat(json(withoutBasic).get("error").asString()).isEqualTo("invalid_client");
     var secretInBody = post("/token", Map.of("Content-Type", "application/x-www-form-urlencoded"), "grant_type=client_credentials&client_id=c&client_secret=s3cr3t-in-body");
     assertThat(secretInBody.statusCode()).isEqualTo(400);
     assertThat(json(secretInBody).get("error").asString()).isEqualTo("invalid_request");
 
-    assertThat(eventLog()).contains("Clients must authenticate with HTTP Basic").doesNotContain("s3cr3t-in-body");
+    assertThat(eventLog().split("\n").length).isEqualTo(events);
+    assertThat(eventLog()).doesNotContain("s3cr3t-in-body");
   }
 
-  /// A token request whose body isn't declared a form, or with credentials in its query, is stored without them
+  /// A request with client authentication refused at the token endpoint is a token request of its own, which is
+  /// refused, without its secrets
+  @Test
+  public void authenticatedRequestRefusedAtTheTokenEndpointIsRecordedWithoutItsSecret() throws Exception {
+    var secretInBody = post(
+        "/token",
+        Map.of("Content-Type", "application/x-www-form-urlencoded", "Authorization", basic("refused-client", "s3cr3t-in-header")),
+        "grant_type=client_credentials&client_secret=s3cr3t-in-body"
+    );
+    assertThat(secretInBody.statusCode()).isEqualTo(400);
+    assertThat(json(secretInBody).get("error").asString()).isEqualTo("invalid_request");
+
+    assertThat(eventLog())
+        .contains("Clients must authenticate with HTTP Basic")
+        .doesNotContain("s3cr3t-in-body")
+        .doesNotContain(basic("refused-client", "s3cr3t-in-header").substring("Basic ".length()));
+  }
+
+  /// A token request whose body isn't declared a form is answered at once, and one with credentials in its query is
+  /// stored without them
   @Test
   public void tokenRequestNotOfAFormIsStoredWithoutItsCredentials() throws Exception {
     var notAForm = post("/token", Map.of("Content-Type", "text/plain"), "grant_type=authorization_code&code=c0de-in-text&client_secret=s3cr3t-in-text");

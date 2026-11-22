@@ -74,7 +74,9 @@ The event log of the backoffice records who signed in and which pages they viewe
   viewed.
 - The static files and the health check are not stored, neither their requests nor their entities.
 
-A page requested without a session still starts a sign-in, which is stored, also for someone who doesn't sign in.
+A page requested without a session still starts a sign-in, which is stored, also for someone who doesn't sign in. It is
+the exception to [not storing requests which aren't authenticated](http-inbox.md#requests-which-arent-authenticated):
+the sign-in must be found again when the user returns from the identity provider, in a session of its own.
 
 ## The database
 

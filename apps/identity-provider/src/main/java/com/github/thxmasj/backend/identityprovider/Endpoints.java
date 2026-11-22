@@ -100,7 +100,7 @@ final class Endpoints {
       case "/health" -> get(request, () -> response(200, "OK", "text/plain", "OK"));
       case "/.well-known/jwks.json" -> get(request, () -> response(200, "OK", "application/jwk-set+json", keys.publicKeys()));
       case "/.well-known/oauth-authorization-server" -> get(request, () -> response(200, "OK", "application/json", metadata));
-      case "/token" -> request.method() == Method.POST ? null : methodNotAllowed("POST");
+      case "/token" -> request.method() != Method.POST ? methodNotAllowed("POST") : unauthenticatedRefusal(request);
       case "/clients" -> request.method() != Method.POST ? methodNotAllowed("POST") : isInternal(request) ? null : withoutToken(request);
       default -> response(404, "Not Found", null, null);
     };
@@ -124,24 +124,57 @@ final class Endpoints {
 
   }
 
-  /// The request to the token endpoint, which is always valid, as a refusal is answered by the token requests
-  Validated<TokenEndpointRequest> tokenEndpointRequest(HttpRequest<byte[]> request) {
+  /// The refusal of a request to the token endpoint which isn't authenticated, as it isn't a form or has no Basic
+  /// credentials, or null if it is. Such a request is answered at once and not stored, as anyone can send it. Its form
+  /// is only parsed here if it has no credentials, as RFC 6749 refuses a secret in the form as an invalid request
+  /// rather than as a failed client authentication.
+  private Tokens.Refusal unauthenticated(HttpRequest<byte[]> request) {
     if (!Masking.isForm(request))
-      return valid(TokenEndpointRequest.refused(null, "invalid_request", "Content-Type must be application/x-www-form-urlencoded"));
+      return new Tokens.Refusal(null, "invalid_request", "Content-Type must be application/x-www-form-urlencoded");
+    if (basicCredentials(request.headerValue("Authorization")).isPresent())
+      return null;
     Map<String, String> form;
     try {
       form = Form.parse(request.body());
     } catch (IllegalArgumentException e) {
-      return valid(TokenEndpointRequest.refused(null, "invalid_request", e.getMessage()));
+      return new Tokens.Refusal(null, "invalid_request", e.getMessage());
     }
     if (form.containsKey("client_secret") || form.containsKey("client_assertion"))
-      return valid(TokenEndpointRequest.refused(null, "invalid_request", "Clients must authenticate with HTTP Basic"));
-    Optional<String[]> credentials = basicCredentials(request.headerValue("Authorization"));
-    if (credentials.isEmpty())
-      return valid(TokenEndpointRequest.refused(null, "invalid_client", "Clients must authenticate with HTTP Basic"));
-    String clientId = credentials.get()[0];
-    String secret = credentials.get()[1];
-    return valid(tokenEndpointRequest(form, clientId, secret));
+      return new Tokens.Refusal(null, "invalid_request", "Clients must authenticate with HTTP Basic");
+    return new Tokens.Refusal(null, "invalid_client", "Clients must authenticate with HTTP Basic");
+  }
+
+  /// The error response of RFC 6749 section 5.2 to a request to the token endpoint which isn't authenticated, or null if
+  /// it is
+  private HttpResponse<byte[]> unauthenticatedRefusal(HttpRequest<byte[]> request) {
+    Tokens.Refusal refusal = unauthenticated(request);
+    if (refusal == null)
+      return null;
+    int status = Tokens.status(refusal);
+    var headers = noStore(Map.of());
+    if (status == 401)
+      headers.put("WWW-Authenticate", basicChallenge());
+    byte[] body = Reply.error(status, refusal.error(), refusal.description()).body().getBytes(UTF_8);
+    return new HttpResponse<>(status, status == 401 ? "Unauthorized" : "Bad Request", headers, body);
+  }
+
+  /// The request to the token endpoint, which is always valid, as a refusal is answered by the token requests. One
+  /// which isn't authenticated is answered at once, and doesn't get here.
+  Validated<TokenEndpointRequest> tokenEndpointRequest(HttpRequest<byte[]> request) {
+    Tokens.Refusal unauthenticated = unauthenticated(request);
+    if (unauthenticated != null)
+      return valid(new TokenEndpointRequest(unauthenticated, null, null));
+    String[] credentials = basicCredentials(request.headerValue("Authorization")).orElseThrow();
+    String clientId = credentials[0];
+    Map<String, String> form;
+    try {
+      form = Form.parse(request.body());
+    } catch (IllegalArgumentException e) {
+      return valid(TokenEndpointRequest.refused(clientId, "invalid_request", e.getMessage()));
+    }
+    if (form.containsKey("client_secret") || form.containsKey("client_assertion"))
+      return valid(TokenEndpointRequest.refused(clientId, "invalid_request", "Clients must authenticate with HTTP Basic"));
+    return valid(tokenEndpointRequest(form, clientId, credentials[1]));
   }
 
   private TokenEndpointRequest tokenEndpointRequest(Map<String, String> form, String clientId, String secret) {
