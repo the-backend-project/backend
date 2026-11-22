@@ -8,7 +8,6 @@ import com.github.thxmasj.backend.core.TransitionModelBuilder.ModelContext;
 import com.github.thxmasj.backend.core.Tuples.Tuple4;
 import com.github.thxmasj.backend.core.internal.TransitionStep.InputStep;
 import com.github.thxmasj.backend.core.internal.TransitionStep.OutputStep;
-import com.github.thxmasj.backend.core.internal.Transitions;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -62,16 +61,10 @@ public class TransitionModel<I, O> {
     return null;
   }
 
-  static {
-    Transitions.register(new Transitions.Calculator() {
-      @Override
-      public <I, O> Mono<OutputStep<O>> calculate(TransitionModel<I, O> transition, InputStep<I> inputStep) {
-        return transition.calculate(inputStep);
-      }
-    });
-  }
-
-  Mono<OutputStep<O>> calculate(InputStep<I> inputStep) {
+  /// Calculates the transition from its input step, without storing its changes. The input step is internal to the
+  /// library, as its package is exported to the library's own modules only, so only the library calls this: the state
+  /// machine, and the tests of the transitions of the library's modules.
+  public Mono<OutputStep<O>> calculate(InputStep<I> inputStep) {
     log(modelContext, "calculate [" + eventType().name() + "] on [" + inputStep.log().entityModel().name() + ":" + inputStep.log().entityId() + "] (input: " + inputStep.input() + ")");
     return chain.apply(Mono.just(inputStep))
         .doOnError(e -> inputStep.stateMachine().transitionFailed(inputStep, e));

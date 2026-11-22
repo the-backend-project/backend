@@ -198,7 +198,7 @@ public class TransitionModelBuilder<I, T, O> {
                       i.correlationId(),
                       i.stepOutput(),
                       i.stateMachine(),
-                      i.calculation()
+                      i.transaction()
                   )))
               ));
             }
@@ -260,9 +260,9 @@ public class TransitionModelBuilder<I, T, O> {
     }
 
     /// Masks the output of the transition when its event is stored, e.g. to keep a secret or bulky data out of the
-    /// event log. The event in the calculation has the whole output: the transition's triggers, the one who triggered
-    /// the event, and the transitions of the same calculation reading the entity's log see it. The event log stores the
-    /// masked output, which is what a later calculation reads of a stored entity, also one of the same session, so the
+    /// event log. The event in the transaction has the whole output: the transition's triggers, the one who triggered
+    /// the event, and the transitions of the same transaction reading the entity's log see it. The event log stores the
+    /// masked output, which is what a later transaction reads of a stored entity, also one of the same session, so the
     /// state of the entity must not depend on what is masked.
     /// A transition which chooses another one stores the event of the chosen transition, with the mask declared on that
     /// one.
@@ -647,7 +647,7 @@ public class TransitionModelBuilder<I, T, O> {
           c.inputStep().correlationId(),
           filter.alternative().dataAdapter().apply(c.stepOutput()),
           c.inputStep().stateMachine(),
-          c.inputStep().calculation(),
+          c.inputStep().transaction(),
           c.inputStep().triggerType(),
           c.inputStep().triggerId()
       ));
@@ -921,10 +921,10 @@ public class TransitionModelBuilder<I, T, O> {
   }
 
 
-  /// The result of a step of the calculation the transition step is part of. Every step is taken like this, such that
+  /// The result of a step of the transaction the transition step is part of. Every step is taken like this, such that
   /// it is not executed again when the changes are calculated again from a later step.
   private static <R> Mono<R> step(TransitionStep<?> context, Supplier<Mono<R>> execution) {
-    return context.inputStep().calculation().step(context, execution);
+    return context.inputStep().transaction().step(context, execution);
   }
 
   static void log(ModelContext<?, ?> modelContext, String text) {

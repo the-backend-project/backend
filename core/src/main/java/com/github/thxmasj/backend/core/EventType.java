@@ -18,7 +18,7 @@ public interface EventType<I, O> {
   /// its entity must not depend on it: on an entity which is stored, its transitions stay in their state
   /// (`toSelf()`), which the state machine checks when it is created. An event which is not stored creating an entity,
   /// i.e. from [EntityModel#Begin], makes the entity one of the session only: none of its events are stored, and only
-  /// the calculations of the session find it (see [EntityModel#stored()]).
+  /// the transactions of the session find it (see [EntityModel#stored()]).
   default boolean stored() {
     return true;
   }

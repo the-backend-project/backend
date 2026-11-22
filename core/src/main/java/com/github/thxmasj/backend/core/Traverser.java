@@ -114,7 +114,7 @@ class Traverser {
     return !Objects.equals(a.toState(), b.toState()) || a.reverseModel() != b.reverseModel();
   }
 
-  /// Whether entities of the session only are of the model, which the later calculations of a session find among the
+  /// Whether entities of the session only are of the model, which the later transactions of a session find among the
   /// events of the earlier ones
   boolean hasEntitiesOfTheSessionOnly() {
     return hasEntitiesOfTheSessionOnly;

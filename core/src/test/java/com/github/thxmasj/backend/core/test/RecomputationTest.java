@@ -34,7 +34,7 @@ import reactor.core.publisher.Mono;
 
 /// The changes of an event are calculated again when one of their ids is found to exist, from the trigger of the id
 @Tag("database")
-public class RecalculationTest {
+public class RecomputationTest {
 
   enum States implements State { CheckedOut, Placed, Reserved, Rejected }
 
@@ -49,9 +49,9 @@ public class RecalculationTest {
   static EventType<String, String> CodeClaimed = BasicEventType.of("Code claimed", UUID.fromString("0f2b4d6e-8a9c-4e1f-b3d5-7f9b1d3f5ad5"), DataType.string(), new CaseInsensitive());
   static IdEntityModel Ids = IdEntityModel.of("Ids", UUID.fromString("c2e8f4a6-0b1d-4c3e-9f5a-7b9d1e3f5a72"), OrderNumberClaimed, CodeClaimed);
 
-  static EntityModel Cart = EntityModel.of("Cart", UUID.fromString("8f3a5c7e-1b2d-4e6f-a8c0-3d5f7a9b1c24"), RecalculationTest::cartTransitions);
-  static EntityModel Order = EntityModel.of("Order", UUID.fromString("1e3f5a7c-9b0d-4c2e-8a4f-6b8d0e2f4a65"), RecalculationTest::orderTransitions);
-  static EntityModel Stock = EntityModel.of("Stock", UUID.fromString("6d8f0b2c-4e5a-4a7c-9e1b-3c5d7f9a1b38"), RecalculationTest::stockTransitions);
+  static EntityModel Cart = EntityModel.of("Cart", UUID.fromString("8f3a5c7e-1b2d-4e6f-a8c0-3d5f7a9b1c24"), RecomputationTest::cartTransitions);
+  static EntityModel Order = EntityModel.of("Order", UUID.fromString("1e3f5a7c-9b0d-4c2e-8a4f-6b8d0e2f4a65"), RecomputationTest::orderTransitions);
+  static EntityModel Stock = EntityModel.of("Stock", UUID.fromString("6d8f0b2c-4e5a-4a7c-9e1b-3c5d7f9a1b38"), RecomputationTest::stockTransitions);
 
   static EventType<String, String> CartCheckedOut = BasicEventType.of("Cart checked out", UUID.fromString("a7c9e1b3-5d6f-4b8a-9c2e-4f6a8c0e2b47"), DataType.string());
   static EventType<String, String> CartForwarded = BasicEventType.of("Cart forwarded", UUID.fromString("3c5e7a9b-1d2f-4a4c-8e6b-0d2f4a6c8e59"), DataType.string());

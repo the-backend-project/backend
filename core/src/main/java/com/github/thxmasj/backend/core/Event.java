@@ -95,7 +95,7 @@ public final class Event<T> {
     return type.name();
   }
 
-  /// The event as it is stored, e.g. masked, as a later calculation reads it from the event log
+  /// The event as it is stored, e.g. masked, as a later transaction reads it from the event log
   public Event<T> asStored() {
     if (storedForm == null)
       return this;

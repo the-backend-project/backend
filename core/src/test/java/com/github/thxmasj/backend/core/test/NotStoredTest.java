@@ -56,7 +56,7 @@ public class NotStoredTest {
   static EventType<Void, Void> TouchScheduled = BasicEventType.of("Touch scheduled", UUID.fromString("5f7b9d1e-3a4c-4e68-8afc-1e3f5a7b9dd5"));
   static EventType<Void, Void> TouchScheduledQuietly = BasicEventType.notStored("Touch scheduled quietly", UUID.fromString("7b9d1f3a-5c6e-4a8a-ac1e-3f5a7b9dbff7"));
 
-  /// Sets a timeout on its entity, which a watcher of the entity cancels at once, in the same calculation
+  /// Sets a timeout on its entity, which a watcher of the entity cancels at once, in the same transaction
   static EventType<Void, Void> TimeoutSet = BasicEventType.of("Timeout set", UUID.fromString("9d1f3b5c-7e8a-4c0e-b2d4-f6a8c0e2a419"));
   static EventType<Void, Void> AccountTimedOut = BasicEventType.of("Account timed out", UUID.fromString("b1f3d5e7-9a0c-4e2a-84f6-a8c0e2a4c63b"));
   static EventType<UUID, UUID> WatchStarted = BasicEventType.of("Watch started", UUID.fromString("d3b5f7a9-1c2e-4a4c-a6a8-c0e2a4c6e85d"), DataType.uuid());
@@ -88,7 +88,7 @@ public class NotStoredTest {
   static EventType<Void, Void> DeliveryRequested = BasicEventType.of("Delivery requested", UUID.fromString("6e8a0c2d-4f5b-4c79-9bed-f1a3c5e7f9c6"));
   static EventType<Void, Void> DeliveryArrived = BasicEventType.of("Delivery arrived", UUID.fromString("8a0c2e4f-6b7d-4e9b-bdf1-a3c5e7a9b1e8"));
 
-  /// Gives the delivery its arrival in a later calculation of the session
+  /// Gives the delivery its arrival in a later transaction of the session
   static Action<String> courier = new Action<>() {
     @Override public String name() {return "Courier";}
     @Override public Mono<InputEvent<?>> execute(String data) {
@@ -109,7 +109,7 @@ public class NotStoredTest {
   static EntityModel Delivery = EntityModel.of("Delivery", UUID.fromString("c2e4a6c8-0f1b-4cd3-b135-e7a9cbedf52c"), () -> Map.<State, List<TransitionModel<?, ?>>>of(
       Begin, List.of(onEvent(DeliveryRequested).to(DeliveryStates.Dispatched).assemble(_ -> "").trigger(courier).with(d -> d).output()),
       DeliveryStates.Dispatched, List.of(
-          // In a later calculation of the session, which finds the visit among the events of the first one
+          // In a later transaction of the session, which finds the visit among the events of the first one
           onEvent(DeliveryArrived).to(DeliveryStates.Delivered)
               .trigger(VisitClosed).on(Visit).identifiedBy(entityIdFromSession())
               .output()
@@ -267,9 +267,9 @@ public class NotStoredTest {
     assertEquals(List.of("1:Account opened", "2:Account touched"), events);
   }
 
-  /// An entity of the session only is found by the later calculations of the session, which an action starts
+  /// An entity of the session only is found by the later transactions of the session, which an action starts
   @Test
-  public void anEntityOfTheSessionOnlyIsFoundByTheLaterCalculationsOfTheSession() {
+  public void anEntityOfTheSessionOnlyIsFoundByTheLaterTransactionsOfTheSession() {
     var events = machine.onEvent(trigger(VisitStarted, Visit), null).take(2).collectList().block(Duration.ofSeconds(10));
     assertEquals(List.of("Visit started", "Visit closed"), events.stream().map(Event::typeName).toList());
 
@@ -316,9 +316,9 @@ public class NotStoredTest {
     assertEquals(List.of("1:Account opened", "2:Account touched"), events);
   }
 
-  /// An event stored on the entity after the transition setting a timeout, in the same calculation, cancels it
+  /// An event stored on the entity after the transition setting a timeout, in the same transaction, cancels it
   @Test
-  public void aDelayedEventIsCancelledByAnEventStoredLaterInTheSameCalculation() throws InterruptedException {
+  public void aDelayedEventIsCancelledByAnEventStoredLaterInTheSameTransaction() throws InterruptedException {
     UUID account = machine.onEvent(trigger(AccountOpened, Account), "a").blockFirst().entityId();
     machine.onEvent(trigger(TimeoutSet, Account, account), null).blockFirst(Duration.ofSeconds(10));
 

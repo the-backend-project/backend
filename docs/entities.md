@@ -101,18 +101,21 @@ outbox request, moves the entity on.
 ## Sessions
 
 A session is all the state machine does for an event entering it through `StateMachine.onEvent`, e.g. a request to the
-[inbox](http-inbox.md). It is one or more calculations, each stored in a transaction of its own:
+[inbox](http-inbox.md). It is one or more transactions. A transaction is the transitions taken for one event, with the
+events they trigger on other entities, whose changes are stored together, in one database transaction. If it can't be
+stored, as another instance has stored an event on one of its entities in the meantime, or an id it claims is
+[taken](existing-ids.md), it is calculated again and stored in another.
 
-1. The event is calculated, with the events its transitions trigger on other entities, and stored in one transaction.
+1. The event entering the state machine is the event of the first transaction.
 2. The actions of the changes stored run, e.g. sending an [outbox request](http-outbox.md). The event an action gives,
-   e.g. the response of the outbox request, is calculated and stored in a calculation of its own, which follows the
-   one which ran the action. Its actions continue the session in the same way.
+   e.g. the response of the outbox request, is the event of a transaction of its own, which follows the one which ran
+   the action. Its actions continue the session in the same way.
 
-Every calculation of a session finds the entities of the earlier ones, e.g. `entityIdFromSession()` the entity the
+Every transaction of a session finds the entities of the earlier ones, e.g. `entityIdFromSession()` the entity the
 session started on, so an outbox request's response can answer the request to the inbox. The events of the entity
-the session started on, in all its calculations, go to the one who triggered the event, e.g. the listener of the
-inbox, which sends the response. A delayed
-or conditional trigger fires in a session of its own, after the session which stored it, even if that hasn't ended.
+the session started on, in all its transactions, go to the one who triggered the event, e.g. the listener of the
+inbox, which sends the response. A delayed or conditional trigger fires in a session of its own, after the session
+which stored it, even if that hasn't ended.
 
 ## Events and entities not stored
 
@@ -134,12 +137,12 @@ tested, drawn in the state diagrams and told the [monitoring](monitoring.md), wi
 * **An entity of the session only** is created by an event which is not stored, i.e. one from `Begin`, or is of an
   entity model whose `stored()` is false, e.g. one of `EntityModel.notStored(name, id, transitions)`. None of its
   events are stored, whatever their types, so its transitions may go to any state, also on events not stored. The
-  [session](#sessions) finds it among the events of its calculations, but no other session does, so it can't have
+  [session](#sessions) finds it among the events of its transactions, but no other session does, so it can't have
   delayed or conditional triggers, which fire in a session of their own: the change fails if it has one. An inbox request which is
   [not stored](http-inbox.md#requests-not-stored) is one.
 * **A masked event** is stored with its output masked: `.masked(mask)` on a transition, after `to(...)`, gives the
-  output as it is stored. The event in the calculation has the whole output, which its triggers, the one who triggered
-  it and the transitions of the same calculation see, while the event log has the masked one. A later calculation, also
+  output as it is stored. The event in the transaction has the whole output, which its triggers, the one who triggered
+  it and the transitions of the same transaction see, while the event log has the masked one. A later transaction, also
   one of the same [session](#sessions), reads a stored entity from the event log, masked. The [inbox](http-inbox.md#masking) masks the credentials of the requests it stores this way.
 
 ```java

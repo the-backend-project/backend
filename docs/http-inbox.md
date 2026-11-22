@@ -69,7 +69,7 @@ request matching it. Its transitions depend on the inbox requests, so each inbox
 starting a request on it takes the inbox's `trigger()`. The inbox requests give their responses to the routing model of
 the session, whichever inbox it is of. The routing models of all inboxes have the same id. A `RequestRouting` entity is
 an [entity of the session only](entities.md#events-and-entities-not-stored): it is not stored, as the inbox request
-stores the request and the response, but it is found by every calculation of the session of the request, e.g. the one
+stores the request and the response, but it is found by every transaction of the session of the request, e.g. the one
 of the callback of an outbox request which the application answers in. A request no inbox request matches is answered
 with 400 Bad Request, and not stored either. The inbox request validates the request: its body, message id,
 authorization and the entity it selects. If it is valid, the inbox request triggers the event on the application's
@@ -390,7 +390,7 @@ HttpInboxRequest<Void> HealthCheck = HttpInboxRequest
     .build("HealthCheck", UUID.fromString("..."));
 ```
 
-A request not stored is found by the calculations of its [session](entities.md#sessions) only, so:
+A request not stored is found by the transactions of its [session](entities.md#sessions) only, so:
 
 - it can't be deduplicated, as a retry is recognised by the first request stored, so `deduplicateOn` is refused, and
   without it there is no `rollback`;

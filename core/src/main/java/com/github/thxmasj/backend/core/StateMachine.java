@@ -27,7 +27,7 @@ import com.github.thxmasj.backend.core.database.EntityGroupNotInitialised;
 import com.github.thxmasj.backend.core.database.MappingFailure;
 import com.github.thxmasj.backend.core.database.UnknownEntity;
 import com.github.thxmasj.backend.core.internal.ActionTrigger;
-import com.github.thxmasj.backend.core.internal.Calculation;
+import com.github.thxmasj.backend.core.internal.Transaction;
 import com.github.thxmasj.backend.core.internal.Debug;
 import com.github.thxmasj.backend.core.internal.DelayedEvent;
 import com.github.thxmasj.backend.core.internal.TransitionStep;
@@ -522,7 +522,7 @@ public class StateMachine implements AutoCloseable {
     return delayedEvent.withEventNumber(transitionsEvent.eventNumber() + (transitionsEvent.type().stored() ? 1 : 0));
   }
 
-  /// The action trigger with the log of its entity as the calculation of the action's result reads it, a later one: with
+  /// The action trigger with the log of its entity as the transaction of the action's result reads it, a later one: with
   /// the event of the transition as stored, e.g. masked, and without it if it isn't stored, as the next event stored
   /// follows. An entity of the session only has its events in the session, as they are.
   private static ActionTrigger<?> withEventAsRead(ActionTrigger<?> actionTrigger, Event<?> event) {
@@ -571,7 +571,7 @@ public class StateMachine implements AutoCloseable {
     if (tuple.t3() != null) {
       Debug.log("onEvent " + eventType.name() + ": Current state: " +  tuple.t3());
     }
-    // Deferred, as a retry is a calculation of its own
+    // Deferred, as a retry is a transaction of its own
     return Mono.defer(() -> calculateAndStore(
         tuple.t2(),
         new InputStep<>(
@@ -586,7 +586,7 @@ public class StateMachine implements AutoCloseable {
             correlationId,
             input,
             this,
-            new Calculation(),
+            new Transaction(),
             triggerType,
             triggerId
         )
@@ -596,7 +596,7 @@ public class StateMachine implements AutoCloseable {
   /// Tells the listener that the transition from the input step failed, unless it was told of the failure already, by
   /// the transition triggered by this one which it was thrown in
   void transitionFailed(InputStep<?> inputStep, Throwable failure) {
-    if (listener != null && inputStep.calculation().isNewFailure(failure))
+    if (listener != null && inputStep.transaction().isNewFailure(failure))
       listener.transitionFailed(
           inputStep.correlationId(),
           inputStep.log().entityModel(),
@@ -608,7 +608,7 @@ public class StateMachine implements AutoCloseable {
 
   /// Calculates the changes of the transition from its input step and stores them. If an id of the changes is
   /// found to exist, the changes are calculated again from the first trigger of the id, with the id existing as the
-  /// result of triggering it. The steps before the trigger are not executed again, as the calculation has their results.
+  /// result of triggering it. The steps before the trigger are not executed again, as the transaction has their results.
   private <I, O> Mono<ProcessResult<?>> calculateAndStore(TransitionModel<I, O> transitionModel, InputStep<I> initial) {
     return transitionModel.calculate(initial)
         .flatMap(this::calculatePendingChanges)
@@ -634,7 +634,7 @@ public class StateMachine implements AutoCloseable {
                           r.exception.getMessage()
                       ),
                       this,
-                      initial.calculation()
+                      initial.transaction()
                   )
               )
               .flatMap(rejectChanges -> rejectChanges.stepOutput().isAccepted() ?
@@ -650,7 +650,7 @@ public class StateMachine implements AutoCloseable {
             e -> storage.eventsByIdEvent().execute(e.idEvent().type(), e.idEvent().getMarshalledData())
                 .switchIfEmpty(Mono.error(e))
                 .doOnNext(_ -> Debug.log("onEvent " + transitionModel.eventType().name() + ": " + e.getMessage()))
-                .flatMap(log -> initial.calculation().recalculateWith(ProcessResult.idExists(e.idEvent().type(), e.idEvent(), log)) ?
+                .flatMap(log -> initial.transaction().recomputeWith(ProcessResult.idExists(e.idEvent().type(), e.idEvent(), log)) ?
                     calculateAndStore(transitionModel, initial) :
                     // The id event would be calculated the same again
                     Mono.error(e)
@@ -663,7 +663,7 @@ public class StateMachine implements AutoCloseable {
     if (!(eventTrigger.entityModel() instanceof IdEntityModel))
       return null;
     EventType<I, O> type = eventTrigger.eventSpec().eventType();
-    return tail.inputStep().calculation().existingIds().stream()
+    return tail.inputStep().transaction().existingIds().stream()
         .filter(existing -> existing.idEvent().type().id().equals(type.id())
             && Arrays.equals(existing.idEvent().getMarshalledData(), type.inputDataType().marshal(data)))
         .findFirst()
@@ -842,11 +842,11 @@ public class StateMachine implements AutoCloseable {
         .switchIfEmpty(Mono.error(() -> new UnknownEntity(entityModel, selector.type(), selector.id())));
   }
 
-  /// The log of the entity of the model the session has, as it was given to its transition, searched in the calculation
-  /// of the step and then in the calculations of the session before it
+  /// The log of the entity of the model the session has, as it was given to its transition, searched in the transaction
+  /// of the step and then in the transactions of the session before it
   private EventLog logFromSteps(TransitionStep<?> context, EntityModel entityModel) {
-    for (var calculation = context; calculation != null; calculation = previousCalculation(calculation)) {
-      for (var c = calculation; c != null; c = c.previous()) {
+    for (var transaction = context; transaction != null; transaction = previousTransaction(transaction)) {
+      for (var c = transaction; c != null; c = c.previous()) {
         if (c instanceof InputStep<?> i && EntityModelGroup.targets(entityModel, i.log().entityModel())) {
           return i.log();
         }
@@ -855,34 +855,33 @@ public class StateMachine implements AutoCloseable {
     throw new NoSuchElementException(entityModel.name() + " not found in transition step");
   }
 
-  /// The tail of the calculation of the session the calculation of the step follows, i.e. the one whose action gave the
-  /// event it calculates, or null if it is the first calculation of its session. A calculation is stored in a
-  /// transaction of its own, and the calculations of a session are linked by the first step of each, which refers to the
-  /// one before.
-  private static TransitionStep<?> previousCalculation(TransitionStep<?> step) {
+  /// The tail of the transaction of the session which the transaction of the step follows, i.e. the one whose action
+  /// gave its event, or null if it is the first transaction of its session. The transactions of a session are linked by
+  /// the first step of each, which refers to the one before.
+  private static TransitionStep<?> previousTransaction(TransitionStep<?> step) {
     InputStep<?> initial = initial(step);
     return initial != null ? initial.stage1() : null;
   }
 
-  /// The log of the entity as the session has it, with the events accepted in the calculation of the step, or, for an
-  /// entity of the session only, in the calculations of the session before it, or null if the session has no events of
-  /// it. A stored entity is otherwise read from the database, as an earlier calculation's events of it may have been
+  /// The log of the entity as the session has it, with the events accepted in the transaction of the step, or, for an
+  /// entity of the session only, in the transactions of the session before it, or null if the session has no events of
+  /// it. A stored entity is otherwise read from the database, as an earlier transaction's events of it may have been
   /// followed by those of other sessions. An id entity or index entity has the same entity id as its entity, so the
   /// entity model is matched too.
   private EventLog logFromNestedChanges(UUID entityId, EntityModel entityModel, TransitionStep<?> transitionStep) {
-    EventLog log = logFromCalculation(entityId, entityModel, transitionStep);
+    EventLog log = logFromTransaction(entityId, entityModel, transitionStep);
     if (log != null || !hasEntitiesOfTheSessionOnly(entityModel))
       return log;
-    for (var calculation = previousCalculation(transitionStep); calculation != null; calculation = previousCalculation(calculation)) {
-      log = logFromCalculation(entityId, entityModel, calculation);
+    for (var transaction = previousTransaction(transitionStep); transaction != null; transaction = previousTransaction(transaction)) {
+      log = logFromTransaction(entityId, entityModel, transaction);
       if (log != null)
         return isSessionOnly(log) ? log : null;
     }
     return null;
   }
 
-  /// The log of the entity with the last event accepted on it in the calculation of the step, or null if it has none
-  private static EventLog logFromCalculation(UUID entityId, EntityModel entityModel, TransitionStep<?> transitionStep) {
+  /// The log of the entity with the last event accepted on it in the transaction of the step, or null if it has none
+  private static EventLog logFromTransaction(UUID entityId, EntityModel entityModel, TransitionStep<?> transitionStep) {
     for (var c = transitionStep; c != null; c = c.previous()) {
       if (c instanceof OutputStep<?>(TransitionStep<?> previous, ProcessResult<?> stepOutput)
           && stepOutput instanceof Accepted<?>(Event<?> event, EntityModel model, _, _, _)
@@ -937,8 +936,8 @@ public class StateMachine implements AutoCloseable {
     return keys;
   }
 
-  /// The changes with the deletion of the stored trigger which fired the event of the calculation, if one did. It comes
-  /// first, as a delayed event the calculation triggers on the entity replaces the trigger. The change of a stored event
+  /// The changes with the deletion of the stored trigger which fired the event of the transaction, if one did. It comes
+  /// first, as a delayed event the transaction triggers on the entity replaces the trigger. The change of a stored event
   /// deletes the trigger too, but the event may not be stored, e.g. as the transition chosen isn't, and the change of a
   /// transition chosen doesn't know the trigger.
   private static List<Change> withFiredTrigger(List<Change> changes, TransitionStep<?> tail) {
@@ -955,7 +954,7 @@ public class StateMachine implements AutoCloseable {
     return withDeletion;
   }
 
-  /// The first step of the calculation of the step, of the event it calculates
+  /// The first step of the transaction of the step, of the event it calculates
   private static InputStep<?> initial(TransitionStep<?> step) {
     InputStep<?> initial = null;
     for (var c = step; c != null; c = c.previous()) {
@@ -1008,7 +1007,7 @@ public class StateMachine implements AutoCloseable {
   ) {
     I adaptedData = eventTrigger.eventSpec().inputAdapter() != null ? eventTrigger.eventSpec().inputAdapter().apply(data) : null;
     // The step results in the input step the event is calculated from, or in the step of its id existing
-    return tail.inputStep().calculation()
+    return tail.inputStep().transaction()
         .step(tail, () -> triggered(eventTrigger, tail, data, adaptedData, skipCircularCheck, triggerEvent))
         .flatMap(triggered -> this.<I, O>calculate(triggered));
   }
@@ -1091,7 +1090,7 @@ public class StateMachine implements AutoCloseable {
                 tail.inputStep().correlationId(),
                 adaptedData,
                 tail.inputStep().stateMachine(),
-                tail.inputStep().calculation()
+                tail.inputStep().transaction()
             ))
     );
   }
@@ -1224,7 +1223,7 @@ public class StateMachine implements AutoCloseable {
   /// The changes for the listener, in the order they were calculated, which is the reverse of the order they are
   /// collected in. The accepted events of an entity are thereby in the order of their numbers.
   /// The changes for the listener: the events and the delayed events and conditional triggers created, not the deletion
-  /// of the trigger which fired the calculation
+  /// of the trigger which fired the transaction
   private List<Listener.Change> toListenerFormat(List<Change> changes, Set<EntityKey> sessionOnly) {
     return changes.reversed().stream()
         .filter(change -> change.firedTrigger() == null)

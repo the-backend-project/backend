@@ -51,7 +51,7 @@ flowchart LR
 ```
 
 The input step also has what the other steps need besides the data: the entity's event log, its current state, the
-timestamp, and the `Calculation` the step is part of. The output of each step is:
+timestamp, and the `Transaction` the step is part of. The output of each step is:
 
 | Step                     | Added by                      | Output                                                                                        |
 |--------------------------|-------------------------------|-----------------------------------------------------------------------------------------------|
@@ -121,7 +121,7 @@ flowchart TB
 
 Every step refers to the one before it, `previous`, so the steps of both transitions are stacked in one chain, with
 the steps of the triggered transition nested between the step triggering it and the `TriggerStep`. Below, the first
-step is on top, every step refers to the one above it, and the result of the calculation is the step at the bottom:
+step is on top, every step refers to the one above it, and the result of the transitions is the step at the bottom:
 
 <div class="step-stack">
   <div class="step-stack-title">Order: OrderPlaced</div>
@@ -149,7 +149,7 @@ of these, whose `ProcessResult` the triggering transition can act on, e.g. with 
 |-----------------|-------------------------------------------------------------------------------------|
 | `RejectedStep`  | The event is rejected, e.g. since the entity has no transition on it from its state |
 | `UnknownIdStep` | The entity of the event is not found                                                |
-| `PendingStep`   | The event is circular, i.e. on an entity already changed by the calculation         |
+| `PendingStep`   | The event is circular, i.e. on an entity already changed by the transaction         |
 | `IdExistsStep`  | The id of an id event is held by another entity (see [existing ids](existing-ids.md)) |
 
 ## Choosing a transition
@@ -224,10 +224,10 @@ transitions they can choose. That has these consequences:
 
 ## Collecting the changes
 
-When the calculation is done, the changes to store, i.e. the accepted events, the delayed events and the conditional
+When the transitions are calculated, the changes to store, i.e. the accepted events, the delayed events and the conditional
 triggers, and the actions to run, are collected by following the chain back from its last step to its first. In the
 order above, that gives the `OrderPlaced` and `StockReserved` events.
 
-Every step is taken through the `Calculation` of the event, which records the result of the step. That makes it
+Every step is taken through the `Transaction` of the event, which records the result of the step. That makes it
 possible to calculate the changes again from a step in the middle of the chain, without executing the steps before it
 again, such as an assembler reading from another system.

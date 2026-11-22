@@ -171,7 +171,7 @@ public final class AtMostOnceBuilder {
     /// which every at-most-once request masks, e.g. the form fields of a token request and the body of its response.
     /// The request is sent and the response handled as they are: only the events stored are masked. An at-most-once
     /// request is never sent again, but what reads it from the event log later gets it masked: a request aware content
-    /// parser, which parses the response in a later calculation, and the rollback message creator, which must then
+    /// parser, which parses the response in a later transaction, and the rollback message creator, which must then
     /// create what is masked itself, e.g. take a new access token rather than copy the request's `Authorization`.
     RollbackOnAcceptedModelStep<RQ> masking(Masking masking);
 

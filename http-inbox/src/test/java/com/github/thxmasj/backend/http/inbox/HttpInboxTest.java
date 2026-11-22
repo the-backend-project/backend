@@ -329,7 +329,7 @@ public class HttpInboxTest {
       .process(InternalProcessingRequested, Lamp, newEntity())
       .build("BodyMaskedRequest", UUID.fromString("3e9a5c1f-7b2d-4e64-a8f0-c6d2b4e8a135"));
 
-  /// Not stored, and answered by the callback of an outbox request, in a later calculation of the session
+  /// Not stored, and answered by the callback of an outbox request, in a later transaction of the session
   static HttpInboxRequest<byte[]> NotStoredExternalRequest = withBody("PUT .*/not-stored-external/.*")
       .notStored()
       .process(ExternalProcessingRequested, Lamp, _ -> null, newEntity())
@@ -599,9 +599,9 @@ public class HttpInboxTest {
     assertThat(storedData(NotStoredRequest, HttpInbox.RequestCompleted)).isEmpty();
   }
 
-  /// The request is of the session only, which the callback of the outbox request is a later calculation of
+  /// The request is of the session only, which the callback of the outbox request is a later transaction of
   @Test
-  public void whenRequestIsNotStoredThenItIsAnsweredInALaterCalculationOfTheSessionToo() {
+  public void whenRequestIsNotStoredThenItIsAnsweredInALaterTransactionOfTheSessionToo() {
     Event<?> response = onRequest(PUT, URI.create("/not-stored-external/" + UUID.randomUUID()), "Hello!".getBytes());
     HttpResponse<byte[]> message = HttpResponse.raw(response.getUnmarshalledData());
     assertEquals(201, message.statusCode());
