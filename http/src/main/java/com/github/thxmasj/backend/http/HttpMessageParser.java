@@ -55,7 +55,12 @@ public class HttpMessageParser {
       int separatorIndex = lines[i].indexOf(":");
       if (separatorIndex == -1)
         throw new IllegalStateException("Invalid header -- no separator: <" + lines[i] + ">");
-      headers.add(lines[i].substring(0, separatorIndex).trim(), lines[i].substring(separatorIndex + 1).trim());
+      String name = lines[i].substring(0, separatorIndex).trim();
+      // A pseudo-header of HTTP/2, e.g. :status, which responses were stored with before headers were validated, is
+      // a line starting with its colon, and not a header
+      if (name.isEmpty())
+        continue;
+      headers.add(name, lines[i].substring(separatorIndex + 1).trim());
     }
     return headers.build();
   }

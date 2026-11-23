@@ -2,6 +2,7 @@ package com.github.thxmasj.backend.http;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -9,7 +10,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.function.BiConsumer;
 import java.util.stream.Stream;
 
@@ -18,19 +19,23 @@ import java.util.stream.Stream;
 /// in. Headers are immutable: [#with(String, String)], [#plus(String, String)] and [#without(String)] return new
 /// headers, and a [Builder] makes them a field at a time.
 ///
-/// Headers are equal if they have the same values for each name, with the names compared without case and the values
-/// of a name in order. The order of fields of different names doesn't matter, as it carries no meaning in HTTP.
+/// Headers are equal if they have the same values for each name, with the names compared without case, and the values
+/// of a name joined in order with `, `, as a recipient may join them (RFC 9110 section 5.3): a header sent once as
+/// `a, b` equals one sent twice, as `a` and `b`. The order of fields of different names doesn't matter, as it carries
+/// no meaning in HTTP.
 public final class Headers {
 
   private static final Headers none = new Headers(List.of());
 
-  /// A header field: a name and one of its values
+  /// A header field: a name and one of its values. The name is a token of RFC 9110 section 5.6.2, which excludes e.g.
+  /// the pseudo-headers of HTTP/2, such as `:status`, and the value has no line break, so that the field can be stored
+  /// as a line.
   public record Field(String name, String value) {
 
     public Field {
       Objects.requireNonNull(name, "name");
       Objects.requireNonNull(value, "value");
-      if (name.isBlank() || name.chars().anyMatch(c -> c == ':' || c == '\r' || c == '\n'))
+      if (!isToken(name))
         throw new IllegalArgumentException("Invalid header name: <" + name + ">");
       if (value.chars().anyMatch(c -> c == '\r' || c == '\n'))
         throw new IllegalArgumentException("Invalid value of header " + name + ": line break");
@@ -40,9 +45,18 @@ public final class Headers {
     public boolean is(String name) {
       return this.name.equalsIgnoreCase(name);
     }
+
+    /// Whether the name is a token, of the characters `tchar` of RFC 9110 section 5.6.2, which are ASCII
+    public static boolean isToken(String name) {
+      return !name.isEmpty()
+          && name.chars().allMatch(c -> c < 128 && (Character.isLetterOrDigit(c) || "!#$%&'*+-.^_`|~".indexOf(c) >= 0));
+    }
   }
 
   private final List<Field> fields;
+  /// The values of each name, by the name in lower case, joined with `, `, which equality compares. Made when first
+  /// needed, and immutable, so made again at most when used by several threads at once.
+  private Map<String, String> combined;
 
   private Headers(List<Field> fields) {
     this.fields = fields;
@@ -100,10 +114,10 @@ public final class Headers {
 
   /// The names, as first written, in the order they first appear
   public Set<String> names() {
-    var names = new TreeMap<String, String>(String.CASE_INSENSITIVE_ORDER);
+    var seen = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
     var ordered = new LinkedHashSet<String>();
     for (Field field : fields)
-      if (names.putIfAbsent(field.name(), field.name()) == null)
+      if (seen.add(field.name()))
         ordered.add(field.name());
     return Collections.unmodifiableSet(ordered);
   }
@@ -144,15 +158,12 @@ public final class Headers {
 
   @Override
   public boolean equals(Object o) {
-    return o instanceof Headers that && byName().equals(that.byName());
+    return o == this || o instanceof Headers that && combined().equals(that.combined());
   }
 
   @Override
   public int hashCode() {
-    int hash = 0;
-    for (var entry : byName().entrySet())
-      hash += entry.getKey().toLowerCase(Locale.ROOT).hashCode() ^ entry.getValue().hashCode();
-    return hash;
+    return combined().hashCode();
   }
 
   @Override
@@ -160,11 +171,17 @@ public final class Headers {
     return fields.toString();
   }
 
-  private Map<String, List<String>> byName() {
-    var map = new TreeMap<String, List<String>>(String.CASE_INSENSITIVE_ORDER);
-    for (Field field : fields)
-      map.computeIfAbsent(field.name(), _ -> new ArrayList<>()).add(field.value());
-    return map;
+  private Map<String, String> combined() {
+    Map<String, String> result = combined;
+    if (result == null) {
+      // Names are ASCII, so lower case is the same in every locale
+      var map = new HashMap<String, String>();
+      for (Field field : fields)
+        map.merge(field.name().toLowerCase(Locale.ROOT), field.value(), (a, b) -> a + ", " + b);
+      result = Map.copyOf(map);
+      combined = result;
+    }
+    return result;
   }
 
   private static Builder builder(Headers headers) {

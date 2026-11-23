@@ -337,7 +337,10 @@ request.headers().without("Cookie")                         // removes every val
 ```
 
 A message is stored in the event log as its start line, a line per value of a header, and its body. Messages are equal
-if their headers have the same values for each name, compared without case, with the values of a name in order.
+if their headers have the same values for each name, compared without case, with the values of a name joined in order
+with `, `, as a recipient may join them (RFC 9110 section 5.3). A header sent once as `a, b` thereby equals one sent
+twice, as `a` and `b`, e.g. a request retried through a proxy which joins them. A name is a token of RFC 9110, which
+the pseudo-headers of HTTP/2, such as `:status`, are not.
 
 ## Finding the requests of a process
 

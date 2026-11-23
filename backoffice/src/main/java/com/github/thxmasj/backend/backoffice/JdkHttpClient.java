@@ -38,13 +38,22 @@ final class JdkHttpClient implements HttpClient {
     request.method(message.method().name(), body != null ? BodyPublishers.ofByteArray(body) : BodyPublishers.noBody());
     return Mono.fromFuture(() -> client.sendAsync(request.build(), BodyHandlers.ofByteArray()))
         .map(response -> {
-          var headers = Headers.builder();
-          response.headers().map().forEach((name, values) -> values.forEach(value -> headers.add(name, value)));
           byte[] responseBody = response.body();
-          return new HttpResponse<>(response.statusCode(), "", headers.build(), responseBody != null && responseBody.length > 0 ? responseBody : null);
+          return new HttpResponse<>(response.statusCode(), "", headers(response.headers()), responseBody != null && responseBody.length > 0 ? responseBody : null);
         })
         .onErrorMap(CompletionException.class, e -> e.getCause() != null ? e.getCause() : e)
         .onErrorMap(HttpConnectTimeoutException.class, e -> (ConnectException) new ConnectException(e.getMessage()).initCause(e));
+  }
+
+  /// The headers of a response, with every value of a name. Over HTTP/2 the client gives the pseudo-headers too, e.g.
+  /// `:status`, which are not headers.
+  static Headers headers(java.net.http.HttpHeaders received) {
+    var headers = Headers.builder();
+    received.map().forEach((name, values) -> {
+      if (!name.startsWith(":"))
+        values.forEach(value -> headers.add(name, value));
+    });
+    return headers.build();
   }
 
 }

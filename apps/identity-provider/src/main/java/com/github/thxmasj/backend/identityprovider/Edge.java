@@ -11,6 +11,7 @@ import com.github.thxmasj.backend.http.HttpRequest;
 import com.github.thxmasj.backend.http.HttpRequest.Method;
 import com.github.thxmasj.backend.http.HttpResponse;
 import com.github.thxmasj.backend.http.inbox.AccessTokenVerifier.AccessToken;
+import com.github.thxmasj.backend.http.inbox.Cookies;
 import com.github.thxmasj.backend.http.inbox.Form;
 import com.github.thxmasj.backend.http.inbox.HttpInboxListener;
 import com.github.thxmasj.backend.http.inbox.OpenIdConnectClient;
@@ -44,6 +45,10 @@ final class Edge implements HttpInboxListener.Filter {
 
   /// The cookie holding the secret of a sign-in with the upstream provider, by the authorization it is for
   private static final String cookiePrefix = "idp_authorization_";
+
+  /// The headers keeping a response out of caches, RFC 6749 section 5.1
+  private static final Headers noCache = Headers.builder().add("Cache-Control", "no-store").add("Pragma", "no-cache").build();
+
   /// How long a user has to sign in with the upstream provider
   private static final Duration signInLifetime = Duration.ofMinutes(10);
   /// The errors of an upstream provider passed on to the client, RFC 6749 section 4.1.2.1 and OpenID Connect Core
@@ -68,9 +73,9 @@ final class Edge implements HttpInboxListener.Filter {
 
   @Override
   public Mono<HttpResponse<byte[]>> filter(HttpRequest<byte[]> request, Function<HttpRequest<byte[]>, Mono<HttpResponse<byte[]>>> next) {
-    // The cookies hold the secrets of sign-ins, so they are kept out of the event log. They may be sent in several
-    // Cookie headers, e.g. over HTTP/2 (RFC 9113 section 8.2.3).
-    String cookies = String.join("; ", request.headerValues("Cookie"));
+    // The cookies hold the secrets of sign-ins, so they are kept out of the event log, and read from the request
+    // received
+    HttpRequest<byte[]> received = request;
     request = withoutTrustedHeaders(request);
     if (upstream != null) {
       switch (request.uri().getPath()) {
@@ -81,7 +86,7 @@ final class Edge implements HttpInboxListener.Filter {
           return get(request, next, this::authorize);
         }
         case "/callback" -> {
-          return get(request, next, (r, n) -> callback(r, cookies, n));
+          return get(request, next, (r, n) -> callback(r, received, n));
         }
         case "/userinfo" -> {
           return get(request, next, this::userInfo);
@@ -108,10 +113,11 @@ final class Edge implements HttpInboxListener.Filter {
         String authorization = DataType.objectMapper.readTree(response.body()).get("authorization").asString();
         String secret = Secrets.generate();
         yield upstream.authorizationUrl(authorization, secret).map(url -> {
-          var headers = noStore(Headers.none())
-              .without("Content-Type")
-              .with("Location", url.toString())
-              .with("Set-Cookie", cookie(authorization, secret, signInLifetime));
+          var headers = Headers.builder()
+              .add(noCache)
+              .add("Location", url.toString())
+              .add("Set-Cookie", cookie(authorization, secret, signInLifetime))
+              .build();
           return new HttpResponse<>(302, "Found", headers, null);
         });
       }
@@ -123,7 +129,7 @@ final class Edge implements HttpInboxListener.Filter {
   /// The redirect URI of the identity provider at the upstream provider. The code of the upstream provider is redeemed
   /// here, and the user it signed in passed on to the state machine with the hash of the code generated for the
   /// client. The client gets the code by the redirect back to it.
-  private Mono<HttpResponse<byte[]>> callback(HttpRequest<byte[]> request, String cookies, Function<HttpRequest<byte[]>, Mono<HttpResponse<byte[]>>> next) {
+  private Mono<HttpResponse<byte[]>> callback(HttpRequest<byte[]> request, HttpRequest<byte[]> received, Function<HttpRequest<byte[]>, Mono<HttpResponse<byte[]>>> next) {
     Map<String, String> query;
     try {
       String raw = request.uri().getRawQuery();
@@ -137,7 +143,7 @@ final class Edge implements HttpInboxListener.Filter {
     } catch (IllegalArgumentException e) {
       return Mono.just(errorPage("The response of the identity provider is invalid"));
     }
-    String secret = cookie(cookies, cookiePrefix + authorization);
+    String secret = Cookies.value(received, cookiePrefix + authorization);
     if (secret == null)
       return Mono.just(errorPage("The sign-in has expired, or was started in another browser. Please sign in again."));
     String clearCookie = cookie(authorization, "", Duration.ZERO);
@@ -355,7 +361,7 @@ final class Edge implements HttpInboxListener.Filter {
   /// Requests can't set the headers the edge tells the state machine what it has authenticated with, and their
   /// cookies are not passed on
   private static HttpRequest<byte[]> withoutTrustedHeaders(HttpRequest<byte[]> request) {
-    if (request.headers().names().stream().noneMatch(Edge::isTrusted))
+    if (request.headers().stream().noneMatch(field -> isTrusted(field.name())))
       return request;
     var headers = Headers.of(request.headers().stream().filter(field -> !isTrusted(field.name())).toList());
     return new HttpRequest<>(request.method(), request.uri(), headers, request.body());
@@ -385,9 +391,7 @@ final class Edge implements HttpInboxListener.Filter {
       parameters.put("code", code);
     parameters.putAll(redirect.parameters());
     String uri = redirect.redirectUri();
-    var headers = noStore(Headers.none())
-        .without("Content-Type")
-        .with("Location", uri + (uri.contains("?") ? "&" : "?") + Form.encode(parameters));
+    var headers = noCache.plus("Location", uri + (uri.contains("?") ? "&" : "?") + Form.encode(parameters));
     return new HttpResponse<>(302, "Found", headers, null);
   }
 
@@ -405,7 +409,7 @@ final class Edge implements HttpInboxListener.Filter {
   }
 
   private static HttpResponse<byte[]> errorPage(String description) {
-    var headers = noStore(Headers.none()).with("Content-Type", "text/plain;charset=UTF-8");
+    var headers = noCache.plus("Content-Type", "text/plain;charset=UTF-8");
     return new HttpResponse<>(400, "Bad Request", headers, ("Sign-in failed: " + description + "\n").getBytes(UTF_8));
   }
 
@@ -415,18 +419,6 @@ final class Edge implements HttpInboxListener.Filter {
     return cookiePrefix + authorization + "=" + secret
         + "; Path=/callback; Max-Age=" + maxAge.toSeconds() + "; HttpOnly; SameSite=Lax"
         + ("https".equals(keys.issuer().getScheme()) ? "; Secure" : "");
-  }
-
-  /// The value of a cookie of the Cookie headers, joined with `; `, or null
-  private static String cookie(String cookies, String name) {
-    for (String cookie : cookies.split(";")) {
-      int i = cookie.indexOf('=');
-      if (i > 0 && cookie.substring(0, i).trim().equals(name)) {
-        String value = cookie.substring(i + 1).trim();
-        return value.isEmpty() ? null : value;
-      }
-    }
-    return null;
   }
 
   private static Mono<HttpResponse<byte[]>> post(
@@ -467,6 +459,7 @@ final class Edge implements HttpInboxListener.Filter {
     return new HttpResponse<>(status, status == 401 ? "Unauthorized" : "Forbidden", Map.of("WWW-Authenticate", challenge.toString()), null);
   }
 
+  /// The headers with those of a JSON response kept out of caches
   private static Headers noStore(Headers headers) {
     return headers
         .with("Content-Type", "application/json;charset=UTF-8")

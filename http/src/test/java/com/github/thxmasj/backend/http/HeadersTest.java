@@ -62,12 +62,18 @@ public class HeadersTest {
     assertEquals(Headers.none(), Headers.of(Map.of()));
   }
 
-  /// A line break would end the header in the stored message, and a colon in a name would split it elsewhere
+  /// A line break would end the header in the stored message, and a name is a token of RFC 9110, which excludes e.g. a
+  /// colon, which would split the line elsewhere, and the pseudo-headers of HTTP/2
   @Test
   public void fieldsWhichCantBeWrittenAsAHeaderLineAreRejected() {
     assertThrows(IllegalArgumentException.class, () -> Headers.of("X-A", "1\r\nX-B: 2"));
     assertThrows(IllegalArgumentException.class, () -> Headers.of("X-A:", "1"));
     assertThrows(IllegalArgumentException.class, () -> Headers.of("", "1"));
+    assertThrows(IllegalArgumentException.class, () -> Headers.of(":status", "200"));
+    assertThrows(IllegalArgumentException.class, () -> Headers.of("X A", "1"));
+    // Not ASCII, which names compared without case would otherwise hash differently from equal ones
+    assertThrows(IllegalArgumentException.class, () -> Headers.of("\u0130", "1"));
+    assertEquals("1", Headers.of("X-Custom_Header.v1~!", "1").firstValue("x-custom_header.V1~!").orElseThrow());
     assertThrows(NullPointerException.class, () -> Headers.of("X-A", null));
   }
 }

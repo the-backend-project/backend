@@ -106,6 +106,24 @@ public class HttpMessageTest {
     assertEquals(List.of(), parsed.headerValues("Cookie"));
   }
 
+  /// A pseudo-header of HTTP/2, `:status`, which responses were stored with before headers were validated, is skipped
+  @Test
+  public void messageStoredWithAPseudoHeaderParses() {
+    var parsed = HttpMessageParser.parseResponse("HTTP/1.1 200 \n:status:200\ncontent-type:application/json\n\n{}".getBytes());
+    assertEquals(List.of("application/json"), parsed.headerValues("Content-Type"));
+    assertEquals(1, parsed.headers().fields().size());
+  }
+
+  /// A request stored with the values of a repeated header joined, as the listener received them before they were kept
+  /// apart, equals a retry of it received with them apart
+  @Test
+  public void requestWithValuesJoinedEqualsOneWithThemApart() {
+    var joined = new HttpRequest<>(Method.PUT, URI.create("/orders/1"), Map.of("X-Tag", "a, b"), "order".getBytes());
+    var apart = new HttpRequest<>(Method.PUT, URI.create("/orders/1"), Headers.builder().add("x-tag", "a").add("X-Tag", "b").build(), "order".getBytes());
+    assertEquals(joined, apart);
+    assertEquals(joined.hashCode(), apart.hashCode());
+  }
+
   /// The values of a header are compared in order, as the order of e.g. the cookies set matters, but not the order of
   /// headers of different names
   @Test

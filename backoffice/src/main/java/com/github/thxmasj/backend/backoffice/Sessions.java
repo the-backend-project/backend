@@ -27,6 +27,7 @@ import com.github.thxmasj.backend.http.HttpClient;
 import com.github.thxmasj.backend.http.HttpRequest;
 import com.github.thxmasj.backend.http.HttpRequest.Method;
 import com.github.thxmasj.backend.http.HttpResponse;
+import com.github.thxmasj.backend.http.inbox.Cookies;
 import com.github.thxmasj.backend.http.inbox.Form;
 import com.github.thxmasj.backend.http.inbox.HttpInbox;
 import com.github.thxmasj.backend.http.inbox.HttpInboxRequest;
@@ -570,7 +571,7 @@ final class Sessions {
   /// The session of the cookie of a request, by the hash of its token, or a new one if it has no cookie or the cookie
   /// is of no session
   private static EntitySelector session(HttpRequest<byte[]> request) {
-    String token = cookie(request.headerValues("Cookie"), sessionCookie);
+    String token = Cookies.value(request, sessionCookie);
     return token != null ? idEvent(TokenClaimed, Secrets.hash(token), EntitySelector.newEntity()) : EntitySelector.newEntity();
   }
 
@@ -590,7 +591,7 @@ final class Sessions {
     String state = query.get("state");
     if (Graph.uuid(state) == null)
       return invalid("The response of the identity provider is invalid");
-    return valid(new Callback(state, query.get("code"), query.get("error"), cookie(request.headerValues("Cookie"), signInCookiePrefix + state)));
+    return valid(new Callback(state, query.get("code"), query.get("error"), Cookies.value(request, signInCookiePrefix + state)));
   }
 
   private static Map<String, String> query(String rawQuery) {
@@ -686,29 +687,6 @@ final class Sessions {
 
   private String signInCookie(String session, String secret, Duration maxAge) {
     return signInCookiePrefix + session + "=" + secret + "; Path=" + Path + "/callback; Max-Age=" + maxAge.toSeconds() + "; HttpOnly; SameSite=Lax" + (config.secure() ? "; Secure" : "");
-  }
-
-  /// The value of a cookie of the Cookie headers, which may be several, e.g. over HTTP/2 (RFC 9113 section 8.2.3), or
-  /// null
-  static String cookie(List<String> cookieHeaders, String name) {
-    for (String cookies : cookieHeaders) {
-      String value = cookie(cookies, name);
-      if (value != null)
-        return value;
-    }
-    return null;
-  }
-
-  /// The value of a cookie of a Cookie header, or null
-  private static String cookie(String cookies, String name) {
-    for (String cookie : cookies.split(";")) {
-      int i = cookie.indexOf('=');
-      if (i > 0 && cookie.substring(0, i).trim().equals(name)) {
-        String value = cookie.substring(i + 1).trim();
-        return value.isEmpty() ? null : value;
-      }
-    }
-    return null;
   }
 
   private static Reply html(int status, String html) {
