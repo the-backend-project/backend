@@ -122,11 +122,6 @@ public interface Inbox {
         .build("ImmediateHttpRequest", UUID.fromString("8a4c2e6f-1d9b-4f73-a5e0-3c7b9d1f2e84"));
   }
 
-  /// A request to the token endpoint, `POST /token`, processed on the token requests: one refused at the endpoint, e.g.
-  /// without client authentication, a code redemption of the grant type `authorization_code`, or a token request of
-  /// the grant type `client_credentials`. Its form and credentials are parsed once, by its content parser, whose result
-  /// chooses the process. The code, the code verifier and a client secret wrongly in the form are masked in the event
-  /// log, and the response, with the tokens signed.
   /// The masking of a token request: its credentials in the form, in a body which isn't one and in the query, where a
   /// client may put them by mistake, and the tokens of its response
   private static Masking tokenMasking() {
@@ -134,6 +129,12 @@ public interface Inbox {
     return Masking.formFields(credentials).andQueryParameters(credentials).andResponseBody();
   }
 
+  /// A request to the token endpoint, `POST /token`, with client authentication, processed on the token requests: one
+  /// refused at the endpoint, e.g. with a secret in its form as well as in HTTP Basic, a code redemption of the grant
+  /// type `authorization_code`, or a token request of the grant type `client_credentials`. One without client
+  /// authentication is answered at once, by the [#immediateHttpRequest(Endpoints)]. Its form and credentials are parsed
+  /// by its content parser, whose result chooses the process. The code, the code verifier and a client secret wrongly
+  /// in the form are masked in the event log, and the response, with the tokens signed.
   static HttpInboxRequest<Endpoints.TokenEndpointRequest> tokenHttpRequest(EntityModel tokenRequest, Endpoints endpoints) {
     return HttpInboxRequest
         .matching(m -> m.method() == Method.POST && m.uri().getPath().equals("/token"))

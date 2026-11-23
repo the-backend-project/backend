@@ -1010,10 +1010,24 @@ public class StateMachine implements AutoCloseable {
 
   }
 
+  /// The changes without the delayed events which a later event stored on their entity in the transaction replaces, as
+  /// the event the delayed one is numbered for is taken. The changes are stored from the last calculated to the first,
+  /// so such a delayed event would otherwise be stored after the event which replaces it, and be left pending.
+  private static List<Change> withoutReplacedDelayedEvents(List<Change> changes, Storing storing) {
+    var lastStored = new HashMap<EntityKey, Integer>();
+    for (var change : changes)
+      if (change.newEvent() != null && storing.isStored(change))
+        lastStored.merge(EntityKey.of(change), change.newEvent().eventNumber(), Math::max);
+    return changes.stream()
+        .filter(change -> change.delayedEvent() == null
+            || change.delayedEvent().eventNumber() > lastStored.getOrDefault(EntityKey.of(change), 0))
+        .toList();
+  }
+
   /// Fails for two delayed triggers on an entity with the same number in the transaction, e.g. of a transition and one
   /// on an event not stored which it triggers on its own entity, as an entity has at most one pending delayed trigger.
-  /// One numbered after a later event stored on the entity replaces it, as that event would, but one with the same
-  /// number would quietly replace the other.
+  /// One followed by a later event stored on the entity is left out, as that event replaces it, but of two with the same
+  /// number one would quietly replace the other.
   private static void requireAtMostOneDelayedTriggerPerEntity(List<Change> changes) {
     record Key(EntityKey entity, int eventNumber) {}
     var delayed = new HashMap<Key, Change>();
@@ -1319,7 +1333,7 @@ public class StateMachine implements AutoCloseable {
       TransitionStep<?> transitionStep
   ) {
     var storing = Storing.of(transitionStep);
-    List<Change> changes = withFiredTrigger(changes(transitionStep), transitionStep, storing);
+    List<Change> changes = withoutReplacedDelayedEvents(withFiredTrigger(changes(transitionStep), transitionStep, storing), storing);
     Debug.log("Changes to store:\n" + changes.stream().map(Object::toString).collect(joining("\n")));
     return Mono.fromRunnable(() -> requireStorable(changes, storing))
         .thenReturn("")

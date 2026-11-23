@@ -322,9 +322,9 @@ public class NotStoredTest {
     UUID account = machine.onEvent(trigger(AccountOpened, Account), "a").blockFirst().entityId();
     machine.onEvent(trigger(TimeoutSet, Account, account), null).blockFirst(Duration.ofSeconds(10));
 
-    for (int i = 0; i < 50 && delayedTriggerCount(account) > 0; i++)
-      Thread.sleep(200);
+    // Left out when the transaction is stored, rather than left pending for the resolver to find out of date
     assertEquals(0, delayedTriggerCount(account));
+    Thread.sleep(500);
     assertEquals(List.of("1:Account opened", "2:Timeout set", "3:Account touched"), events(log(Account, List.of(AccountOpened, TimeoutSet, AccountTouched, AccountTimedOut), account)));
   }
 }

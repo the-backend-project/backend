@@ -140,9 +140,9 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
 
     if (delayedEvent != null) {
       // Replace the previous delayed trigger, which may not have been deleted yet by the new event's change. One of a
-      // transition on an event not stored has the number of the pending one, which it replaces. A transaction has at most
-      // one delayed trigger on an entity with a number, which the state machine checks, so this deletes one of the same
-      // transaction only if it is numbered before, i.e. followed by a later event stored on the entity.
+      // transition on an event not stored has the number of the pending one, which it replaces. The state machine leaves out
+      // a delayed trigger of the transaction which a later event stored on the entity replaces, and refuses two with the
+      // same number, so this only deletes those of earlier transactions.
       sql +=
           """
           DELETE FROM {DelayedTrigger}
