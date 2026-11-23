@@ -70,6 +70,21 @@ public class MaskedEventTest {
     assertDoesNotThrow(() -> new Traverser(Map.of(Begin, List.of(delaying), States.Open, List.of()), true));
   }
 
+  record Codes(List<String> values) {}
+
+  static EventType<Codes, Codes> CodesSet = BasicEventType.of("Codes set", UUID.fromString("2e4a6c8f-0b1d-4f35-97a9-cbdfe1f3a5c7"), DataType.json(Codes.class));
+
+  /// A reader of a masked event of the transaction gets a copy of its whole data, like a reader of any other event, so
+  /// one changing it doesn't change what the next one reads
+  @Test
+  public void eachReaderOfAMaskedEventGetsACopyOfItsWholeData() {
+    var event = new Event<>(UUID.randomUUID(), 1, CodesSet, ZonedDateTime.now(), new Codes(new ArrayList<>(List.of("c0de"))), _ -> new Codes(List.of("***")));
+    var log = new EventLog(Account, event.entityId(), List.of(event));
+    log.one(CodesSet).values().add("changed");
+    assertEquals(List.of("c0de"), log.one(CodesSet).values());
+    assertEquals(List.of("c0de"), log.number(1, CodesSet).values());
+  }
+
   @Test
   public void aMaskGivingNullStoresNoData() {
     var event = new Event<>(UUID.randomUUID(), 1, PasswordSet, ZonedDateTime.now(), "hunter2", _ -> null);

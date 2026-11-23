@@ -1011,9 +1011,34 @@ public class StateMachine implements AutoCloseable {
 
   }
 
+  /// Fails for two delayed triggers on an entity with the same number in the transaction, e.g. of a transition and one
+  /// on an event not stored which it triggers on its own entity, as an entity has at most one pending delayed trigger.
+  /// One numbered after a later event stored on the entity replaces it, as that event would, but one with the same
+  /// number would quietly replace the other.
+  private static void requireAtMostOneDelayedTriggerPerEntity(List<Change> changes) {
+    record Key(EntityKey entity, int eventNumber) {}
+    var delayed = new HashMap<Key, Change>();
+    for (var change : changes) {
+      if (change.delayedEvent() == null)
+        continue;
+      var other = delayed.putIfAbsent(new Key(EntityKey.of(change), change.delayedEvent().eventNumber()), change);
+      if (other != null)
+        throw new IllegalStateException(String.format(
+            "%s and %s are both delayed triggers on %s/%s numbered %d in one transaction, but an entity has at most one " +
+                "pending delayed trigger, so one would quietly replace the other",
+            other.delayedEvent().type().name(),
+            change.delayedEvent().type().name(),
+            change.entityModel().name(),
+            change.entityId(),
+            change.delayedEvent().eventNumber()
+        ));
+    }
+  }
+
   /// Fails for a change which is not stored but would have to be: a delayed or conditional trigger of an entity of the
   /// session only, which fires in a session of its own
   private static void requireStorable(List<Change> changes, Storing storing) {
+    requireAtMostOneDelayedTriggerPerEntity(changes);
     for (var change : changes) {
       if (storing.isStored(change))
         continue;

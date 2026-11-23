@@ -162,11 +162,13 @@ public record EventLog(
 
 
   /// The data of the event unmarshalled for the reader, as the data type unmarshals it, so that one changing it doesn't
-  /// change what others read. A masked event of the transaction gives its whole data, which only the transaction has.
+  /// change what others read. A masked event of the transaction gives a copy of its whole data, which only the
+  /// transaction has, as its stored data is masked.
   @SuppressWarnings("unchecked")
   private static <T> T copy(Event<?> event) {
     Event<T> typed = (Event<T>) event;
-    return typed.isMasked() ? typed.getUnmarshalledData() : Event.unmarshal(typed.type(), typed.data());
+    byte[] data = typed.isMasked() ? Event.marshal(typed.type(), typed.getUnmarshalledData()) : typed.data();
+    return Event.unmarshal(typed.type(), data);
   }
 
   /// The data of the event, unmarshalled once and shared by its readers, or null if it has none. A masked event of the

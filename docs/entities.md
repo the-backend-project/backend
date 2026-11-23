@@ -92,7 +92,9 @@ A transition has four kinds of triggers:
 * **Event triggers** trigger an event on another entity, in the same transaction.
 * **Delayed triggers** (`.after(delay)`) trigger an event on the entity after a delay, unless it has received another
   event first. They are stored in the database and fired by a worker of every state machine instance. Timeouts and
-  retries are built from them.
+  retries are built from them. An entity has at most one pending delayed trigger, which the next event stored on it
+  replaces, so a transition can't have two, which the state machine checks when it is created, and a transaction which
+  would leave two on an entity with the same event number fails.
 * **Conditional triggers** trigger an event when the last event of every referenced entity is one of the given types,
   e.g. when all the requests of a batch are completed. They are also fired by a worker.
 * **Actions** are side effects outside the database, such as sending an HTTP request. They are run after the

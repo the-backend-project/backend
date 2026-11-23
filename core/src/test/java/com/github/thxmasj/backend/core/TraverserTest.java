@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -106,6 +107,14 @@ public class TraverserTest {
         States.Accepted, List.of(onEvent(Retried).toSelf().assembleInput().when(_ -> true).then(onEvent(Viewed).to(States.Rejected).output()).otherwise(reject(States.Rejected)))
     )));
     assertTrue(e.getMessage().startsWith("Event type Viewed is not stored, but its transition from Accepted goes to Rejected"), e.getMessage());
+  }
+
+  /// An entity has at most one pending delayed trigger, so a transition can't trigger two
+  @Test
+  public void aTransitionWithTwoDelayedTriggersIsRejected() {
+    var twice = onEvent(Retried).toSelf().trigger(Accepted).after(_ -> Duration.ofMinutes(1)).trigger(Rejected).after(_ -> Duration.ofMinutes(2)).output();
+    var e = assertThrows(IllegalArgumentException.class, () -> new Traverser(Map.of(Begin, List.of(acceptance), States.Accepted, List.of(twice))));
+    assertTrue(e.getMessage().startsWith("The transition on Retried triggers 2 delayed events"), e.getMessage());
   }
 
   /// Every entity is created from `Begin`, so a model without transitions from it, or with a state it doesn't lead to,

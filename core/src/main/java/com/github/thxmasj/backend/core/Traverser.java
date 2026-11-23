@@ -47,6 +47,7 @@ class Traverser {
         requireNotStoredToSelf(from, fromState);
       for (var transition : fromState) {
         requireStoredEventOfConditionalTrigger(transition);
+        requireAtMostOneDelayedTrigger(transition, 0);
         if (mayBeOfAnEntityOfTheSessionOnly(reachedBySessionOnly, from, transition))
           requireNoLaterTrigger(transition);
       }
@@ -77,6 +78,21 @@ class Traverser {
     }
     for (var filter : transition.filters())
       requireStoredEventOfConditionalTrigger(filter.alternative().model());
+  }
+
+  /// An entity has at most one pending delayed trigger, which the next event stored on it replaces, so a transition,
+  /// with the one it chooses, can't trigger two delayed events, as the second would replace the first
+  private void requireAtMostOneDelayedTrigger(TransitionModel<?, ?> transition, int inherited) {
+    int delayed = inherited + transition.delayedEventTypes().size();
+    if (delayed > 1)
+      throw new IllegalArgumentException(String.format(
+          "The transition on %s triggers %d delayed events, but an entity has at most one pending delayed trigger, so " +
+              "the second would replace the first",
+          transition.eventType().name(),
+          delayed
+      ));
+    for (var filter : transition.filters())
+      requireAtMostOneDelayedTrigger(filter.alternative().model(), delayed);
   }
 
   /// An entity of the session only is not found after its session, so its transitions, and those they may choose, can't
