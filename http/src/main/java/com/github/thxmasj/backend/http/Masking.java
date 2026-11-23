@@ -14,56 +14,72 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /// What of the requests and responses of an inbox request, or of an at-most-once outbox request, is masked in the event
-/// log: the values of headers, of
-/// query parameters and of the fields of a form body, or the whole body of a response. The transitions see the whole
-/// request and response, while the event log has [#MASK] in place of what is masked, e.g. of a session cookie, an
-/// authorization code or a token.
+/// log. Requests and responses are masked apart: of a request, the values of headers, query parameters and the fields of
+/// a form body, and of a response, the values of headers and the whole body. The transitions see the whole request and
+/// response, while the event log has [#MASK] in place of what is masked, e.g. of a session cookie, an authorization
+/// code or a token.
 ///
 /// ```java
-/// .masking(Masking.queryParameters("code").andFormFields("client_secret").andResponseBody())
+/// .masking(Masking.queryParameters("code").andFormFields("client_secret").andResponseHeaders("Location").andResponseBody())
 /// ```
 ///
 /// Every inbox request and at-most-once outbox request masks [#CREDENTIALS], the headers which carry credentials, and
 /// what its `masking` adds.
 ///
-/// @param headers         the names of the headers whose values are masked, in requests and responses, compared
-///                        without case
+/// @param requestHeaders  the names of the headers of a request whose values are masked, compared without case
 /// @param queryParameters the names of the query parameters of a request whose values are masked
-/// @param formFields      the names of the fields of an `application/x-www-form-urlencoded` body whose values are
-///                        masked, in requests and responses. The body of a request which isn't declared a form is
-///                        masked as a whole, as the client may have sent the fields all the same, while that of a
-///                        response is masked only if it is a form, e.g. not a JSON or HTML response.
+/// @param formFields      the names of the fields of an `application/x-www-form-urlencoded` body of a request whose
+///                        values are masked. A body which isn't declared a form is masked as a whole, as the client may
+///                        have sent the fields all the same.
+/// @param responseHeaders the names of the headers of a response whose values are masked, compared without case
 /// @param wholeResponseBody whether the body of a response is masked as a whole, e.g. one with a token
-public record Masking(Set<String> headers, Set<String> queryParameters, Set<String> formFields, boolean wholeResponseBody) {
+public record Masking(
+    Set<String> requestHeaders,
+    Set<String> queryParameters,
+    Set<String> formFields,
+    Set<String> responseHeaders,
+    boolean wholeResponseBody
+) {
 
   /// The value of what is masked in the event log
   public static final String MASK = "***";
 
   /// Masks nothing
-  public static final Masking NONE = new Masking(Set.of(), Set.of(), Set.of(), false);
+  public static final Masking NONE = new Masking(Set.of(), Set.of(), Set.of(), Set.of(), false);
 
-  /// The headers which carry credentials, masked in the event log of every inbox request
-  public static final Masking CREDENTIALS = headers("Authorization", "Proxy-Authorization", "Cookie", "Set-Cookie");
+  /// The headers which carry credentials, masked in the event log of every inbox request and at-most-once outbox
+  /// request: `Authorization`, `Proxy-Authorization` and `Cookie` of requests, and `Set-Cookie` of responses
+  public static final Masking CREDENTIALS = requestHeaders("Authorization", "Proxy-Authorization", "Cookie").andResponseHeaders("Set-Cookie");
 
   public Masking {
-    headers = headers.stream().map(h -> h.toLowerCase(Locale.ROOT)).collect(Collectors.toUnmodifiableSet());
+    requestHeaders = lowerCase(requestHeaders);
     queryParameters = Set.copyOf(queryParameters);
     formFields = Set.copyOf(formFields);
+    responseHeaders = lowerCase(responseHeaders);
   }
 
-  /// Masks the values of the headers
-  public static Masking headers(String... names) {
-    return NONE.andHeaders(names);
+  private static Set<String> lowerCase(Set<String> names) {
+    return names.stream().map(h -> h.toLowerCase(Locale.ROOT)).collect(Collectors.toUnmodifiableSet());
   }
 
-  /// Masks the values of the query parameters
+  /// Masks the values of the headers of a request
+  public static Masking requestHeaders(String... names) {
+    return NONE.andRequestHeaders(names);
+  }
+
+  /// Masks the values of the query parameters of a request
   public static Masking queryParameters(String... names) {
     return NONE.andQueryParameters(names);
   }
 
-  /// Masks the values of the fields of a form body
+  /// Masks the values of the fields of a form body of a request
   public static Masking formFields(String... names) {
     return NONE.andFormFields(names);
+  }
+
+  /// Masks the values of the headers of a response
+  public static Masking responseHeaders(String... names) {
+    return NONE.andResponseHeaders(names);
   }
 
   /// Masks the body of a response
@@ -71,32 +87,38 @@ public record Masking(Set<String> headers, Set<String> queryParameters, Set<Stri
     return NONE.andResponseBody();
   }
 
-  /// This masking and the values of the headers
-  public Masking andHeaders(String... names) {
-    return new Masking(union(headers, names), queryParameters, formFields, wholeResponseBody);
+  /// This masking and the values of the headers of a request
+  public Masking andRequestHeaders(String... names) {
+    return new Masking(union(requestHeaders, names), queryParameters, formFields, responseHeaders, wholeResponseBody);
   }
 
-  /// This masking and the values of the query parameters
+  /// This masking and the values of the query parameters of a request
   public Masking andQueryParameters(String... names) {
-    return new Masking(headers, union(queryParameters, names), formFields, wholeResponseBody);
+    return new Masking(requestHeaders, union(queryParameters, names), formFields, responseHeaders, wholeResponseBody);
   }
 
-  /// This masking and the values of the fields of a form body
+  /// This masking and the values of the fields of a form body of a request
   public Masking andFormFields(String... names) {
-    return new Masking(headers, queryParameters, union(formFields, names), wholeResponseBody);
+    return new Masking(requestHeaders, queryParameters, union(formFields, names), responseHeaders, wholeResponseBody);
+  }
+
+  /// This masking and the values of the headers of a response
+  public Masking andResponseHeaders(String... names) {
+    return new Masking(requestHeaders, queryParameters, formFields, union(responseHeaders, names), wholeResponseBody);
   }
 
   /// This masking and the body of a response
   public Masking andResponseBody() {
-    return new Masking(headers, queryParameters, formFields, true);
+    return new Masking(requestHeaders, queryParameters, formFields, responseHeaders, true);
   }
 
   /// What this masking or the other masks
   public Masking and(Masking other) {
     return new Masking(
-        union(headers, other.headers.toArray(String[]::new)),
+        union(requestHeaders, other.requestHeaders.toArray(String[]::new)),
         union(queryParameters, other.queryParameters.toArray(String[]::new)),
         union(formFields, other.formFields.toArray(String[]::new)),
+        union(responseHeaders, other.responseHeaders.toArray(String[]::new)),
         wholeResponseBody || other.wholeResponseBody
     );
   }
@@ -111,72 +133,62 @@ public record Masking(Set<String> headers, Set<String> queryParameters, Set<Stri
   public HttpRequest<byte[]> mask(HttpRequest<byte[]> request) {
     if (request == null || !appliesTo(request))
       return request;
-    return new HttpRequest<>(request.method(), maskQuery(request.uri()), maskHeaders(request.headers()), maskFormOrWhole(request));
+    return new HttpRequest<>(request.method(), maskQuery(request.uri()), maskHeaders(request.headers(), requestHeaders), maskForm(request));
   }
 
   /// The response as it is stored, with what is masked replaced by [#MASK]
   public HttpResponse<byte[]> mask(HttpResponse<byte[]> response) {
     if (response == null || !appliesTo(response))
       return response;
-    byte[] body = wholeResponseBody && response.body() != null ? MASK.getBytes(UTF_8)
-        : isForm(response) ? maskForm(response.body())
-        : response.body();
-    return new HttpResponse<>(response.statusCode(), response.reasonPhrase(), maskHeaders(response.headers()), body);
+    byte[] body = wholeResponseBody && response.body() != null ? MASK.getBytes(UTF_8) : response.body();
+    return new HttpResponse<>(response.statusCode(), response.reasonPhrase(), maskHeaders(response.headers(), responseHeaders), body);
   }
 
   /// Whether masking the request may change it, which is told without its body: it has a header this masking masks, a
-  /// query with parameters to mask, or a form body with fields to mask
+  /// query with parameters to mask, or a body with form fields to mask
   public boolean appliesTo(HttpRequest<?> request) {
-    return hasMaskedHeader(request.headers())
+    return hasMaskedHeader(request.headers(), requestHeaders)
         || (!queryParameters.isEmpty() && request.uri().getRawQuery() != null)
         || (!formFields.isEmpty() && request.body() != null);
   }
 
-  /// Whether masking the response may change it, which is told without its body: it has a header this masking masks, a
-  /// body which is masked as a whole, or a form body with fields to mask
+  /// Whether masking the response may change it, which is told without its body: it has a header this masking masks, or
+  /// a body which is masked
   public boolean appliesTo(HttpResponse<?> response) {
-    return hasMaskedHeader(response.headers())
-        || (wholeResponseBody && response.body() != null)
-        || (!formFields.isEmpty() && response.body() != null && isForm(response));
+    return hasMaskedHeader(response.headers(), responseHeaders) || (wholeResponseBody && response.body() != null);
   }
 
-  /// Whether this masking masks more of requests than the other one does: other headers, or query parameters or form
-  /// fields, which a request may differ in from another one stored, unseen
+  /// Whether this masking masks more of requests than the other one does: other headers, query parameters or form
+  /// fields of requests, which a request may differ in from another one stored, unseen. What it masks of responses
+  /// doesn't count.
   public boolean masksMoreOfRequestsThan(Masking other) {
-    return !other.headers.containsAll(headers)
+    return !other.requestHeaders.containsAll(requestHeaders)
         || !other.queryParameters.containsAll(queryParameters)
         || !other.formFields.containsAll(formFields);
   }
 
-  private boolean hasMaskedHeader(Map<String, String> original) {
-    return !headers.isEmpty() && original.keySet().stream().anyMatch(this::isMaskedHeader);
-  }
-
-  /// Whether the response, as stored, has something masked: a header or form field with the value [#MASK] which this
-  /// masking masks, or a body which is [#MASK] if it masks the body of a response. A response stored before it was
-  /// masked has the values as they were.
+  /// Whether the response, as stored, has something masked: a header with the value [#MASK] which this masking masks,
+  /// or a body which is [#MASK] if it masks the body of a response. A response stored before it was masked has the
+  /// values as they were.
   public boolean hasMasked(HttpResponse<byte[]> stored) {
     if (stored == null)
       return false;
     if (wholeResponseBody && stored.body() != null && MASK.equals(new String(stored.body(), UTF_8)))
       return true;
-    if (stored.headers().entrySet().stream().anyMatch(header -> isMaskedHeader(header.getKey()) && MASK.equals(header.getValue())))
-      return true;
-    if (formFields.isEmpty() || stored.body() == null || !isForm(stored))
-      return false;
-    return Stream.of(new String(stored.body(), UTF_8).split("&", -1)).anyMatch(this::isMaskedField);
+    return stored.headers().entrySet().stream()
+        .anyMatch(header -> responseHeaders.contains(header.getKey().toLowerCase(Locale.ROOT)) && MASK.equals(header.getValue()));
   }
 
-  private Map<String, String> maskHeaders(Map<String, String> original) {
-    if (!hasMaskedHeader(original))
+  private static boolean hasMaskedHeader(Map<String, String> original, Set<String> names) {
+    return !names.isEmpty() && original.keySet().stream().anyMatch(name -> names.contains(name.toLowerCase(Locale.ROOT)));
+  }
+
+  private static Map<String, String> maskHeaders(Map<String, String> original, Set<String> names) {
+    if (!hasMaskedHeader(original, names))
       return original;
     var masked = new LinkedHashMap<String, String>();
-    original.forEach((name, value) -> masked.put(name, isMaskedHeader(name) ? MASK : value));
+    original.forEach((name, value) -> masked.put(name, names.contains(name.toLowerCase(Locale.ROOT)) ? MASK : value));
     return masked;
-  }
-
-  private boolean isMaskedHeader(String name) {
-    return headers.contains(name.toLowerCase(Locale.ROOT));
   }
 
   /// The URI with the query masked. The query starts at the first `?`, which a path can't have, and ends at a
@@ -194,17 +206,12 @@ public record Masking(Set<String> headers, Set<String> queryParameters, Set<Stri
 
   /// The body of the request with the form fields masked. A body which isn't declared a form is masked as a whole, as
   /// it may have the fields all the same, e.g. sent with another content type by mistake.
-  private byte[] maskFormOrWhole(HttpRequest<byte[]> request) {
-    if (formFields.isEmpty() || request.body() == null || isForm(request))
-      return maskForm(request.body());
-    return MASK.getBytes(UTF_8);
-  }
-
-  /// The form body with the form fields masked. Only called for a request or response declared a form, as one which
-  /// isn't has no form fields to mask.
-  private byte[] maskForm(byte[] body) {
+  private byte[] maskForm(HttpRequest<byte[]> request) {
+    byte[] body = request.body();
     if (formFields.isEmpty() || body == null)
       return body;
+    if (!isForm(request))
+      return MASK.getBytes(UTF_8);
     return maskParameters(new String(body, UTF_8), formFields).getBytes(UTF_8);
   }
 
@@ -212,21 +219,6 @@ public record Masking(Set<String> headers, Set<String> queryParameters, Set<Stri
   public static boolean isForm(HttpMessage<?> message) {
     String contentType = message.headerValue("Content-Type");
     return contentType != null && contentType.toLowerCase(Locale.ROOT).startsWith("application/x-www-form-urlencoded");
-  }
-
-  /// Whether the parameter, as written, is a field this masking masks with the value [#MASK], or one masked as a whole
-  /// as its name can't be decoded
-  private boolean isMaskedField(String pair) {
-    if (pair.equals(MASK))
-      return true;
-    int i = pair.indexOf('=');
-    if (i < 0 || !pair.substring(i + 1).equals(MASK))
-      return false;
-    try {
-      return formFields.contains(URLDecoder.decode(pair.substring(0, i), UTF_8));
-    } catch (IllegalArgumentException e) {
-      return false;
-    }
   }
 
   /// The parameters, as written, with the values of those with the names masked. A parameter whose name can't be

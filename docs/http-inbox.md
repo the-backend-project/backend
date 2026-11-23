@@ -346,10 +346,11 @@ same way (see [events and entities not stored](entities.md#events-and-entities-n
 
 ### Masking
 
-Every inbox request masks the values of the headers which carry credentials, `Authorization`, `Proxy-Authorization`,
-`Cookie` and `Set-Cookie` (`Masking.CREDENTIALS`), in the requests and responses it stores. `masking` adds what else
-is masked: other headers, query parameters, the fields of an `application/x-www-form-urlencoded` body, or the whole
-body of a response:
+Every inbox request masks the values of the headers which carry credentials (`Masking.CREDENTIALS`): `Authorization`,
+`Proxy-Authorization` and `Cookie` of the requests it stores, and `Set-Cookie` of the responses. `masking` adds what
+else is masked, of requests and of responses apart: of a request, other headers (`requestHeaders`), query parameters,
+and the fields of an `application/x-www-form-urlencoded` body, and of a response, other headers (`responseHeaders`)
+or the whole body:
 
 ```java
 HttpInboxRequest<Callback> SignInCallback = HttpInboxRequest
@@ -364,9 +365,10 @@ What is masked is replaced by `***` in the event log, e.g. `GET /callback?state=
 transitions see the whole request: the content parser, the authorizer and the process read the code and the cookie,
 and the application's response is sent to the client as it gave it, with its `Set-Cookie`.
 
-Form fields are masked in the bodies of requests and responses declared `application/x-www-form-urlencoded`. The body
-of a request which isn't declared a form is masked as a whole, as the client may have sent the fields with another
-content type by mistake, while that of a response which isn't a form, e.g. a JSON body or a page, is stored as it is.
+Form fields are masked in the body of a request declared `application/x-www-form-urlencoded`. The body of a request
+which isn't declared a form is masked as a whole, as the client may have sent the fields with another content type by
+mistake. What is masked of responses doesn't count as masking more of the requests, so masking e.g. a `Location`
+header leaves a request free to be deduplicated.
 
 As the event log only has the masked request, a retried request with the same message id is compared with the first
 one after masking both: a retry may differ from the first request in its credentials, e.g. in a refreshed access token.

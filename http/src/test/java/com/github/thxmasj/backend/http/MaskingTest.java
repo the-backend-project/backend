@@ -44,16 +44,29 @@ public class MaskingTest {
     assertEquals("***", new String(masking.mask(json).body(), UTF_8));
   }
 
-  /// The form fields of the requests don't mask a response which isn't a form, e.g. a page or a JSON body
+  /// What is masked of requests doesn't mask responses: their form fields and headers, e.g. a JSON body with a field of
+  /// the same name, or a header of the same name
   @Test
-  public void formFieldsLeaveAResponseWhichIsntAFormAsItIs() {
-    var masking = Masking.CREDENTIALS.andFormFields("code");
-    var json = new HttpResponse<>(200, "OK", Map.of("Content-Type", "application/json", "Set-Cookie", "s=1"), "{\"code\":\"abc\"}".getBytes(UTF_8));
+  public void whatIsMaskedOfRequestsLeavesResponsesAsTheyAre() {
+    var masking = Masking.CREDENTIALS.andFormFields("code").andRequestHeaders("X-Api-Key");
+    var json = new HttpResponse<>(200, "OK", Map.of("Content-Type", "application/json", "Set-Cookie", "s=1", "X-Api-Key", "k"), "{\"code\":\"abc\"}".getBytes(UTF_8));
     var stored = masking.mask(json);
     assertEquals("{\"code\":\"abc\"}", new String(stored.body(), UTF_8));
     assertEquals("***", stored.headerValue("Set-Cookie"));
-    assertEquals(false, masking.appliesTo(new HttpResponse<>(200, "OK", Map.of("Content-Type", "text/html"), "<p>".getBytes(UTF_8))));
-    assertEquals("code=***", new String(masking.mask(new HttpResponse<>(200, "OK", form, "code=abc".getBytes(UTF_8))).body(), UTF_8));
+    assertEquals("k", stored.headerValue("X-Api-Key"));
+    assertEquals(false, masking.appliesTo(new HttpResponse<>(200, "OK", form, "code=abc".getBytes(UTF_8))));
+  }
+
+  /// What is masked of responses doesn't mask requests, nor counts as masking more of them, so it doesn't stand in the
+  /// way of deduplication
+  @Test
+  public void whatIsMaskedOfResponsesLeavesRequestsAsTheyAre() {
+    var masking = Masking.CREDENTIALS.andResponseHeaders("Location");
+    var request = new HttpRequest<byte[]>(Method.GET, URI.create("/cb"), Map.of("Location", "/x"), null);
+    assertEquals(request, masking.mask(request));
+    assertEquals("***", masking.mask(new HttpResponse<byte[]>(302, "Found", Map.of("Location", "/x"), null)).headerValue("Location"));
+    assertEquals(false, masking.masksMoreOfRequestsThan(Masking.CREDENTIALS));
+    assertEquals(true, Masking.CREDENTIALS.andRequestHeaders("X-Api-Key").masksMoreOfRequestsThan(Masking.CREDENTIALS));
   }
 
   @Test
@@ -71,7 +84,7 @@ public class MaskingTest {
 
   @Test
   public void maskingsAreCombined() {
-    var masking = Masking.CREDENTIALS.and(Masking.queryParameters("code").andHeaders("X-Api-Key"));
+    var masking = Masking.CREDENTIALS.and(Masking.queryParameters("code").andRequestHeaders("X-Api-Key"));
     var request = new HttpRequest<byte[]>(Method.GET, URI.create("/cb?code=1"), Map.of("X-Api-Key", "k", "Cookie", "c"), null);
     var masked = masking.mask(request);
     assertEquals(Map.of("X-Api-Key", "***", "Cookie", "***"), masked.headers());
@@ -87,14 +100,11 @@ public class MaskingTest {
     assertEquals(false, Masking.responseBody().hasMasked(new HttpResponse<byte[]>(204, "No Content", Map.of(), null)));
   }
 
-  /// A masked field is found by its value, also when its name is written encoded
+  /// A form field is masked also when its name is written encoded
   @Test
-  public void aStoredFormFieldWithAnEncodedNameIsFoundMasked() {
-    var masking = Masking.formFields("client_secret");
-    var response = new HttpResponse<>(200, "OK", form, "client%5Fsecret=s3cret&x=1".getBytes(UTF_8));
-    var stored = masking.mask(response);
-    assertEquals("client%5Fsecret=***&x=1", new String(stored.body(), UTF_8));
-    assertEquals(true, masking.hasMasked(stored));
+  public void aFormFieldWithAnEncodedNameIsMasked() {
+    var request = new HttpRequest<>(Method.POST, URI.create("/token"), form, "client%5Fsecret=s3cret&x=1".getBytes(UTF_8));
+    assertEquals("client%5Fsecret=***&x=1", new String(Masking.formFields("client_secret").mask(request).body(), UTF_8));
   }
 
   /// A response stored before it was masked has its values as they were, which a retry can be given
@@ -114,11 +124,4 @@ public class MaskingTest {
     assertEquals(false, Masking.responseBody().appliesTo(new HttpResponse<byte[]>(204, "No Content", Map.of(), null)));
   }
 
-  /// A form field is masked if it is one of the fields masked, with the value of the mask, not any field with that value
-  @Test
-  public void onlyAMaskedFieldWithTheValueOfTheMaskIsMasked() {
-    var masking = Masking.formFields("token");
-    assertEquals(false, masking.hasMasked(new HttpResponse<>(200, "OK", form, "status=ok&note=***".getBytes(UTF_8))));
-    assertEquals(true, masking.hasMasked(new HttpResponse<>(200, "OK", form, "status=ok&token=***".getBytes(UTF_8))));
-  }
 }

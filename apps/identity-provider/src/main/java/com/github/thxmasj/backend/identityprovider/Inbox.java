@@ -154,7 +154,7 @@ public interface Inbox {
         Validated<Registration> registration = registration(m, m.headerValue(RegisteredByHeader), m.headerValue(SecretHashHeader));
         return registration.isInvalid() ? invalid(registration.invalidReason()) : valid(new Clients.RegistrationRequest(registration.validValue(), null));
       })
-      .masking(Masking.headers(InternalHeader))
+      .masking(Masking.requestHeaders(InternalHeader))
       .process(Clients.RegistrationRequested, Clients.ClientRegistration, r -> r.body(), newEntity())
       .response(ReplyCreated, Inbox::reply)
       .build("InternalRegistrationHttpRequest", UUID.fromString("2e6c0a4f-8b3d-4f91-a7e5-d9c1b5f3a068"));
@@ -190,7 +190,7 @@ public interface Inbox {
     return HttpInboxRequest
         .matching(m -> m.method() == Method.GET && m.uri().getPath().equals("/callback"))
         .contentParser(Endpoints::callback)
-        .masking(Masking.queryParameters("code").andHeaders("Location"))
+        .masking(Masking.queryParameters("code").andResponseHeaders("Location"))
         .process(Authorizations.CallbackReceived, upstreamSignIn, r -> r.body(), newEntity())
         .response(ReplyCreated, endpoints::callbackResponse)
         .build("CallbackHttpRequest", UUID.fromString("0c0f5f0e-4a5d-4b8e-9d6b-2a7c3e1f8d42"));

@@ -117,6 +117,23 @@ public class TraverserTest {
     assertTrue(e.getMessage().startsWith("The transition on Retried triggers 2 delayed events"), e.getMessage());
   }
 
+  static EventType<Void, Void> QuietlyRetried = BasicEventType.notStored("Quietly retried", UUID.fromString("6f8a0c2e-4b1d-4e7a-b9cb-dfe1f3a5c7e9"));
+
+  /// A transition with a delayed trigger which triggers an event not stored of the model with a delayed trigger too is
+  /// refused, as on the same entity the two would have the same number
+  @Test
+  public void aDelayedTriggerWithAnotherOneNumberedAlikeIsRejected() {
+    var delayedThenQuiet = onEvent(Retried).toSelf()
+        .trigger(Accepted).after(_ -> Duration.ofMinutes(1))
+        .trigger(QuietlyRetried).on(EntityModel.of("Other", UUID.randomUUID(), Map::of)).identifiedBy(_ -> null)
+        .output();
+    var quiet = onEvent(QuietlyRetried).toSelf().trigger(Rejected).after(_ -> Duration.ofMinutes(2)).output();
+    var e = assertThrows(IllegalArgumentException.class, () -> new Traverser(Map.of(Begin, List.of(acceptance), States.Accepted, List.of(delayedThenQuiet, quiet))));
+    assertTrue(e.getMessage().startsWith("The transition on Retried has a delayed trigger, and triggers Quietly retried"), e.getMessage());
+    var quietWithoutDelay = onEvent(QuietlyRetried).toSelf().output();
+    assertDoesNotThrow(() -> new Traverser(Map.of(Begin, List.of(acceptance), States.Accepted, List.of(delayedThenQuiet, quietWithoutDelay))));
+  }
+
   /// Every entity is created from `Begin`, so a model without transitions from it, or with a state it doesn't lead to,
   /// is refused
   @Test

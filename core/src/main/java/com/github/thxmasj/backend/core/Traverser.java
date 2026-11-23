@@ -42,12 +42,14 @@ class Traverser {
     requireReachableFromBegin();
     var reachedBySessionOnly = stored ? statesOfEntitiesOfTheSessionOnly() : transitions.keySet();
     var reached = stored ? statesOfStoredEntities() : Set.<State>of();
+    var delayingNotStored = notStoredEventTypesWithADelayedTrigger();
     transitions.forEach((from, fromState) -> {
       if (reached.contains(from))
         requireNotStoredToSelf(from, fromState);
       for (var transition : fromState) {
         requireStoredEventOfConditionalTrigger(transition);
         requireAtMostOneDelayedTrigger(transition, 0);
+        requireNoDelayedTriggerNumberedAlike(transition, 0, List.of(), delayingNotStored);
         if (mayBeOfAnEntityOfTheSessionOnly(reachedBySessionOnly, from, transition)) {
           requireNoLaterTrigger(transition);
           requireNoIdOrIndex(transition);
@@ -95,6 +97,53 @@ class Traverser {
       ));
     for (var filter : transition.filters())
       requireAtMostOneDelayedTrigger(filter.alternative().model(), delayed);
+  }
+
+  /// The event types not stored on which a transition of the model, or one it chooses, has a delayed trigger
+  private Set<EventType<?, ?>> notStoredEventTypesWithADelayedTrigger() {
+    var types = new HashSet<EventType<?, ?>>();
+    for (var fromState : transitions.values())
+      for (var transition : fromState)
+        if (!transition.eventType().stored() && hasDelayedTrigger(transition))
+          types.add(transition.eventType());
+    return types;
+  }
+
+  private static boolean hasDelayedTrigger(TransitionModel<?, ?> transition) {
+    return !transition.delayedEventTypes().isEmpty()
+        || transition.filters().stream().anyMatch(filter -> hasDelayedTrigger(filter.alternative().model()));
+  }
+
+  /// A delayed trigger is numbered after the event of its transition if that is stored, and with its number if it
+  /// isn't. So a transition with a delayed trigger which triggers, on its own entity, an event not stored whose
+  /// transition has a delayed trigger too, would have two delayed triggers on the entity with the same number, of which
+  /// only one can be pending. The entity a trigger is on is only known when it is taken, so an event not stored of this
+  /// model with a delayed trigger is taken to be on the same entity, which is refused, as the transaction would fail
+  /// when stored.
+  private void requireNoDelayedTriggerNumberedAlike(
+      TransitionModel<?, ?> transition,
+      int inheritedDelayed,
+      List<EventTrigger<?, ?, ?>> inheritedTriggers,
+      Set<EventType<?, ?>> delayingNotStored
+  ) {
+    int delayed = inheritedDelayed + transition.delayedEventTypes().size();
+    var triggers = new ArrayList<EventTrigger<?, ?, ?>>(inheritedTriggers);
+    triggers.addAll(transition.triggers());
+    if (transition.filters().isEmpty()) {
+      if (delayed == 0)
+        return;
+      for (var trigger : triggers)
+        if (trigger.condition() == null && delayingNotStored.contains(trigger.eventSpec().eventType()))
+          throw new IllegalArgumentException(String.format(
+              "The transition on %s has a delayed trigger, and triggers %s, which isn't stored and has a delayed trigger " +
+                  "too. On the same entity, the two would have the same number, but an entity has at most one pending " +
+                  "delayed trigger",
+              transition.eventType().name(),
+              trigger.eventSpec().eventType().name()
+          ));
+    }
+    for (var filter : transition.filters())
+      requireNoDelayedTriggerNumberedAlike(filter.alternative().model(), delayed, triggers, delayingNotStored);
   }
 
   /// An entity of the session only is not found after its session, so its transitions, and those they may choose, can't

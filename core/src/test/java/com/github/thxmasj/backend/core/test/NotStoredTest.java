@@ -59,9 +59,6 @@ public class NotStoredTest {
   /// Sets a timeout on its entity, which a watcher of the entity cancels at once, in the same transaction
   static EventType<Void, Void> TimeoutSet = BasicEventType.of("Timeout set", UUID.fromString("9d1f3b5c-7e8a-4c0e-b2d4-f6a8c0e2a419"));
   static EventType<Void, Void> AccountTimedOut = BasicEventType.of("Account timed out", UUID.fromString("b1f3d5e7-9a0c-4e2a-84f6-a8c0e2a4c63b"));
-  /// Sets a timeout, and has a reminder scheduled quietly on the same account, both delayed triggers numbered alike
-  static EventType<Void, Void> TimeoutAndReminderSet = BasicEventType.of("Timeout and reminder set", UUID.fromString("e5a7c9eb-1d3f-4b5a-97c9-ebfd1f3b5d70"));
-  static EventType<Void, Void> ReminderScheduledQuietly = BasicEventType.notStored("Reminder scheduled quietly", UUID.fromString("f7c9ebfd-3f5b-4d7c-b9eb-fd1f3b5d7f92"));
   static EventType<UUID, UUID> WatchStarted = BasicEventType.of("Watch started", UUID.fromString("d3b5f7a9-1c2e-4a4c-a6a8-c0e2a4c6e85d"), DataType.uuid());
   static EntityModel Watcher = EntityModel.of("Watcher", UUID.fromString("f5d7b9c1-3e4a-4c6e-88ca-e2a4c6e8a07f"), () -> Map.<State, List<TransitionModel<?, ?>>>of(
       Begin, List.of(
@@ -150,12 +147,6 @@ public class NotStoredTest {
                 .trigger(WatchStarted).with(account -> account).on(Watcher).identifiedBy(newEntityId())
                 .output(),
             onEvent(AccountTimedOut).toSelf().output(),
-            onEvent(TimeoutAndReminderSet).toSelf()
-                .assemble(c -> c.log().entityId())
-                .trigger(AccountTimedOut).after(_ -> Duration.ofMillis(100))
-                .trigger(ReminderScheduledQuietly).on(Account).identifiedBy(account -> entityId(account))
-                .output(),
-            onEvent(ReminderScheduledQuietly).toSelf().trigger(AccountTouched).after(_ -> Duration.ofMillis(100)).output(),
             onEvent(TouchScheduled).toSelf()
                 .assembleInput()
                 .trigger(AccountTouched).after(_ -> Duration.ofMillis(100))
@@ -335,16 +326,5 @@ public class NotStoredTest {
       Thread.sleep(200);
     assertEquals(0, delayedTriggerCount(account));
     assertEquals(List.of("1:Account opened", "2:Timeout set", "3:Account touched"), events(log(Account, List.of(AccountOpened, TimeoutSet, AccountTouched, AccountTimedOut), account)));
-  }
-
-  /// Two delayed triggers on an entity with the same number in one transaction fail it, rather than one quietly
-  /// replacing the other, as an entity has at most one pending delayed trigger
-  @Test
-  public void twoDelayedTriggersOnAnEntityWithTheSameNumberFailTheTransaction() {
-    UUID account = machine.onEvent(trigger(AccountOpened, Account), "b").blockFirst().entityId();
-    var e = assertThrows(IllegalStateException.class, () -> machine.onEvent(trigger(TimeoutAndReminderSet, Account, account), null).blockLast(Duration.ofSeconds(10)));
-    assertTrue(e.getMessage().contains("are both delayed triggers on Account/" + account), e.getMessage());
-    assertEquals(0, delayedTriggerCount(account));
-    assertEquals(List.of("1:Account opened"), events(log(Account, List.of(AccountOpened, TimeoutAndReminderSet), account)));
   }
 }
