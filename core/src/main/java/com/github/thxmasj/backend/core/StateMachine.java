@@ -271,12 +271,9 @@ public class StateMachine implements AutoCloseable {
       public Completed<T> completed() {return this;}
     }
 
-    /**
-     * @param severity    the severity declared on the transition which accepted the event
-     * @param triggerType optional type of the stored trigger that caused the event
-     * @param triggerId   id of the stored trigger that caused the event, present if and only if triggerType is
-     */
-    record Accepted<T>(Event<T> event, EntityModel entityModel, Severity severity, TriggerType triggerType, UUID triggerId) implements ProcessResult<T> {
+    /// @param severity the severity declared on the transition which accepted the event. The trigger which fired the
+    ///                 transaction, if any, is on its first step, see [InputStep#triggerType()].
+    record Accepted<T>(Event<T> event, EntityModel entityModel, Severity severity) implements ProcessResult<T> {
       public Accepted<T> accepted() {return this;}
     }
 
@@ -335,17 +332,11 @@ public class StateMachine implements AutoCloseable {
     }
 
     static <T> Accepted<T> accepted(Event<T> event, EntityModel entityModel) {
-      return new Accepted<>(event, entityModel, Severity.Info, null, null);
+      return new Accepted<>(event, entityModel, Severity.Info);
     }
 
-    static <T> Accepted<T> accepted(
-        Event<T> event,
-        EntityModel entityModel,
-        Severity severity,
-        TriggerType triggerType,
-        UUID triggerId
-    ) {
-      return new Accepted<>(event, entityModel, severity, triggerType, triggerId);
+    static <T> Accepted<T> accepted(Event<T> event, EntityModel entityModel, Severity severity) {
+      return new Accepted<>(event, entityModel, severity);
     }
 
     default boolean isAccepted() {
@@ -847,16 +838,11 @@ public class StateMachine implements AutoCloseable {
   /// of the step and then in the transactions of the session before it, each walked once. The transactions of a session
   /// are linked by the first step of each, which refers to the tail of the one before.
   private EventLog logFromSteps(TransitionStep<?> context, EntityModel entityModel) {
-    for (var transaction = context; transaction != null; ) {
-      InputStep<?> initial = null;
+    for (var transaction = context; transaction != null; transaction = previousTransaction(transaction)) {
       for (var c = transaction; c != null; c = c.previous()) {
-        if (c instanceof InputStep<?> i) {
-          if (EntityModelGroup.targets(entityModel, i.log().entityModel()))
-            return i.log();
-          initial = i;
-        }
+        if (c instanceof InputStep<?> i && EntityModelGroup.targets(entityModel, i.log().entityModel()))
+          return i.log();
       }
-      transaction = initial != null ? initial.stage1() : null;
     }
     throw new NoSuchElementException(entityModel.name() + " not found in transition step");
   }
@@ -884,10 +870,9 @@ public class StateMachine implements AutoCloseable {
 
   /// Walks the transaction of the step once, from its tail, for the last event accepted on the entity
   private static InTransaction inTransaction(UUID entityId, EntityModel entityModel, TransitionStep<?> transitionStep) {
-    InputStep<?> initial = null;
     for (var c = transitionStep; c != null; c = c.previous()) {
       if (c instanceof OutputStep<?>(TransitionStep<?> previous, ProcessResult<?> stepOutput)
-          && stepOutput instanceof Accepted<?>(Event<?> event, EntityModel model, _, _, _)
+          && stepOutput instanceof Accepted<?>(Event<?> event, EntityModel model, _)
           && event.entityId().equals(entityId)
           && model.equals(entityModel)
           && !(previous instanceof ChoiceStep)) {
@@ -896,10 +881,8 @@ public class StateMachine implements AutoCloseable {
         if (event.type().stored() || log.isSessionOnlyWith(event))
           return new InTransaction(log.withNewEvent(event), null);
       }
-      if (c instanceof InputStep<?> i)
-        initial = i;
     }
-    return new InTransaction(null, initial != null ? initial.stage1() : null);
+    return new InTransaction(null, previousTransaction(transitionStep));
   }
 
   /// Whether entities of the session only are of the model, which a group is not
@@ -919,7 +902,7 @@ public class StateMachine implements AutoCloseable {
     var keys = new HashSet<EntityKey>();
     for (var c = tail; c != null; c = c.previous()) {
       if (c instanceof OutputStep<?>(TransitionStep<?> previous, ProcessResult<?> stepOutput)
-          && stepOutput instanceof Accepted<?>(Event<?> event, EntityModel model, _, _, _)
+          && stepOutput instanceof Accepted<?>(Event<?> event, EntityModel model, _)
           && !(previous instanceof ChoiceStep)
           && c.inputStep().log().isSessionOnlyWith(event))
         keys.add(new EntityKey(model.id(), event.entityId()));
@@ -969,6 +952,13 @@ public class StateMachine implements AutoCloseable {
             .thenComparingInt(change -> modelRank.get(change.entityModel().id()))
             .thenComparingInt(change -> -position.get(change)))
         .toList();
+  }
+
+  /// The tail of the transaction before that of the step in the session, which the first step of a transaction refers
+  /// to, or null if it is the first of the session
+  private static TransitionStep<?> previousTransaction(TransitionStep<?> step) {
+    InputStep<?> initial = initial(step);
+    return initial != null ? initial.stage1() : null;
   }
 
   /// The first step of the transaction of the step, of the event it calculates

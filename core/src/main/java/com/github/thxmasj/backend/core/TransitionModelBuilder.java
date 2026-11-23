@@ -135,9 +135,7 @@ public class TransitionModelBuilder<I, T, O> {
                     i.from()
                 ),
                 i.log().entityModel(),
-                Severity.Info,
-                i.triggerType(),
-                i.triggerId()
+                Severity.Info
             )
         ))))
     );
@@ -220,9 +218,7 @@ public class TransitionModelBuilder<I, T, O> {
                       i.stepOutput()
                   ),
                   i.log().entityModel(),
-                  Severity.Info,
-                  i.triggerType(),
-                  i.triggerId()
+                  Severity.Info
               )
           ))));
         })
@@ -861,9 +857,7 @@ public class TransitionModelBuilder<I, T, O> {
             ProcessResult.accepted(
                 event(b.inputStep(), f.apply(b.stepOutput())),
                 b.inputStep().log().entityModel(),
-                modelContext.severity(),
-                b.inputStep().triggerType(),
-                b.inputStep().triggerId()
+                modelContext.severity()
             )
         )))))
     );
@@ -916,9 +910,7 @@ public class TransitionModelBuilder<I, T, O> {
                     b.inputStep().timestamp()
                 ),
                 b.inputStep().log().entityModel(),
-                modelContext.severity(),
-                b.inputStep().triggerType(),
-                b.inputStep().triggerId()
+                modelContext.severity()
             )
         )))))
     );
