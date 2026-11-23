@@ -932,12 +932,12 @@ public class StateMachine implements AutoCloseable {
   /// entity too, which deletes the delayed triggers it follows, so this is only needed if no event is stored on it, e.g.
   /// as the transition chosen isn't. It comes first, as a delayed event the transaction triggers on the entity
   /// replaces the trigger.
-  private static List<Change> withFiredTrigger(List<Change> changes, TransitionStep<?> tail, Set<EntityKey> sessionOnly) {
+  private static List<Change> withFiredTrigger(List<Change> changes, TransitionStep<?> tail, Storing storing) {
     InputStep<?> initial = initial(tail);
     if (initial == null || initial.triggerType() == null)
       return changes;
     var entity = new EntityKey(initial.log().entityModel().id(), initial.log().entityId());
-    if (initial.triggerType() == TriggerType.DELAYED && hasStoredEvent(changes, entity, sessionOnly))
+    if (initial.triggerType() == TriggerType.DELAYED && hasStoredEvent(changes, entity, storing))
       return changes;
     var withDeletion = new ArrayList<Change>(changes.size() + 1);
     withDeletion.add(Change.fromFiredTrigger(
@@ -949,8 +949,8 @@ public class StateMachine implements AutoCloseable {
     return withDeletion;
   }
 
-  private static boolean hasStoredEvent(List<Change> changes, EntityKey entity, Set<EntityKey> sessionOnly) {
-    return changes.stream().anyMatch(change -> change.newEvent() != null && EntityKey.of(change).equals(entity) && isStored(change, sessionOnly));
+  private static boolean hasStoredEvent(List<Change> changes, EntityKey entity, Storing storing) {
+    return changes.stream().anyMatch(change -> change.newEvent() != null && EntityKey.of(change).equals(entity) && storing.isStored(change));
   }
 
   /// The changes of the events with an entity id, in the order the events are emitted to the one who triggered the
@@ -980,22 +980,42 @@ public class StateMachine implements AutoCloseable {
     return initial;
   }
 
-  /// Whether the change is stored. The deletion of the trigger which fired the transaction always is, as the trigger is
-  /// stored whatever its entity, which may be one of the session only, e.g. of a model not stored, and would otherwise
-  /// fire again.
-  private static boolean isStored(Change change, Set<EntityKey> sessionOnly) {
-    if (change.firedTrigger() != null)
-      return true;
-    if (sessionOnly.contains(EntityKey.of(change)))
-      return false;
-    return change.newEvent() == null || change.newEvent().type().stored();
+  /// Which changes of a transaction are stored, by the entities of the session only among those it accepted events on,
+  /// and the entity whose transition created each conditional trigger
+  private record Storing(Set<EntityKey> sessionOnly, Map<ConditionalTrigger<?>, EntityKey> conditionalTriggerOwners) {
+
+    static Storing of(TransitionStep<?> tail) {
+      var owners = new IdentityHashMap<ConditionalTrigger<?>, EntityKey>();
+      for (var c = tail; c != null; c = c.previous())
+        if (c instanceof ConditionalTriggerStep<?, ?> step)
+          owners.put(step.conditionalTrigger(), new EntityKey(step.inputStep().log().entityModel().id(), step.inputStep().log().entityId()));
+      return new Storing(sessionOnlyEntities(tail), owners);
+    }
+
+    /// The entity whose storing decides that of the change: that of its event or delayed event, or, for a conditional
+    /// trigger, the entity whose transition created it, whose event it refers to, rather than the one it fires on
+    EntityKey owner(Change change) {
+      return change.conditionalTrigger() != null ? conditionalTriggerOwners.get(change.conditionalTrigger()) : EntityKey.of(change);
+    }
+
+    /// Whether the change is stored. The deletion of the trigger which fired the transaction always is, as the trigger
+    /// is stored whatever its entity, which may be one of the session only, e.g. of a model not stored, and would
+    /// otherwise fire again.
+    boolean isStored(Change change) {
+      if (change.firedTrigger() != null)
+        return true;
+      if (sessionOnly.contains(owner(change)))
+        return false;
+      return change.newEvent() == null || change.newEvent().type().stored();
+    }
+
   }
 
   /// Fails for a change which is not stored but would have to be: a delayed or conditional trigger of an entity of the
   /// session only, which fires in a session of its own
-  private static void requireStorable(List<Change> changes, Set<EntityKey> sessionOnly) {
+  private static void requireStorable(List<Change> changes, Storing storing) {
     for (var change : changes) {
-      if (isStored(change, sessionOnly))
+      if (storing.isStored(change))
         continue;
       if (change.delayedEvent() != null || change.conditionalTrigger() != null)
         throw new IllegalStateException(String.format(
@@ -1003,7 +1023,7 @@ public class StateMachine implements AutoCloseable {
                 "stored, but it fires in a session of its own",
             change.delayedEvent() != null ? change.delayedEvent().type().name() : change.conditionalTrigger().type().name(),
             change.entityModel().name(),
-            change.entityId()
+            storing.owner(change).entityId()
         ));
     }
   }
@@ -1243,10 +1263,9 @@ public class StateMachine implements AutoCloseable {
   }
 
   /// The changes for the listener, in the order they were calculated, which is the reverse of the order they are
-  /// collected in. The accepted events of an entity are thereby in the order of their numbers.
-  /// The changes for the listener: the events and the delayed events and conditional triggers created, not the deletion
-  /// of the trigger which fired the transaction
-  private List<Listener.Change> toListenerFormat(List<Change> changes, Set<EntityKey> sessionOnly) {
+  /// collected in, so the accepted events of an entity are in the order of their numbers: the events and the delayed
+  /// events and conditional triggers created, not the deletion of the trigger which fired the transaction
+  private List<Listener.Change> toListenerFormat(List<Change> changes, Storing storing) {
     return changes.reversed().stream()
         .filter(change -> change.firedTrigger() == null)
         .map(change -> new Listener.Change(
@@ -1259,7 +1278,7 @@ public class StateMachine implements AutoCloseable {
                     change.newEvent().type().name(),
                     change.severity(),
                     change.newEvent().timestamp(),
-                    isStored(change, sessionOnly)
+                    storing.isStored(change)
                 ) : (change.delayedEvent() != null ? new Listener.Change.DelayedEvent(
                     change.delayedEvent().eventNumber(),
                     change.delayedEvent().type().name(),
@@ -1275,10 +1294,10 @@ public class StateMachine implements AutoCloseable {
       String correlationId,
       TransitionStep<?> transitionStep
   ) {
-    var sessionOnly = sessionOnlyEntities(transitionStep);
-    List<Change> changes = withFiredTrigger(changes(transitionStep), transitionStep, sessionOnly);
+    var storing = Storing.of(transitionStep);
+    List<Change> changes = withFiredTrigger(changes(transitionStep), transitionStep, storing);
     Debug.log("Changes to store:\n" + changes.stream().map(Object::toString).collect(joining("\n")));
-    return Mono.fromRunnable(() -> requireStorable(changes, sessionOnly))
+    return Mono.fromRunnable(() -> requireStorable(changes, storing))
         .thenReturn("")
         .delayUntil(_ -> delayer.apply(changes.stream()
             .filter(change -> change.newEvent() != null)
@@ -1289,16 +1308,19 @@ public class StateMachine implements AutoCloseable {
                     timestamp,
                     correlationId,
                     changes.stream()
-                        .filter(c -> isStored(c, sessionOnly))
+                        .filter(storing::isStored)
                         .toList()
                 )
                 .collectList()
                 // The listener is told before the events are emitted to the one who triggered them, which fails if
                 // that one has stopped listening, e.g. after the first event or a timeout
+                // Not for a transaction whose only change is the deletion of the trigger which fired it
                 .doOnNext(_ -> {
-                  if (!changes.isEmpty() && listener != null) {
-                    listener.changeAccepted(correlationId, toListenerFormat(changes, sessionOnly));
-                  }
+                  if (listener == null)
+                    return;
+                  var accepted = toListenerFormat(changes, storing);
+                  if (!accepted.isEmpty())
+                    listener.changeAccepted(correlationId, accepted);
                 })
                 .flatMap(x -> Mono.just("")
                     .contextWrite(ctx -> {

@@ -27,7 +27,7 @@ public record EventLog(
         .stream()
         .filter(e -> e.eventNumber() == number && eventType.equals(e.type()))
         .findFirst()
-        .map(e -> EventLog.<T>data(e))
+        .map(e -> EventLog.<T>copy(e))
         .orElseThrow(() -> new NoSuchElementException("number(" + number + ", " + eventType.name() + "). Have:\n" + effectiveEvents().stream().map(e -> e.toString()).collect(joining("\n"))));
   }
 
@@ -36,13 +36,13 @@ public record EventLog(
         .stream()
         .filter(e -> e.eventNumber() == number && eventType.equals(e.type()))
         .findFirst()
-        .map(e -> EventLog.<T>data(e));
+        .map(e -> EventLog.<T>copy(e));
   }
 
   public <T> T one(DataType<T> dataType) {
     return effectiveEvents().stream()
         .filter(e -> dataType.equals(e.type().outputDataType()))
-        .map(e -> EventLog.<T>data(e))
+        .map(e -> EventLog.<T>copy(e))
         .filter(e -> e != null)
         .findFirst()
         .orElseThrow(() -> new NoSuchElementException("one(" + dataType.name() + "). Have:\n" + effectiveEvents().stream().map(e -> e.toString()).collect(joining("\n"))));
@@ -51,7 +51,7 @@ public record EventLog(
   public <T> T last(DataType<T> dataType) {
     T result = effectiveEvents().reversed().stream()
         .filter(e -> dataType.equals(e.type().outputDataType()))
-        .map(e -> EventLog.<T>data(e))
+        .map(e -> EventLog.<T>cached(e))
         .findFirst()
         .orElseThrow(() -> new NoSuchElementException("last(" + dataType.name() + ")"));
     return result;
@@ -60,7 +60,7 @@ public record EventLog(
   public <T> T one(EventType<?, T> eventType) {
     return effectiveEvents().stream()
         .filter(e -> e.type().id().equals(eventType.id()))
-        .map(e -> EventLog.<T>data(e))
+        .map(e -> EventLog.<T>copy(e))
         .findFirst()
         .orElseThrow(() -> new NoSuchElementException(String.format("one(%s) on %s [log: %s]",
             eventType.name(),
@@ -73,7 +73,7 @@ public record EventLog(
   public final <T> T one(EventType<?, T>... eventTypes) {
     return effectiveEvents().stream()
         .filter(e -> Stream.of(eventTypes).map(EventType::id).toList().contains(e.type().id()))
-        .map(e -> EventLog.<T>data(e))
+        .map(e -> EventLog.<T>cached(e))
         .findFirst()
         .orElseThrow();
   }
@@ -81,14 +81,14 @@ public record EventLog(
   public <T> Optional<T> oneIfExists(EventType<?, T> eventType) {
     return effectiveEvents().stream()
         .filter(e -> Stream.of(eventType).map(EventType::id).toList().contains(e.type().id()))
-        .map(e -> EventLog.<T>data(e))
+        .map(e -> EventLog.<T>cached(e))
         .findFirst();
   }
 
   public <T> T last(EventType<?, T> eventType) {
     return effectiveEvents().reversed().stream()
         .filter(e -> e.type().id().equals(eventType.id()))
-        .map(e -> EventLog.<T>data(e))
+        .map(e -> EventLog.<T>cached(e))
         .findFirst()
         .orElseThrow(() -> new NoSuchElementException("last(" + eventType.name() + ")"));
   }
@@ -96,14 +96,14 @@ public record EventLog(
   public <T> Optional<T> lastIfExists(EventType<?, T> eventType) {
     return effectiveEvents().reversed().stream()
         .filter(e -> e.type().id().equals(eventType.id()))
-        .map(e -> EventLog.<T>data(e))
+        .map(e -> EventLog.<T>cached(e))
         .findFirst();
   }
 
   public <T> List<T> all(EventType<?, T> eventType) {
     return effectiveEvents().stream()
         .filter(e -> e.type().id().equals(eventType.id()))
-        .map(e -> EventLog.<T>data(e))
+        .map(e -> EventLog.<T>cached(e))
         .toList();
   }
 
@@ -161,13 +161,19 @@ public record EventLog(
   }
 
 
-  /// The data of the event, as it is stored, unmarshalled for each reader, so that one changing it doesn't change what
-  /// the others read, except for a masked event of the transaction, whose whole data is only the one the transaction
-  /// has. Every accessor of the data reads it by this.
+  /// The data of the event unmarshalled for the reader, as the data type unmarshals it, so that one changing it doesn't
+  /// change what others read. A masked event of the transaction gives its whole data, which only the transaction has.
   @SuppressWarnings("unchecked")
-  private static <T> T data(Event<?> event) {
+  private static <T> T copy(Event<?> event) {
     Event<T> typed = (Event<T>) event;
     return typed.isMasked() ? typed.getUnmarshalledData() : Event.unmarshal(typed.type(), typed.data());
+  }
+
+  /// The data of the event, unmarshalled once and shared by its readers, or null if it has none. A masked event of the
+  /// transaction gives its whole data, which only the transaction has.
+  @SuppressWarnings("unchecked")
+  private static <T> T cached(Event<?> event) {
+    return ((Event<T>) event).getUnmarshalledData();
   }
 
   /// Whether the entity is one of the session only, whose events are not stored: of a model which is not stored, or

@@ -39,8 +39,8 @@ class Traverser {
         .flatMap(transition -> leaves(transition).stream())
         .anyMatch(leaf -> !leaf.eventType().stored());
     transitions.forEach(this::requireUniquePaths);
-    var reached = stored ? statesOfStoredEntities() : Set.<State>of();
     var reachedBySessionOnly = stored ? statesOfEntitiesOfTheSessionOnly() : transitions.keySet();
+    var reached = stored ? statesOfStoredEntities(reachedBySessionOnly) : Set.<State>of();
     transitions.forEach((from, fromState) -> {
       if (reached.contains(from))
         requireNotStoredToSelf(from, fromState);
@@ -93,11 +93,16 @@ class Traverser {
       requireNoLaterTrigger(filter.alternative().model());
   }
 
-  /// The states an entity which is stored reaches: from `Begin` by the events stored, as one created by an event not
-  /// stored is an entity of the session only, and from there by any event. The states only entities of the session
-  /// reach may be left by events not stored.
-  private Set<State> statesOfStoredEntities() {
-    return statesReachedFromBegin(EventType::stored);
+  /// The states an entity which is stored may be in: every state but `Begin`, except those which only entities of the
+  /// session only reach, which may be left by events not stored. An entity may be created otherwise than from `Begin`,
+  /// so a state isn't left out for not being reached from it.
+  private Set<State> statesOfStoredEntities(Set<State> reachedBySessionOnly) {
+    var reachedByStored = statesReachedFromBegin(EventType::stored);
+    var states = new HashSet<State>();
+    for (State state : transitions.keySet())
+      if (state != Begin && (reachedByStored.contains(state) || !reachedBySessionOnly.contains(state)))
+        states.add(state);
+    return states;
   }
 
   /// The states an entity of the session only of a stored model reaches: from `Begin` by the events not stored, which
