@@ -23,6 +23,8 @@ import java.util.function.Predicate;
 class Traverser {
 
   private final Map<State, List<TransitionModel<?, ?>>> transitions;
+  /// Why the transitions are refused, all of them, so that a model is fixed in one go rather than one refusal at a time
+  private final List<String> refusals = new ArrayList<>();
   /// Whether entities of the session only are of the model: all of them if it is not stored, and those an event not
   /// stored creates otherwise
   private final boolean hasEntitiesOfTheSessionOnly;
@@ -56,6 +58,14 @@ class Traverser {
         }
       }
     });
+    if (refusals.size() == 1)
+      throw new IllegalArgumentException(refusals.getFirst());
+    if (!refusals.isEmpty())
+      throw new IllegalArgumentException(refusals.size() + " refusals of the transitions:\n- " + String.join("\n- ", refusals));
+  }
+
+  private void refuse(String refusal) {
+    refusals.add(refusal);
   }
 
   /// Whether the transition may be taken by an entity of the session only: one from a state such an entity reaches, or
@@ -72,7 +82,7 @@ class Traverser {
     if (transition.triggers().stream().anyMatch(trigger -> trigger.condition() != null)) {
       for (var leaf : leaves(transition)) {
         if (!leaf.eventType().stored())
-          throw new IllegalArgumentException(String.format(
+          refuse(String.format(
               "The transition on %s has a conditional trigger, which refers to its event, but the transition on %s, which " +
                   "it may choose, is not stored",
               transition.eventType().name(),
@@ -89,7 +99,7 @@ class Traverser {
   private void requireAtMostOneDelayedTrigger(TransitionModel<?, ?> transition, int inherited) {
     int delayed = inherited + transition.delayedEventTypes().size();
     if (delayed > 1)
-      throw new IllegalArgumentException(String.format(
+      refuse(String.format(
           "The transition on %s triggers %d delayed events, but an entity has at most one pending delayed trigger, so " +
               "the second would replace the first",
           transition.eventType().name(),
@@ -134,7 +144,7 @@ class Traverser {
         return;
       for (var trigger : triggers)
         if (trigger.condition() == null && delayingNotStored.contains(trigger.eventSpec().eventType()))
-          throw new IllegalArgumentException(String.format(
+          refuse(String.format(
               "The transition on %s has a delayed trigger, and triggers %s, which isn't stored and has a delayed trigger " +
                   "too. On the same entity, the two would have the same number, but an entity has at most one pending " +
                   "delayed trigger",
@@ -154,7 +164,7 @@ class Traverser {
   private void requireNoIdOrIndex(TransitionModel<?, ?> transition) {
     for (var trigger : transition.triggers())
       if (trigger.entityModel() instanceof IdEntityModel || trigger.entityModel() instanceof IndexEntityModel)
-        throw new IllegalArgumentException(String.format(
+        refuse(String.format(
             "The transition on %s may be of an entity of the session only, which is never stored, so it can't trigger %s " +
                 "on the %s model %s, which would point to an entity which doesn't exist",
             transition.eventType().name(),
@@ -169,7 +179,7 @@ class Traverser {
   private void requireNoLaterTrigger(TransitionModel<?, ?> transition) {
     boolean conditional = transition.triggers().stream().anyMatch(trigger -> trigger.condition() != null);
     if (conditional || !transition.delayedEventTypes().isEmpty())
-      throw new IllegalArgumentException(String.format(
+      refuse(String.format(
           "The transition on %s may be of an entity of the session only, which is not found after its session, so it " +
               "can't have a %s trigger, which fires in a session of its own",
           transition.eventType().name(),
@@ -185,8 +195,10 @@ class Traverser {
   private void requireReachableFromBegin() {
     if (transitions.values().stream().allMatch(List::isEmpty))
       return;
-    if (transitions.getOrDefault(Begin, List.of()).isEmpty())
-      throw new IllegalArgumentException("The model has transitions, but none from Begin, from which every entity is created");
+    if (transitions.getOrDefault(Begin, List.of()).isEmpty()) {
+      refuse("The model has transitions, but none from Begin, from which every entity is created");
+      return;
+    }
     var reached = new HashSet<State>();
     var toVisit = new ArrayDeque<State>(List.of(Begin));
     while (!toVisit.isEmpty())
@@ -196,7 +208,7 @@ class Traverser {
             toVisit.add(target);
     for (var entry : transitions.entrySet())
       if (entry.getKey() != Begin && !entry.getValue().isEmpty() && !reached.contains(entry.getKey()))
-        throw new IllegalArgumentException(String.format(
+        refuse(String.format(
             "State %s is not reached from Begin, from which every entity is created, so its transitions are never taken",
             entry.getKey().name()
         ));
@@ -251,7 +263,7 @@ class Traverser {
     for (var transition : transitionsFromState) {
       for (var leaf : leaves(transition)) {
         if (!leaf.eventType().stored() && leaf.toState() != null && !leaf.toState().equals(from))
-          throw new IllegalArgumentException(String.format(
+          refuse(String.format(
               "Event type %s is not stored, but its transition from %s goes to %s. The state of an entity is found " +
                   "from its stored events, so a transition on an event which is not stored must stay in its state",
               leaf.eventType().name(),
@@ -272,7 +284,7 @@ class Traverser {
       for (var leaf : leaves(transition)) {
         var other = byEventType.putIfAbsent(leaf.eventType(), leaf);
         if (other != null && isDistinguishable(other, leaf)) {
-          throw new IllegalArgumentException(String.format(
+          refuse(String.format(
               "Event type %s has transitions from %s with different target states or reverse models: %s and %s. " +
                   "The event of a chosen transition is stored, so the transition of a logged event would be ambiguous",
               leaf.eventType().name(),

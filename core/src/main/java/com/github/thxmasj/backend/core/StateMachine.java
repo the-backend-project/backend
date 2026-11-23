@@ -162,7 +162,7 @@ public class StateMachine implements AutoCloseable {
     List<EntityModel> models = resolved.entityModels();
     this.models = resolved;
     Debug.log("Supported entity models:\n" + models.stream().map(EntityModel::name).collect(joining("\n")));
-    this.traversers = models.stream().collect(toMap(m -> m, m -> new Traverser(m.transitions(), m.stored())));
+    this.traversers = models.stream().collect(toMap(m -> m, StateMachine::checkedTraverser));
     this.eventTypesByEntityModel = resolved.eventTypesByEntityModel();
     this.delayer = delayer != null ? delayer : _ -> Mono.empty();
     if (schemaDataSource != null) {
@@ -210,7 +210,16 @@ public class StateMachine implements AutoCloseable {
     client.close();
   }
 
-  private EventLog emptyEventLog(EntityModel entityModel) {
+  /// The traverser of the transitions of the model, which checks them, failing with the model named
+  private static Traverser checkedTraverser(EntityModel model) {
+    try {
+      return new Traverser(model.transitions(), model.stored());
+    } catch (IllegalArgumentException e) {
+      throw new IllegalArgumentException("The transitions of entity model " + model.name() + " are refused: " + e.getMessage(), e);
+    }
+  }
+
+    private EventLog emptyEventLog(EntityModel entityModel) {
     return new EventLog(entityModel, Identifiers.newId(), List.of());
   }
 

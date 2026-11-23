@@ -134,6 +134,20 @@ public class TraverserTest {
     assertDoesNotThrow(() -> new Traverser(Map.of(Begin, List.of(acceptance), States.Accepted, List.of(delayedThenQuiet, quietWithoutDelay))));
   }
 
+  /// All the refusals of a model are reported together, so it is fixed in one go
+  @Test
+  public void allRefusalsAreReportedTogether() {
+    var twice = onEvent(Retried).toSelf().trigger(Accepted).after(_ -> Duration.ofMinutes(1)).trigger(Rejected).after(_ -> Duration.ofMinutes(2)).output();
+    var e = assertThrows(IllegalArgumentException.class, () -> new Traverser(Map.of(
+        Begin, List.of(acceptance),
+        States.Accepted, List.of(twice),
+        States.Rejected, List.of(onEvent(Retried).to(States.Requested).output())
+    )));
+    assertTrue(e.getMessage().startsWith("2 refusals of the transitions:"), e.getMessage());
+    assertTrue(e.getMessage().contains("- The transition on Retried triggers 2 delayed events"), e.getMessage());
+    assertTrue(e.getMessage().contains("- State Rejected is not reached from Begin"), e.getMessage());
+  }
+
   /// Every entity is created from `Begin`, so a model without transitions from it, or with a state it doesn't lead to,
   /// is refused
   @Test
