@@ -57,7 +57,6 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -633,7 +632,7 @@ public class HttpOutboxTest {
   @Test
   public void atLeastOnceAcceptedRequestRedispatched() {
     var redispatched = redispatchAcceptedRequest(
-        (_, r) -> HttpRequest.create(r.method(), r.uri(), Map.of("Message-Id", r.headers().get("Message-Id") + "-again"), r.body() + " again")
+        (_, r) -> HttpRequest.create(r.method(), r.uri(), Map.of("Message-Id", r.headerValue("Message-Id") + "-again"), r.body() + " again")
     );
     List<String> sent = List.of(redispatched.messageId(), "fixed", "payload");
     List<String> again = List.of(redispatched.messageId() + "-again", "fixed", "payload again");
@@ -801,9 +800,7 @@ public class HttpOutboxTest {
         .responsePayloadType(DataType.none());
     AtLeastOnce<String> notification = (repeatMessageCreator != null ? payloadTypes.repeatMessageCreator(repeatMessageCreator) : payloadTypes)
         .forwarder(r -> {
-          var headers = new HashMap<>(r.headers());
-          headers.put("Forwarder", "fixed");
-          return netty.exchange(new HttpRequest<>(r.method(), r.uri(), headers, r.body()));
+          return netty.exchange(new HttpRequest<>(r.method(), r.uri(), r.headers().with("Forwarder", "fixed"), r.body()));
         })
         .inflightTimeout(Duration.ofSeconds(10))
         .processModel(process)

@@ -1,8 +1,7 @@
 package com.github.thxmasj.backend.http.inbox;
 
-import static java.util.stream.Collectors.toMap;
-
 import com.github.thxmasj.backend.core.StateMachine;
+import com.github.thxmasj.backend.http.Headers;
 import com.github.thxmasj.backend.http.HttpMessageParser;
 import com.github.thxmasj.backend.http.HttpRequest;
 import com.github.thxmasj.backend.http.HttpRequest.Method;
@@ -13,8 +12,6 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
@@ -143,15 +140,14 @@ public class HttpInboxListener {
     return correlationId;
   }
 
+  /// The request as received, with the values of a header repeated kept apart, in order
   private static HttpRequest<byte[]> requestMessage(HttpServerRequest request, Method method, byte[] body) {
-    Map<String, String> headers = request.requestHeaders().entries().stream()
-        .collect(toMap(Entry::getKey, Entry::getValue, (a, b) -> a + ", " + b));
-    return new HttpRequest<>(method, URI.create(request.uri()), headers, body);
+    return new HttpRequest<>(method, URI.create(request.uri()), Headers.ofEntries(request.requestHeaders().entries()), body);
   }
 
   private static Mono<Void> send(HttpServerResponse response, HttpResponse<byte[]> message) {
     response.status(HttpResponseStatus.valueOf(message.statusCode(), message.reasonPhrase()));
-    message.headers().forEach(response::header);
+    message.headers().forEach(response::addHeader);
     return message.body() == null
         ? response.send()
         : response.send(Mono.just(Unpooled.wrappedBuffer(message.body()))).then();

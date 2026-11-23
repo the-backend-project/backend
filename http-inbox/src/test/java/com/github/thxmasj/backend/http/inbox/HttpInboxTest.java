@@ -53,6 +53,7 @@ import com.github.thxmasj.backend.core.Validated.Valid;
 import com.github.thxmasj.backend.http.NettyHttpClient;
 import com.github.thxmasj.backend.http.NettyHttpClientBuilder;
 import com.github.thxmasj.backend.core.internal.EventTypes;
+import com.github.thxmasj.backend.http.Headers;
 import com.github.thxmasj.backend.http.HttpMessageParser;
 import com.github.thxmasj.backend.http.HttpRequest;
 import com.github.thxmasj.backend.http.HttpRequest.Method;
@@ -74,11 +75,11 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
@@ -517,6 +518,39 @@ public class HttpInboxTest {
   public void whenNoCorrelationIdHeaderOverHttpThenGeneratedCorrelationId() throws IOException {
     HttpResponse<byte[]> response = exchangeOverHttp(new HttpInboxListener(stateMachine, inbox), Map.of());
     assertThat(response.headerValue("X-Correlation-Id")).matches("SYS-\\d{19}");
+  }
+
+  /// A header received several times is kept as several, in order, rather than joined, and every value of a header of
+  /// the response is sent, e.g. two cookies set, which can't be joined in one header
+  @Test
+  public void whenHeaderRepeatedOverHttpThenValuesKeptApart() throws IOException {
+    var received = new AtomicReference<HttpRequest<byte[]>>();
+    DisposableServer listener = new HttpInboxListener(stateMachine, inbox)
+        .filter((request, next) -> {
+          received.set(request);
+          return next.apply(request).map(response -> new HttpResponse<>(
+              response.statusCode(),
+              response.reasonPhrase(),
+              response.headers().plus("Set-Cookie", "a=1").plus("Set-Cookie", "b=2"),
+              response.body()
+          ));
+        })
+        .listen(0);
+    try {
+      HttpResponse<byte[]> response = new NettyHttpClient(new NettyHttpClientBuilder().build())
+          .exchange(new HttpRequest<>(
+              PUT,
+              URI.create("http://localhost:" + listener.port() + "/internal/" + UUID.randomUUID()),
+              Headers.builder().add("X-Tag", "a, b").add("X-Other", "c").add("x-tag", "d").build(),
+              new ObjectMapper().writeValueAsBytes(new InternalProcess("Hello", 1))
+          ))
+          .block(Duration.ofSeconds(5));
+      assertEquals(201, response.statusCode());
+      assertEquals(List.of("a, b", "d"), received.get().headerValues("X-Tag"));
+      assertEquals(List.of("a=1", "b=2"), response.headerValues("Set-Cookie"));
+    } finally {
+      listener.disposeNow();
+    }
   }
 
   private HttpResponse<byte[]> exchangeOverHttp(HttpInboxListener inboxListener, Map<String, String> headers) throws IOException {
@@ -1264,9 +1298,7 @@ public class HttpInboxTest {
   }
 
   private static HttpRequest<byte[]> withoutCorrelationId(HttpRequest<byte[]> m) {
-    var headers = new HashMap<>(m.headers());
-    headers.remove("X-Correlation-Id");
-    return new HttpRequest<>(m.method(), m.uri(), headers, m.body());
+    return new HttpRequest<>(m.method(), m.uri(), m.headers().without("X-Correlation-Id"), m.body());
   }
 
   private HttpResponse<byte[]> onRollbackRequest(String messageId, Map<String, String> headers) throws IOException {

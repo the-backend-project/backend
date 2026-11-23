@@ -82,6 +82,10 @@ machine takes it to the inbox request of the session:
 
 The response goes back to the `RequestRouting` entity, which the listener sends to the client.
 
+The request is stored as the listener received it, a header received several times as several, in the order received,
+and the listener sends every value of a header of the response, e.g. two `Set-Cookie` headers. See
+[headers](http-outbox.md#headers).
+
 Requests carrying a message id are deduplicated through the `MessageIds` id entity model: a retried request gets the
 response of the first one, also if the application rejected it, without triggering anything again. A message id is
 the client's: the authorized subject and the id, or the id alone without an authorizer. All inbox requests share

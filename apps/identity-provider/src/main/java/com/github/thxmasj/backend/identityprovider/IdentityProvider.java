@@ -8,6 +8,7 @@ import com.github.thxmasj.backend.core.JsonLinesListener;
 import com.github.thxmasj.backend.core.StateMachine;
 import com.github.thxmasj.backend.core.database.DataSourceBuilder;
 import com.github.thxmasj.backend.core.database.Database;
+import com.github.thxmasj.backend.http.Headers;
 import com.github.thxmasj.backend.http.HttpMessageParser;
 import com.github.thxmasj.backend.http.HttpRequest;
 import com.github.thxmasj.backend.http.HttpRequest.Method;
@@ -191,7 +192,7 @@ public final class IdentityProvider {
   /// Registers a client as the registrar, outside the edge
   private static HttpResponse<byte[]> register(StateMachine stateMachine, HttpInbox inbox, String correlationId, Map<String, ?> body, String registrar, String secretHash) {
     var request = Edge.registration(
-        Map.of("Content-Type", "application/json"),
+        Headers.of("Content-Type", "application/json"),
         registrar,
         secretHash,
         new HttpRequest<>(Method.POST, URI.create("/clients"), Map.of(), DataType.objectMapper.writeValueAsBytes(body))

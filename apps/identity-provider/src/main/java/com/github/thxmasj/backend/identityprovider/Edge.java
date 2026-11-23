@@ -6,6 +6,7 @@ import static com.github.thxmasj.backend.identityprovider.Inbox.SecretHashHeader
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.github.thxmasj.backend.core.DataType;
+import com.github.thxmasj.backend.http.Headers;
 import com.github.thxmasj.backend.http.HttpRequest;
 import com.github.thxmasj.backend.http.HttpRequest.Method;
 import com.github.thxmasj.backend.http.HttpResponse;
@@ -19,7 +20,6 @@ import java.net.URI;
 import java.text.ParseException;
 import java.time.Duration;
 import java.util.Base64;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -68,8 +68,9 @@ final class Edge implements HttpInboxListener.Filter {
 
   @Override
   public Mono<HttpResponse<byte[]>> filter(HttpRequest<byte[]> request, Function<HttpRequest<byte[]>, Mono<HttpResponse<byte[]>>> next) {
-    // The cookies hold the secrets of sign-ins, so they are kept out of the event log
-    String cookies = request.headerValue("Cookie");
+    // The cookies hold the secrets of sign-ins, so they are kept out of the event log. They may be sent in several
+    // Cookie headers, e.g. over HTTP/2 (RFC 9113 section 8.2.3).
+    String cookies = String.join("; ", request.headerValues("Cookie"));
     request = withoutTrustedHeaders(request);
     if (upstream != null) {
       switch (request.uri().getPath()) {
@@ -107,10 +108,10 @@ final class Edge implements HttpInboxListener.Filter {
         String authorization = DataType.objectMapper.readTree(response.body()).get("authorization").asString();
         String secret = Secrets.generate();
         yield upstream.authorizationUrl(authorization, secret).map(url -> {
-          var headers = noStore(Map.of());
-          headers.remove("Content-Type");
-          headers.put("Location", url.toString());
-          headers.put("Set-Cookie", cookie(authorization, secret, signInLifetime));
+          var headers = noStore(Headers.none())
+              .without("Content-Type")
+              .with("Location", url.toString())
+              .with("Set-Cookie", cookie(authorization, secret, signInLifetime));
           return new HttpResponse<>(302, "Found", headers, null);
         });
       }
@@ -199,9 +200,7 @@ final class Edge implements HttpInboxListener.Filter {
       return Mono.just(bearerError(401, "invalid_token", "The access token is invalid or expired", null));
     if (!principal.get().scopes().contains("openid"))
       return Mono.just(bearerError(403, "insufficient_scope", "The access token lacks the scope openid", "openid"));
-    var headers = new HashMap<>(request.headers());
-    headers.keySet().removeIf(name -> name.equalsIgnoreCase("Authorization"));
-    headers.put(Inbox.TokenIdHeader, tokenId.get());
+    var headers = request.headers().without("Authorization").with(Inbox.TokenIdHeader, tokenId.get());
     return next.apply(new HttpRequest<>(request.method(), request.uri(), headers, null))
         .map(response -> response.statusCode() == 200 ?
             new HttpResponse<>(200, "OK", noStore(response.headers()), response.body()) :
@@ -238,7 +237,7 @@ final class Edge implements HttpInboxListener.Filter {
       return Mono.just(tokenError(400, "unsupported_grant_type", "Only the client_credentials and authorization_code grants are supported"));
     if (grantType.equals(Clients.ClientCredentials) && form.containsKey("scope") && !Scopes.isValid(form.get("scope")))
       return Mono.just(tokenError(400, "invalid_scope", "scope must be a space separated list of scopes"));
-    var headers = new HashMap<>(request.headers());
+    var headers = Headers.builder().add(request.headers());
     byte[] body = request.body();
     if (grantType.equals(Clients.AuthorizationCode)) {
       String code = form.get("code");
@@ -250,9 +249,9 @@ final class Edge implements HttpInboxListener.Filter {
       if (verifier != null && !Inbox.codeChallengePattern.matcher(verifier).matches())
         return Mono.just(tokenError(400, "invalid_request", "code_verifier is invalid"));
       // The code and the code verifier are replaced by their hashes, which is the S256 challenge of the verifier
-      headers.put(Inbox.CodeHashHeader, Secrets.hash(code));
+      headers.set(Inbox.CodeHashHeader, Secrets.hash(code));
       if (verifier != null)
-        headers.put(Inbox.CodeChallengeHeader, Secrets.hash(verifier));
+        headers.set(Inbox.CodeChallengeHeader, Secrets.hash(verifier));
       var rest = new LinkedHashMap<>(form);
       rest.remove("code");
       rest.remove("code_verifier");
@@ -260,10 +259,10 @@ final class Edge implements HttpInboxListener.Filter {
     }
     if (!Clients.isValidClientId(clientId))
       return Mono.just(tokenError(401, "invalid_client", "Client authentication failed"));
-    headers.keySet().removeIf(name -> name.equalsIgnoreCase("Authorization") || name.equalsIgnoreCase("Content-Length"));
-    headers.put(ClientIdHeader, clientId);
-    headers.put(SecretHashHeader, secretHash(clientId, secret));
-    return next.apply(new HttpRequest<>(request.method(), request.uri(), headers, body))
+    headers.remove("Authorization").remove("Content-Length");
+    headers.set(ClientIdHeader, clientId);
+    headers.set(SecretHashHeader, secretHash(clientId, secret));
+    return next.apply(new HttpRequest<>(request.method(), request.uri(), headers.build(), body))
         .map(response -> switch (response.statusCode()) {
           case 200 -> grantType.equals(Clients.AuthorizationCode) ? userTokensResponse(response) : tokenResponse(response);
           case 401 -> withHeader(response, "WWW-Authenticate", basicChallenge());
@@ -314,19 +313,15 @@ final class Edge implements HttpInboxListener.Filter {
     if (!principal.get().scopes().contains(Clients.RegistrationScope))
       return Mono.just(bearerError(403, "insufficient_scope", "The access token lacks the scope " + Clients.RegistrationScope, Clients.RegistrationScope));
     String secret = Secrets.generate();
-    var headers = new HashMap<>(request.headers());
-    headers.keySet().removeIf(name -> name.equalsIgnoreCase("Authorization"));
-    return next.apply(registration(headers, principal.get().clientId(), Secrets.hash(secret), request))
+    return next.apply(registration(request.headers().without("Authorization"), principal.get().clientId(), Secrets.hash(secret), request))
         .map(response -> response.statusCode() == 201 ? withSecret(response, secret) : response);
   }
 
   /// A registration request as it enters the state machine
   ///
   /// @param registeredBy the client id of the client registering the client
-  static HttpRequest<byte[]> registration(Map<String, String> headers, String registeredBy, String secretHash, HttpRequest<byte[]> request) {
-    var trusted = new HashMap<>(headers);
-    trusted.put(RegisteredByHeader, registeredBy);
-    trusted.put(SecretHashHeader, secretHash);
+  static HttpRequest<byte[]> registration(Headers headers, String registeredBy, String secretHash, HttpRequest<byte[]> request) {
+    var trusted = headers.with(RegisteredByHeader, registeredBy).with(SecretHashHeader, secretHash);
     return new HttpRequest<>(request.method(), request.uri(), trusted, request.body());
   }
 
@@ -360,10 +355,9 @@ final class Edge implements HttpInboxListener.Filter {
   /// Requests can't set the headers the edge tells the state machine what it has authenticated with, and their
   /// cookies are not passed on
   private static HttpRequest<byte[]> withoutTrustedHeaders(HttpRequest<byte[]> request) {
-    if (request.headers().keySet().stream().noneMatch(Edge::isTrusted))
+    if (request.headers().names().stream().noneMatch(Edge::isTrusted))
       return request;
-    var headers = new HashMap<>(request.headers());
-    headers.keySet().removeIf(Edge::isTrusted);
+    var headers = Headers.of(request.headers().stream().filter(field -> !isTrusted(field.name())).toList());
     return new HttpRequest<>(request.method(), request.uri(), headers, request.body());
   }
 
@@ -391,9 +385,9 @@ final class Edge implements HttpInboxListener.Filter {
       parameters.put("code", code);
     parameters.putAll(redirect.parameters());
     String uri = redirect.redirectUri();
-    var headers = noStore(Map.of());
-    headers.remove("Content-Type");
-    headers.put("Location", uri + (uri.contains("?") ? "&" : "?") + Form.encode(parameters));
+    var headers = noStore(Headers.none())
+        .without("Content-Type")
+        .with("Location", uri + (uri.contains("?") ? "&" : "?") + Form.encode(parameters));
     return new HttpResponse<>(302, "Found", headers, null);
   }
 
@@ -411,8 +405,7 @@ final class Edge implements HttpInboxListener.Filter {
   }
 
   private static HttpResponse<byte[]> errorPage(String description) {
-    var headers = noStore(Map.of());
-    headers.put("Content-Type", "text/plain;charset=UTF-8");
+    var headers = noStore(Headers.none()).with("Content-Type", "text/plain;charset=UTF-8");
     return new HttpResponse<>(400, "Bad Request", headers, ("Sign-in failed: " + description + "\n").getBytes(UTF_8));
   }
 
@@ -424,10 +417,8 @@ final class Edge implements HttpInboxListener.Filter {
         + ("https".equals(keys.issuer().getScheme()) ? "; Secure" : "");
   }
 
-  /// The value of a cookie of a Cookie header, or null
+  /// The value of a cookie of the Cookie headers, joined with `; `, or null
   private static String cookie(String cookies, String name) {
-    if (cookies == null)
-      return null;
     for (String cookie : cookies.split(";")) {
       int i = cookie.indexOf('=');
       if (i > 0 && cookie.substring(0, i).trim().equals(name)) {
@@ -454,9 +445,9 @@ final class Edge implements HttpInboxListener.Filter {
     var body = new LinkedHashMap<String, String>();
     body.put("error", error);
     body.put("error_description", description);
-    var headers = noStore(Map.of());
+    var headers = noStore(Headers.none());
     if (status == 401)
-      headers.put("WWW-Authenticate", basicChallenge());
+      headers = headers.with("WWW-Authenticate", basicChallenge());
     return new HttpResponse<>(status, status == 401 ? "Unauthorized" : "Bad Request", headers, DataType.objectMapper.writeValueAsBytes(body));
   }
 
@@ -476,18 +467,15 @@ final class Edge implements HttpInboxListener.Filter {
     return new HttpResponse<>(status, status == 401 ? "Unauthorized" : "Forbidden", Map.of("WWW-Authenticate", challenge.toString()), null);
   }
 
-  private static Map<String, String> noStore(Map<String, String> headers) {
-    var result = new HashMap<>(headers);
-    result.put("Content-Type", "application/json;charset=UTF-8");
-    result.put("Cache-Control", "no-store");
-    result.put("Pragma", "no-cache");
-    return result;
+  private static Headers noStore(Headers headers) {
+    return headers
+        .with("Content-Type", "application/json;charset=UTF-8")
+        .with("Cache-Control", "no-store")
+        .with("Pragma", "no-cache");
   }
 
   private static HttpResponse<byte[]> withHeader(HttpResponse<byte[]> response, String name, String value) {
-    var headers = new HashMap<>(response.headers());
-    headers.put(name, value);
-    return new HttpResponse<>(response.statusCode(), response.reasonPhrase(), headers, response.body());
+    return new HttpResponse<>(response.statusCode(), response.reasonPhrase(), response.headers().with(name, value), response.body());
   }
 
   private static HttpResponse<byte[]> response(int status, String reason, String contentType, String body) {

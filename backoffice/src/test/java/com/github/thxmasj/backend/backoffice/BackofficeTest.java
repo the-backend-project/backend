@@ -182,6 +182,9 @@ public class BackofficeTest {
     var signedIn = signIn(server, path);
     assertThat(signedIn.statusCode()).isEqualTo(303);
     assertThat(signedIn.headers().firstValue("Location")).hasValue(path);
+    // The response setting the cookie of the session removes that of the sign-in
+    assertThat(signedIn.headers().allValues("Set-Cookie")).hasSize(2).last().asString()
+        .startsWith("backoffice_signin_").contains("=;", "Max-Age=0", "Path=/backoffice/callback");
     String cookie = sessionCookie(signedIn);
     var page = get(server, path, cookie);
     assertThat(page.statusCode()).isEqualTo(200);
@@ -192,6 +195,17 @@ public class BackofficeTest {
     assertThat(page.headers().firstValue("Content-Security-Policy")).hasValueSatisfying(csp -> assertThat(csp)
         .contains("default-src 'self'")
         .doesNotContain("img-src", "script-src", "style-src", "*", "http"));
+  }
+
+  /// The cookies may come in several Cookie headers, e.g. over HTTP/2 (RFC 9113 section 8.2.3)
+  @Test
+  void sessionCookieIsFoundInAnyOfSeveralCookieHeaders() throws Exception {
+    provider.signInAs(ada);
+    String cookie = sessionCookie(signIn(server, "/backoffice/"));
+    var request = request(server, "/backoffice/", "other=1", Map.of()).header("Cookie", cookie).GET().build();
+    var page = http.send(request, BodyHandlers.ofString());
+    assertThat(page.statusCode()).isEqualTo(200);
+    assertThat(page.body()).contains("Ada Lovelace");
   }
 
   @Test

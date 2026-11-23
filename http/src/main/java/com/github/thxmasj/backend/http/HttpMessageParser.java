@@ -2,9 +2,6 @@ package com.github.thxmasj.backend.http;
 
 import com.github.thxmasj.backend.http.HttpRequest.Method;
 import java.net.URI;
-import java.util.Collections;
-import java.util.Map;
-import java.util.TreeMap;
 
 public class HttpMessageParser {
 
@@ -13,7 +10,7 @@ public class HttpMessageParser {
     String requestLine = message.lines().findFirst().orElseThrow();
     Method method = Method.valueOf(requestLine.substring(0, requestLine.indexOf(" ")));
     URI uri = uri(message);
-    Map<String, String> headers = HttpMessageParser.headers(message);
+    Headers headers = HttpMessageParser.headers(message);
     byte[] body = HttpMessageParser.body(message);
     return new HttpRequest<>(method, uri, headers, body);
   }
@@ -24,7 +21,7 @@ public class HttpMessageParser {
     var s = statusLine.substring(statusLine.indexOf(" ") + 1);
     int statusCode = Integer.parseInt(s.substring(0, s.indexOf(" ")));
     String reasonPhrase = statusLine.substring(statusLine.lastIndexOf(" ") + 1);
-    Map<String, String> headers = HttpMessageParser.headers(message);
+    Headers headers = HttpMessageParser.headers(message);
     byte[] body = HttpMessageParser.body(message);
     return new HttpResponse<>(statusCode, reasonPhrase, headers, body);
   }
@@ -34,7 +31,8 @@ public class HttpMessageParser {
     return URI.create(startLine.substring(message.indexOf(" ") + 1));
   }
 
-  public static Map<String, String> headers(String message) {
+  /// The headers of the message, with a value for each header line, in order
+  public static Headers headers(String message) {
     return headersOfHead(head(message));
   }
 
@@ -46,20 +44,20 @@ public class HttpMessageParser {
     return substring.isBlank() ? null : substring.getBytes();
   }
 
-  private static Map<String, String> headersOfHead(String head) {
+  private static Headers headersOfHead(String head) {
     if (head.isBlank())
-      return Map.of();
+      return Headers.none();
     String[] lines = head.split("\n");
     if (lines.length < 2)
-      return Map.of();
-    TreeMap<String, String> map = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+      return Headers.none();
+    var headers = Headers.builder();
     for (int i = 1; i < lines.length; i++) {
       int separatorIndex = lines[i].indexOf(":");
       if (separatorIndex == -1)
         throw new IllegalStateException("Invalid header -- no separator: <" + lines[i] + ">");
-      map.put(lines[i].substring(0, separatorIndex).trim(), lines[i].substring(separatorIndex + 1).trim());
+      headers.add(lines[i].substring(0, separatorIndex).trim(), lines[i].substring(separatorIndex + 1).trim());
     }
-    return Collections.unmodifiableMap(map);
+    return headers.build();
   }
 
   private static String head(String message) {

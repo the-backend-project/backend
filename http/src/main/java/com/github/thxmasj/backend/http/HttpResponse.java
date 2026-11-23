@@ -6,25 +6,38 @@ import java.util.function.Function;
 
 /// An HTTP response, with a body of type `T`: `byte[]` for the response as sent or received, or the payload it is
 /// parsed into or marshalled from, e.g. by [com.github.thxmasj.backend.http.HttpDataType]. A response without a
-/// body has a null body. Responses are equal if their status, their headers, with the names compared without case,
-/// and the content of their bodies are.
-public record HttpResponse<T>(int statusCode, String reasonPhrase, Map<String, String> headers, T body)
+/// body has a null body. Responses are equal if their status, their [Headers] and the content of their bodies are.
+public record HttpResponse<T>(int statusCode, String reasonPhrase, Headers headers, T body)
     implements HttpMessage<T> {
 
   public HttpResponse {
-    Objects.requireNonNull(headers, "headers, which are Map.of() for none");
+    Objects.requireNonNull(headers, "headers, which are Headers.none() for none");
   }
 
   public HttpResponse(int statusCode, String reasonPhrase) {
-    this(statusCode, reasonPhrase, Map.of());
+    this(statusCode, reasonPhrase, Headers.none());
   }
 
-  public HttpResponse(int statusCode, String reasonPhrase, Map<String, String> headers) {
+  public HttpResponse(int statusCode, String reasonPhrase, Headers headers) {
     this(statusCode, reasonPhrase, headers, null);
   }
 
+  /// With one value per name, in the order of the map
+  public HttpResponse(int statusCode, String reasonPhrase, Map<String, String> headers) {
+    this(statusCode, reasonPhrase, Headers.of(headers), null);
+  }
+
+  /// With one value per name, in the order of the map
+  public HttpResponse(int statusCode, String reasonPhrase, Map<String, String> headers, T body) {
+    this(statusCode, reasonPhrase, Headers.of(headers), body);
+  }
+
   public static HttpResponse<Void> create(int statusCode, String reasonPhrase) {
-    return create(statusCode, reasonPhrase, Map.of());
+    return create(statusCode, reasonPhrase, Headers.none());
+  }
+
+  public static HttpResponse<Void> create(int statusCode, String reasonPhrase, Headers headers) {
+    return new HttpResponse<>(statusCode, reasonPhrase, headers, null);
   }
 
   public static HttpResponse<Void> create(int statusCode, String reasonPhrase, Map<String, String> headers) {
@@ -32,7 +45,11 @@ public record HttpResponse<T>(int statusCode, String reasonPhrase, Map<String, S
   }
 
   public static <T> HttpResponse<T> create(int statusCode, String reasonPhrase, T body) {
-    return create(statusCode, reasonPhrase, Map.of(), body);
+    return create(statusCode, reasonPhrase, Headers.none(), body);
+  }
+
+  public static <T> HttpResponse<T> create(int statusCode, String reasonPhrase, Headers headers, T body) {
+    return new HttpResponse<>(statusCode, reasonPhrase, headers, body);
   }
 
   public static <T> HttpResponse<T> create(int statusCode, String reasonPhrase, Map<String, String> headers, T body) {
@@ -70,13 +87,13 @@ public record HttpResponse<T>(int statusCode, String reasonPhrase, Map<String, S
     return o instanceof HttpResponse<?> that
         && statusCode == that.statusCode
         && Objects.equals(reasonPhrase, that.reasonPhrase)
-        && HttpMessage.headersEqual(headers, that.headers)
+        && headers.equals(that.headers)
         && HttpMessage.bodiesEqual(body, that.body);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(statusCode, reasonPhrase, HttpMessage.headersHashCode(headers), HttpMessage.bodyHashCode(body));
+    return Objects.hash(statusCode, reasonPhrase, headers.hashCode(), HttpMessage.bodyHashCode(body));
   }
 
   @Override

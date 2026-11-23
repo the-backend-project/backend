@@ -1,5 +1,6 @@
 package com.github.thxmasj.backend.backoffice;
 
+import com.github.thxmasj.backend.http.Headers;
 import com.github.thxmasj.backend.http.HttpClient;
 import com.github.thxmasj.backend.http.HttpRequest;
 import com.github.thxmasj.backend.http.HttpResponse;
@@ -8,7 +9,6 @@ import java.net.http.HttpConnectTimeoutException;
 import java.net.http.HttpRequest.BodyPublishers;
 import java.net.http.HttpResponse.BodyHandlers;
 import java.time.Duration;
-import java.util.LinkedHashMap;
 import java.util.Set;
 import java.util.concurrent.CompletionException;
 import reactor.core.publisher.Mono;
@@ -38,10 +38,10 @@ final class JdkHttpClient implements HttpClient {
     request.method(message.method().name(), body != null ? BodyPublishers.ofByteArray(body) : BodyPublishers.noBody());
     return Mono.fromFuture(() -> client.sendAsync(request.build(), BodyHandlers.ofByteArray()))
         .map(response -> {
-          var headers = new LinkedHashMap<String, String>();
-          response.headers().map().forEach((name, values) -> headers.put(name, String.join(", ", values)));
+          var headers = Headers.builder();
+          response.headers().map().forEach((name, values) -> values.forEach(value -> headers.add(name, value)));
           byte[] responseBody = response.body();
-          return new HttpResponse<>(response.statusCode(), "", headers, responseBody != null && responseBody.length > 0 ? responseBody : null);
+          return new HttpResponse<>(response.statusCode(), "", headers.build(), responseBody != null && responseBody.length > 0 ? responseBody : null);
         })
         .onErrorMap(CompletionException.class, e -> e.getCause() != null ? e.getCause() : e)
         .onErrorMap(HttpConnectTimeoutException.class, e -> (ConnectException) new ConnectException(e.getMessage()).initCause(e));

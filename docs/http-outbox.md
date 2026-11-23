@@ -321,6 +321,24 @@ requests are built. If one transition triggers on the outbox request the dispatc
 its `outbox()`, the state machine finds two entity models with the same id when it is created, and fails. Trigger on
 the `outbox()`.
 
+### Headers
+
+The headers of a message are `Headers`: fields of a name and a value, in the order they were sent or received, where a
+name may have several values, e.g. a `Set-Cookie` for each cookie, which can't be joined in one header. Names are looked
+up without case. `headerValue(name)` of a message is the first value of a header, or null, and `headerValues(name)` all
+of them. The constructors and `create(..)` methods taking a `Map<String, String>` make headers of one value per name,
+and `Headers.builder()` makes them a field at a time. Headers are immutable, so a header is added to or replaced in a
+copy, e.g. by a forwarder:
+
+```java
+request.headers().with("Authorization", "Bearer " + token)  // replaces any value of the header
+response.headers().plus("Set-Cookie", "b=2")                // adds a value after any the header has
+request.headers().without("Cookie")                         // removes every value of the header
+```
+
+A message is stored in the event log as its start line, a line per value of a header, and its body. Messages are equal
+if their headers have the same values for each name, compared without case, with the values of a name in order.
+
 ## Finding the requests of a process
 
 Every request is indexed by the id of the entity which dispatched it, `ProcessReferenced`, and a batched request also

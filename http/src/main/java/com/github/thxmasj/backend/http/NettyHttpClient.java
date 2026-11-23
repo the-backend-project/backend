@@ -1,13 +1,10 @@
 package com.github.thxmasj.backend.http;
 
-import static java.util.stream.Collectors.toMap;
-
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.http.HttpMethod;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.function.Supplier;
 import reactor.core.publisher.Mono;
 
@@ -49,14 +46,14 @@ public class NettyHttpClient implements HttpClient {
             .map(body -> new HttpResponse<>(
                     httpClientResponse.status().code(),
                     httpClientResponse.status().reasonPhrase(),
-                    httpClientResponse.responseHeaders().entries().stream().collect(toMap(Entry::getKey, Entry::getValue)),
+                    Headers.ofEntries(httpClientResponse.responseHeaders().entries()),
                     body
                 )
             )
           .defaultIfEmpty(new HttpResponse<>(
               httpClientResponse.status().code(),
               httpClientResponse.status().reasonPhrase(),
-              httpClientResponse.responseHeaders().entries().stream().collect(toMap(Entry::getKey, Entry::getValue))
+              Headers.ofEntries(httpClientResponse.responseHeaders().entries())
           ))
         )
         .single()
