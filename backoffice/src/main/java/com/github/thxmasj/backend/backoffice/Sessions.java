@@ -437,10 +437,10 @@ final class Sessions {
                 )
                 .otherwise(
                     // The secret is kept in the browser, and only its hash and its nonce in the event log
-                    onEvent(SignInStarted).to(States.SigningIn).masked(Start::stored)
+                    onEvent(SignInStarted).to(States.SigningIn)
                         .assemble(c -> tuple(c.input(), c.log().entityId()))
                         .trigger(ReplyCreated).with(d -> signInPage(d.t1(), d.t2())).on(Request).identifiedBy(entityIdFromSession())
-                        .output(d -> d.t1().t1()),
+                        .outputWithMask(d -> d.t1().t1(), Start::stored),
                     Optional::get
                 ),
             // Signing out without a session
@@ -460,10 +460,10 @@ final class Sessions {
                 .otherwise(
                     // The outbox tells the session the response, which then answers the browser. The code and the secret,
                     // which is the one of the cookie, are given the outbox request, and masked in the event log.
-                    onEvent(CodeRedemptionRequested).to(States.Redeeming).masked(Callback::stored)
+                    onEvent(CodeRedemptionRequested).to(States.Redeeming)
                         .assemble(c -> tuple(new Redemption(c.input().code(), c.input().secret()), DispatchContext.of(c), c.input()))
                         .trigger(tokenRequests.requestDispatched()).withReactive(d -> tokenRequests.input(d.t2(), d.t1())).on(tokenRequests.outbox()).identifiedBy(newEntityId())
-                        .output(d -> d.t1().t3()),
+                        .outputWithMask(d -> d.t1().t3(), Callback::stored),
                     Tuple2::t1
                 )
         ),
@@ -566,10 +566,10 @@ final class Sessions {
     return onEvent(CallbackReceived).toSelf()
         .assembleInput()
         .otherwise(
-            onEvent(CallbackRefused).toSelf().masked(Callback::stored)
+            onEvent(CallbackRefused).toSelf()
                 .assembleInput()
                 .trigger(ReplyCreated).with(_ -> page(400, "Sign-in failed", "The sign-in has already been used. Please sign in again.", "Sign in again")).on(Request).identifiedBy(entityIdFromSession())
-                .output(Tuple2::t1),
+                .outputWithMask(Tuple2::t1, Callback::stored),
             d -> d
         );
   }

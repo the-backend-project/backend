@@ -321,7 +321,7 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
   ) {
     return Map.of(
         Begin, List.of(
-            onEvent(shape.requestDispatched()).to(InFlight).masked(d -> tuple(shape.maskedRequest(d.t1()), d.t2()))
+            onEvent(shape.requestDispatched()).to(InFlight)
                 .assemble(c -> tuple(
                     c.input(),
                     c.triggerEvent(), // process id
@@ -335,8 +335,8 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
 
                 .trigger(shape.forward()).with(d -> toHttpRequest(d.t1().t1(), shape.requestPayloadType()))
                 .trigger(TimeoutExpired).after(_ -> shape.inflightTimeout())
-                .output(d -> tuple(d.t1().t1(), d.t1().t2().entityId())),
-            onEvent(shape.batchedRequestDispatched()).to(InFlight).masked(d -> tuple(shape.maskedRequest(d.t1()), d.t2()))
+                .outputWithMask(d -> tuple(d.t1().t1(), d.t1().t2().entityId()), d -> tuple(shape.maskedRequest(d.t1()), d.t2())),
+            onEvent(shape.batchedRequestDispatched()).to(InFlight)
                 .assemble(c -> tuple(
                     c.input().request(),
                     c.triggerEvent(), // process id
@@ -356,7 +356,7 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
 
                 .trigger(shape.forward()).with(d -> toHttpRequest(d.t1().t1().t1(), shape.requestPayloadType()))
                 .trigger(TimeoutExpired).after(_ -> shape.inflightTimeout())
-                .output(d -> tuple(d.t1().t1().t1(), d.t1().t1().t2().entityId()))
+                .outputWithMask(d -> tuple(d.t1().t1().t1(), d.t1().t1().t2().entityId()), d -> tuple(shape.maskedRequest(d.t1()), d.t2()))
         ),
         InFlight, list(
             rollbackOnUnknownModel != null ?
@@ -411,43 +411,43 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
                         .when(shape.rules().isAccepted())
                         .then(
                             shape.callbacks().onSuccess() != null ?
-                                onEvent(shape.requestAccepted()).to(Accepted).masked(shape::maskedResponse)
+                                onEvent(shape.requestAccepted()).to(Accepted)
                                     .assembleInput()
                                     .trigger(shape.callbacks().onSuccess().eventType())
                                     .with(shape.callbacks().onSuccess().dataAdapter())
                                     .on(shape.processModel())
                                     .identifiedBy(entityIdFromSession())
-                                    .output(d -> d.t1()) :
-                                onEvent(shape.requestAccepted()).to(Accepted).masked(shape::maskedResponse)
+                                    .outputWithMask(d -> d.t1(), shape::maskedResponse) :
+                                onEvent(shape.requestAccepted()).to(Accepted)
                                     .assembleInput()
-                                    .output(d -> d)
+                                    .outputWithMask(d -> d, shape::maskedResponse)
                         )
                         .when(shape.rules().isRejected())
                         .then(
                             shape.callbacks().onFailure() != null ?
-                                onEvent(shape.validResponseAndRejected()).to(Failed).masked(shape::maskedResponse)
+                                onEvent(shape.validResponseAndRejected()).to(Failed)
                                     .assembleInput()
                                     .trigger(shape.callbacks().onFailure().eventType())
                                     .with(shape.callbacks().onFailure().dataAdapter())
                                     .on(shape.processModel())
                                     .identifiedBy(entityIdFromSession())
-                                    .output(d -> d.t1()) :
-                                onEvent(shape.validResponseAndRejected()).to(Failed).masked(shape::maskedResponse)
+                                    .outputWithMask(d -> d.t1(), shape::maskedResponse) :
+                                onEvent(shape.validResponseAndRejected()).to(Failed)
                                     .assembleInput()
-                                    .output(d -> d)
+                                    .outputWithMask(d -> d, shape::maskedResponse)
                         )
                         .otherwise(
                             shape.callbacks().onValidResponseUnknown() != null ?
-                                onEvent(shape.validResponseAndUnknown()).to(Unknown).masked(shape::maskedResponse)
+                                onEvent(shape.validResponseAndUnknown()).to(Unknown)
                                     .assembleInput()
                                     .trigger(shape.callbacks().onValidResponseUnknown().eventType())
                                     .with(shape.callbacks().onValidResponseUnknown().dataAdapter())
                                     .on(shape.processModel())
                                     .identifiedBy(entityIdFromSession())
-                                    .output(d -> d.t1()) :
-                                onEvent(shape.validResponseAndUnknown()).to(Unknown).masked(shape::maskedResponse)
+                                    .outputWithMask(d -> d.t1(), shape::maskedResponse) :
+                                onEvent(shape.validResponseAndUnknown()).to(Unknown)
                                     .assembleInput()
-                                    .output(d -> d)
+                                    .outputWithMask(d -> d, shape::maskedResponse)
                         ),
                     d -> HttpResponse.create(
                         d.t1().statusCode(),
@@ -461,29 +461,29 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
                         .when(shape.rules().isRejectedByInvalidResponse())
                         .then(
                             shape.callbacks().onInvalidResponseRejection() != null ?
-                                onEvent(shape.invalidResponseAndRejected()).to(Failed).masked(shape.masking()::mask)
+                                onEvent(shape.invalidResponseAndRejected()).to(Failed)
                                     .assembleInput()
                                     .trigger(shape.callbacks().onInvalidResponseRejection().eventType())
                                     .with(shape.callbacks().onInvalidResponseRejection().dataAdapter())
                                     .on(shape.processModel())
                                     .identifiedBy(entityIdFromSession())
-                                    .output(d -> d.t1().t1()) :
-                                onEvent(shape.invalidResponseAndRejected()).to(Failed).masked(shape.masking()::mask)
+                                    .outputWithMask(d -> d.t1().t1(), shape.masking()::mask) :
+                                onEvent(shape.invalidResponseAndRejected()).to(Failed)
                                     .assembleInput()
-                                    .output(d -> d.t1())
+                                    .outputWithMask(d -> d.t1(), shape.masking()::mask)
                         )
                         .otherwise(
                             shape.callbacks().onInvalidResponseUnknown() != null ?
-                                onEvent(shape.invalidResponseAndUnknown()).to(Unknown).masked(shape.masking()::mask)
+                                onEvent(shape.invalidResponseAndUnknown()).to(Unknown)
                                     .assembleInput()
                                     .trigger(shape.callbacks().onInvalidResponseUnknown().eventType())
                                     .with(shape.callbacks().onInvalidResponseUnknown().dataAdapter())
                                     .on(shape.processModel())
                                     .identifiedBy(entityIdFromSession())
-                                    .output(d -> d.t1().t1()) :
-                                onEvent(shape.invalidResponseAndUnknown()).to(Unknown).masked(shape.masking()::mask)
+                                    .outputWithMask(d -> d.t1().t1(), shape.masking()::mask) :
+                                onEvent(shape.invalidResponseAndUnknown()).to(Unknown)
                                     .assembleInput()
-                                    .output(d -> d.t1())
+                                    .outputWithMask(d -> d.t1(), shape.masking()::mask)
                         ),
                     d -> tuple(d.t1(), d.t2().invalidReason())
                 )

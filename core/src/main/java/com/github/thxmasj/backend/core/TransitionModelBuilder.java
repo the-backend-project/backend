@@ -261,17 +261,6 @@ public class TransitionModelBuilder<I, T, O> {
       return new WithToState<>(modelContext.withSeverity(requireNonNull(severity, "severity is null")));
     }
 
-    /// Masks the output of the transition when its event is stored, e.g. to keep a secret or bulky data out of the
-    /// event log. The event in the transaction has the whole output: the transition's triggers, the one who triggered
-    /// the event, and the transitions of the same transaction reading the entity's log see it. The event log stores the
-    /// masked output, which is what a later transaction reads of a stored entity, also one of the same session, so the
-    /// state of the entity must not depend on what is masked.
-    /// A transition which chooses another one stores the event of the chosen transition, with the mask declared on that
-    /// one.
-    public WithToState<I, O> masked(UnaryOperator<O> mask) {
-      return new WithToState<>(modelContext.withMask(requireNonNull(mask, "mask is null")));
-    }
-
     public <T> TransitionModelBuilder<I, T, O> assemble(BiFunction<I, EventLog, T> assembler) {
       return new TransitionModelBuilder<>(
           modelContext,
@@ -444,6 +433,11 @@ public class TransitionModelBuilder<I, T, O> {
 
       public TransitionModel<I, O> output(Function<Tuple2<T, ProcessResult<O1>>, O> f) {
         return complete().output(f);
+      }
+
+      /// The output, masked when the event is stored, see [TransitionModelBuilder#outputWithMask(Function, UnaryOperator)]
+      public TransitionModel<I, O> outputWithMask(Function<Tuple2<T, ProcessResult<O1>>, O> f, UnaryOperator<O> mask) {
+        return complete().outputWithMask(f, mask);
       }
 
       public TransitionModel<I, O> output() {
@@ -861,6 +855,18 @@ public class TransitionModelBuilder<I, T, O> {
             )
         )))))
     );
+  }
+
+  /// The output of the transition, masked when its event is stored, e.g. to keep a secret or bulky data out of the event
+  /// log. The event in the transaction has the whole output: the transition's triggers, the one who triggered the
+  /// event, and the transitions of the same transaction reading the entity's log see it. The event log stores the
+  /// masked output, which is what a later transaction reads of a stored entity, also one of the same session, so the
+  /// state of the entity must not depend on what is masked. A transition which chooses another one stores the event of
+  /// the chosen transition, with the mask of that one.
+  ///
+  /// @param mask gives the output as it is stored, or null for no data
+  public TransitionModel<I, O> outputWithMask(Function<T, O> f, UnaryOperator<O> mask) {
+    return new TransitionModelBuilder<>(modelContext.withMask(requireNonNull(mask, "mask is null")), builderFunction).output(f);
   }
 
   /// The event of the transition with the output, stored masked if the transition has a mask

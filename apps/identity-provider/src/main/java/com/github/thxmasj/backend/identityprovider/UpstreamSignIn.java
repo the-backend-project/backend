@@ -120,10 +120,10 @@ final class UpstreamSignIn {
                     callback -> new Outcome(callback.authorization(), null, new Failure("server_error", "The sign-in has expired, or was started in another browser"))
                 )
                 .otherwise(
-                    onEvent(UpstreamCodeRedemptionRequested).to(States.Redeeming).masked(Redeeming::stored)
+                    onEvent(UpstreamCodeRedemptionRequested).to(States.Redeeming)
                         .assemble(c -> tuple(new Redemption(c.input().upstreamCode(), c.input().secret()), DispatchContext.of(c), c.input()))
                         .trigger(tokenRequests.requestDispatched()).withReactive(d -> tokenRequests.input(d.t2(), d.t1())).on(tokenRequests.outbox()).identifiedBy(newEntityId())
-                        .output(d -> d.t1().t3()),
+                        .outputWithMask(d -> d.t1().t3(), Redeeming::stored),
                     UpstreamSignIn::redeeming
                 )
         ),

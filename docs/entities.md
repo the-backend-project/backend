@@ -149,8 +149,9 @@ tested, drawn in the state diagrams and told the [monitoring](monitoring.md), wi
   entity which doesn't exist, and claim an id for good. The state machine refuses both when it is created. An inbox
   request which is [not stored](http-inbox.md#requests-not-stored) is one, and isn't indexed by the entity of the
   application.
-* **A masked event** is stored with its output masked: `.masked(mask)` on a transition, after `to(...)`, gives the
-  output as it is stored. The event in the transaction has the whole output, which its triggers, the one who triggered
+* **A masked event** is stored with its output masked: `.outputWithMask(dataAdapter, mask)` ends a transition like
+  `.output(dataAdapter)`, and its `mask` gives the output as it is stored. A transition without an output has nothing
+  to mask, so it has no mask. The event in the transaction has the whole output, which its triggers, the one who triggered
   it and the transitions of the same transaction see, while the event log has the masked one. A later transaction, also
   one of the same [session](#sessions), reads a stored entity from the event log, masked. The [inbox](http-inbox.md#masking) masks the credentials of the requests it stores this way.
 
@@ -159,7 +160,9 @@ tested, drawn in the state diagrams and told the [monitoring](monitoring.md), wi
 EventType<View, Page> PageViewed = BasicEventType.notStored("Page viewed", UUID.fromString("..."), DataType.json(View.class), DataType.json(Page.class));
 
 // A secret kept in the browser, of which the event log only has the hash
-onEvent(SignInStarted).to(States.SigningIn).masked(Start::withoutSecret)
+onEvent(SignInStarted).to(States.SigningIn)
+    .assembleInput()
+    .outputWithMask(start -> start, Start::withoutSecret)
 ```
 
 What isn't stored can't be read back, so it must be something the entity doesn't need later: the state it is in, a

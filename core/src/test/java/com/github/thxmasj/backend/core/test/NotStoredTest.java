@@ -152,7 +152,7 @@ public class NotStoredTest {
                 .trigger(AccountTouched).after(_ -> Duration.ofMillis(100))
                 .when(_ -> true).then(onEvent(TouchScheduledQuietly).toSelf().output(), d -> null)
                 .otherwise(onEvent(AccountTouched).toSelf().output(), d -> null),
-            onEvent(PasswordSet).toSelf().masked(_ -> "***").assembleInput().output(d -> d),
+            onEvent(PasswordSet).toSelf().assembleInput().outputWithMask(d -> d, _ -> "***"),
             onEvent(PageViewed).toSelf()
                 .assemble(c -> c.log().entityId())
                 .trigger(ViewRecorded).with(id -> id).on(Views).identifiedBy(newEntityId())
