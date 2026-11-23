@@ -12,6 +12,7 @@ import com.github.thxmasj.backend.http.AccessTokenSupplier;
 import com.github.thxmasj.backend.http.NettyHttpClient;
 import com.github.thxmasj.backend.http.NettyHttpClientBuilder;
 import com.github.thxmasj.backend.core.test.Init;
+import com.github.thxmasj.backend.http.JdkHttpClient;
 import com.github.thxmasj.backend.http.inbox.Form;
 import com.github.thxmasj.backend.http.inbox.HttpInbox;
 import com.github.thxmasj.backend.http.inbox.Secrets;
@@ -120,7 +121,8 @@ public class IdentityProviderTest {
         tokenLifetime,
         new Keys(Keys.generate(), issuer, null, Clock.systemUTC()),
         IdentityProvider.upstream(upstreamConfig, issuer),
-        importedClients.stream().collect(java.util.stream.Collectors.toMap(ImportedClient::clientId, ImportedClient::secretHash))
+        importedClients.stream().collect(java.util.stream.Collectors.toMap(ImportedClient::clientId, ImportedClient::secretHash)),
+        new JdkHttpClient()
     );
     stateMachine = Init.stateMachine(schema, inbox.entityModels());
     IdentityProvider.bootstrap(stateMachine, inbox, new BootstrapClient(adminId, adminSecret));
@@ -588,15 +590,18 @@ public class IdentityProviderTest {
     assertThat(userInfo.propertyNames()).containsExactly("sub");
   }
 
-  /// A callback sent again, with the same code of the upstream provider and the same cookie, gets no second code, as the
-  /// authorization no longer waits for the user, though the upstream code isn't redeemed again within a minute
+  /// The code of the upstream provider is redeemed once by a sign-in. A callback sent again, with the same code and the
+  /// same cookie, redeems it again, which the upstream provider refuses, and gets no second code.
   @Test
   public void whenCallbackIsSentAgainThenItIsRefused() throws Exception {
     registerWebApp("replayed");
+    int before = upstream.tokenRequests.get();
     signIn("replayed", "openid email", null);
+    assertThat(upstream.tokenRequests.get()).isEqualTo(before + 1);
     HttpResponse<String> again = send(lastCallback);
     assertThat(again.statusCode()).as(again.body()).isEqualTo(400);
     assertThat(again.headers().firstValue("Location")).isEmpty();
+    assertThat(upstream.tokenRequests.get()).isEqualTo(before + 2);
   }
 
   @Test

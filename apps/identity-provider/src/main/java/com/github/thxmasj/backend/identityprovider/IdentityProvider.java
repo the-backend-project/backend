@@ -9,6 +9,7 @@ import com.github.thxmasj.backend.core.StateMachine;
 import com.github.thxmasj.backend.core.database.DataSourceBuilder;
 import com.github.thxmasj.backend.core.database.Database;
 import com.github.thxmasj.backend.http.HttpResponse;
+import com.github.thxmasj.backend.http.JdkHttpClient;
 import com.github.thxmasj.backend.http.inbox.HttpInbox;
 import com.github.thxmasj.backend.http.inbox.HttpInboxListener;
 import com.github.thxmasj.backend.http.inbox.OpenIdConnectClient;
@@ -120,7 +121,7 @@ public final class IdentityProvider {
   /// @param upstream the client of the provider users sign in with, or null if users can't sign in
   static HttpInbox inbox(Config config, Keys keys, OpenIdConnectClient upstream) {
     var importedSecretHashes = config.clients().stream().collect(toMap(ImportedClient::clientId, ImportedClient::secretHash));
-    return Inbox.inbox(config.tokenLifetime(), keys, upstream, importedSecretHashes);
+    return Inbox.inbox(config.tokenLifetime(), keys, upstream, importedSecretHashes, new JdkHttpClient());
   }
 
   /// @param inbox the inbox of the identity provider, see [#inbox(Config, Keys, OpenIdConnectClient)]

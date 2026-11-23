@@ -298,10 +298,13 @@ var client = new OpenIdConnectClient(new OpenIdConnectClient.Config(
     "openid email profile",
     URI.create("https://app.example.com/callback")
 ));
-// A sign-in: redirect the user, and keep the secret in a cookie
+// A sign-in: redirect the user, and keep the secret in a cookie, and its nonce in the entity of the sign-in
 Mono<URI> url = client.authorizationUrl(state, secret);
-// The callback: redeem the code, and get the verified claims of the ID token
-Mono<JWTClaimsSet> claims = client.redeem(code, secret);
+String nonce = OpenIdConnectClient.nonce(secret);
+// The callback: the token request redeeming the code, which an at-most-once outbox request sends
+Mono<HttpRequest<String>> tokenRequest = client.tokenRequest(code, secret);
+// The response the outbox tells: the verified claims of the ID token
+Mono<JWTClaimsSet> claims = client.verifyWithNonce(tokenResponse, nonce);
 ```
 
 - The endpoints are found by [OpenID Connect Discovery](https://openid.net/specs/openid-connect-discovery-1_0.html)
@@ -310,13 +313,14 @@ Mono<JWTClaimsSet> claims = client.redeem(code, secret);
 - The secret of a sign-in, e.g. of `Secrets.generate()`, is kept in the browser the sign-in was started in. The PKCE
   verifier (S256) and the nonce are derived from it, which binds the sign-in to that browser. A secret which is not a
   valid PKCE verifier, 43 to 128 characters of letters, digits and `-._~`, fails the sign-in at once.
-- `redeem` sends the token request with the HTTP client of the JDK. As a code can be redeemed only once, the same
-  code and secret redeemed again within a minute get the result of the first redemption, so a transition redeeming
-  it can be calculated again, e.g. after a concurrent change of its entity. To send it otherwise, e.g. by an
-  at-most-once [outbox](http-outbox.md#masking), take the request from `tokenRequest(code, secret)` and verify the
-  response with `verify(tokenResponse, secret)`, or, in the later session the outbox gives the response in, with
-  `verifyWithNonce(tokenResponse, nonce)`, as the nonce, `OpenIdConnectClient.nonce(secret)`, can be stored, unlike
-  the secret.
+- A code can be redeemed only once, so send the token request of `tokenRequest(code, secret)` by an at-most-once
+  [outbox](http-outbox.md#masking) request, masking the code and the verifier of its form and the body of its response.
+  The outbox sends it once the transition dispatching it is stored, so a transition calculated again, e.g. after a
+  concurrent change of its entity, doesn't redeem the code twice. Verify the response with
+  `verifyWithNonce(tokenResponse, nonce)` in the transaction the outbox tells it in, where the secret isn't known, as
+  the nonce, `OpenIdConnectClient.nonce(secret)`, can be stored, unlike the secret, or with
+  `verify(tokenResponse, secret)` where it is. `JdkHttpClient` sends the requests of an outbox with the HTTP client of
+  the JDK, e.g. in a native image.
 - A confidential client authenticates with its secret by HTTP Basic, a public client without a secret sends its
   `client_id` instead.
 - The ID token must be signed with RS256, ES256 or PS256 by a key of the provider, issued by the provider for the client,
@@ -329,7 +333,7 @@ Mono<JWTClaimsSet> claims = client.redeem(code, secret);
 The sign-in is not an authorizer of inbox requests, like `bearerToken`: an authorizer checks one request, while a
 sign-in takes several, redirecting the user, keeping a secret in a cookie, and redeeming the code. It is done in the
 transitions of an entity, such as the backoffice's sessions, which keep the secret, the code and the tokens out of the
-event log by [masking](#masking) and by redeeming the code in the transition of the callback.
+event log by [masking](#masking), and redeem the code by an at-most-once outbox request.
 
 ## Keeping secrets and bulky data out of the event log
 

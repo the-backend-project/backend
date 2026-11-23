@@ -17,7 +17,9 @@ import com.github.thxmasj.backend.core.TransitionModelBuilder.TransitionContext;
 import com.github.thxmasj.backend.core.Validated;
 import com.github.thxmasj.backend.http.HttpDataType;
 import com.github.thxmasj.backend.http.HttpRequest.Method;
+import com.github.thxmasj.backend.http.HttpClient;
 import com.github.thxmasj.backend.http.HttpRequest;
+import com.github.thxmasj.backend.http.JdkHttpClient;
 import com.github.thxmasj.backend.http.HttpResponse;
 import com.github.thxmasj.backend.http.Masking;
 import com.github.thxmasj.backend.http.inbox.Form;
@@ -181,9 +183,9 @@ public interface Inbox {
         .build("AuthorizationHttpRequest", UUID.fromString("709a9c55-28ab-4aaf-83b6-b5755fc4c50b"));
   }
 
-  /// The user returning from the upstream provider, `GET /callback`, whose code is redeemed by an upstream sign-in of
-  /// the session only. The code of the upstream provider, the cookie and the redirect to the client with the code
-  /// generated for it are masked in the event log.
+  /// The user returning from the upstream provider, `GET /callback`, whose code is redeemed by an [UpstreamSignIn]. The
+  /// code of the upstream provider, the cookie and the redirect to the client with the code generated for it are
+  /// masked in the event log.
   static HttpInboxRequest<Authorizations.Callback> callbackHttpRequest(Endpoints endpoints, EntityModel upstreamSignIn) {
     return HttpInboxRequest
         .matching(m -> m.method() == Method.GET && m.uri().getPath().equals("/callback"))
@@ -223,7 +225,7 @@ public interface Inbox {
   /// The inbox of the identity provider for its entity models only, e.g. for a backoffice or a diagram. Its requests
   /// can't be served, as it has no keys.
   static HttpInbox inbox(Duration tokenLifetime) {
-    return inbox(tokenLifetime, new Endpoints(null, null, Map.of()), true);
+    return inbox(tokenLifetime, new Endpoints(null, null, Map.of()), new JdkHttpClient(), true);
   }
 
   /// The inbox of the identity provider, whose requests trigger events on the clients, the token requests, whose tokens
@@ -232,11 +234,12 @@ public interface Inbox {
   /// @param keys                 the keys tokens are signed and verified with
   /// @param upstream             the client of the provider users sign in with, or null if users can't sign in
   /// @param importedSecretHashes the BCrypt hashes of the secrets of the imported clients, by client id
-  static HttpInbox inbox(Duration tokenLifetime, Keys keys, OpenIdConnectClient upstream, Map<String, String> importedSecretHashes) {
-    return inbox(tokenLifetime, new Endpoints(keys, upstream, importedSecretHashes), upstream != null);
+  /// @param forwarder            the HTTP client the token requests to the upstream provider are sent with
+  static HttpInbox inbox(Duration tokenLifetime, Keys keys, OpenIdConnectClient upstream, Map<String, String> importedSecretHashes, HttpClient forwarder) {
+    return inbox(tokenLifetime, new Endpoints(keys, upstream, importedSecretHashes), forwarder, upstream != null);
   }
 
-  private static HttpInbox inbox(Duration tokenLifetime, Endpoints endpoints, boolean signIn) {
+  private static HttpInbox inbox(Duration tokenLifetime, Endpoints endpoints, HttpClient forwarder, boolean signIn) {
     EntityModel tokenRequest = Tokens.tokenRequest(tokenLifetime);
     // In the order they are matched in, as the first matching one takes a request
     var requests = new ArrayList<HttpInboxRequest<?>>(List.of(
@@ -248,7 +251,7 @@ public interface Inbox {
     if (signIn)
       requests.addAll(List.of(
           authorizationHttpRequest(endpoints),
-          callbackHttpRequest(endpoints, Authorizations.upstreamSignIn(endpoints.upstream())),
+          callbackHttpRequest(endpoints, new UpstreamSignIn(endpoints.upstream(), forwarder).model()),
           userInfoHttpRequest(tokenRequest, endpoints)
       ));
     return HttpInbox.of(requests);

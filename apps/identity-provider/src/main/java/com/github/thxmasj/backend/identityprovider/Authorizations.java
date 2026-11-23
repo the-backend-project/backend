@@ -13,7 +13,6 @@ import static com.github.thxmasj.backend.identityprovider.Clients.ClientIdClaime
 import com.github.thxmasj.backend.core.BasicEventType;
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EntityModel;
-import com.github.thxmasj.backend.core.EntitySelector;
 import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.IdEntityModel;
 import com.github.thxmasj.backend.core.Severity;
@@ -21,8 +20,6 @@ import com.github.thxmasj.backend.core.State;
 import com.github.thxmasj.backend.core.StateMachine.ProcessResult;
 import com.github.thxmasj.backend.core.TransitionModel;
 import com.github.thxmasj.backend.core.Tuples.Tuple2;
-import com.github.thxmasj.backend.http.inbox.OpenIdConnectClient;
-import com.github.thxmasj.backend.http.inbox.Secrets;
 import com.github.thxmasj.backend.identityprovider.Clients.Registration;
 import com.github.thxmasj.backend.identityprovider.Inbox.Redirect;
 import com.github.thxmasj.backend.identityprovider.Inbox.Reply;
@@ -34,16 +31,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import reactor.core.publisher.Mono;
 
 /// Sign-in with the OpenID Connect authorization code flow. Every authorization request is an entity of its own, which
 /// records the request of the client, the user who signed in, and the redemption of the code issued to the client.
 ///
 /// Users sign in with an upstream OpenID Connect provider, to which they are redirected when the request is started
 /// here. The entity id of the authorization is the `state` given the upstream provider, so the user returning from it
-/// is routed to the authorization. The user returns to the callback, where an [#upstreamSignIn(OpenIdConnectClient)],
-/// an entity of the session only, redeems the code of the upstream provider, so its code and tokens never enter the
-/// event log, and passes the user it signed in on to the authorization. The code issued to the client is generated
+/// is routed to the authorization. The user returns to the callback, where an [UpstreamSignIn] redeems the code of the
+/// upstream provider by an at-most-once outbox request, with its code and tokens masked in the event log, and passes
+/// the user it signed in on to the authorization. The code issued to the client is generated
 /// for the request, and only its hash enters the event log, as an id of the authorization, so the token endpoint finds
 /// the authorization by it. The code itself is only in the redirect to the client, which the event log masks.
 public interface Authorizations {
@@ -286,20 +282,53 @@ public interface Authorizations {
   /// @param upstreamCode  the code of the upstream provider, or null if the user didn't sign in
   /// @param upstreamError the error of the upstream provider, or null
   /// @param secret        the secret of the sign-in, from the cookie of the browser it was started in
-  /// @param code          the code generated for the client
-  record Callback(UUID authorization, String upstreamCode, String upstreamError, String secret, String code) {}
+  record Callback(UUID authorization, String upstreamCode, String upstreamError, String secret) {}
+
+  /// The code of the upstream provider dispatched to be redeemed, of which only the authorization and the nonce are
+  /// stored
+  ///
+  /// @param nonce the nonce the ID token must have, derived from the secret, which the response of the token request is
+  ///              verified against, as the secret isn't stored
+  record Redeeming(UUID authorization, String nonce, String upstreamCode, String secret) {
+
+    /// The redemption as stored, without the code and the secret
+    Redeeming stored() {
+      return new Redeeming(authorization, nonce, null, null);
+    }
+
+  }
 
   /// What the upstream provider said: that the user signed in, that the user didn't, or neither, if its response was
   /// invalid
   record Outcome(UUID authorization, SignIn signIn, Failure failure) {}
 
-  enum SignInStates implements State {Redeemed}
+  enum SignInStates implements State {Redeeming, Redeemed}
 
+  /// The user returned from the upstream provider. It is never stored, as one of its outcomes always is.
   EventType<Callback, Void> CallbackReceived = BasicEventType.of(
       "Callback received",
       UUID.fromString("4e1b7c9a-2d5f-4a83-b6e0-9c3f1a7d5e28"),
       DataType.json(Callback.class),
       DataType.none()
+  );
+  /// The code of the upstream provider dispatched to be redeemed by an at-most-once outbox request
+  EventType<Redeeming, Redeeming> UpstreamCodeRedemptionRequested = BasicEventType.of(
+      "Upstream code redemption requested",
+      UUID.fromString("7c2e9a4f-1b6d-4f83-a5c0-8e3d2b7f1a64"),
+      DataType.json(Redeeming.class)
+  );
+  /// The response of the upstream provider to the token request, as the outbox tells it, with the tokens of the user.
+  /// It is never stored, as one of its outcomes always is.
+  EventType<String, Void> UpstreamTokenReceived = BasicEventType.of(
+      "Upstream token received",
+      UUID.fromString("e4a1c7d3-9f2b-4e65-b8d0-3a6f1c9e5b27"),
+      DataType.string(),
+      DataType.none()
+  );
+  /// The token request failed, e.g. as the upstream provider refused the code or couldn't be reached
+  EventType<Void, Void> UpstreamTokenRequestFailed = BasicEventType.of(
+      "Upstream token request failed",
+      UUID.fromString("2f8b5d1e-6c3a-4b97-9e04-7d1a5c8f3b62")
   );
   EventType<Outcome, Void> UpstreamUserSignedIn = BasicEventType.of(
       "Upstream user signed in",
@@ -318,65 +347,9 @@ public interface Authorizations {
   /// unknown or no longer waits for the user
   EventType<Void, Void> SignInUnanswerable = BasicEventType.of("Sign-in unanswerable", UUID.fromString("2a7e4c1b-8f3d-4e95-b6a2-0d9c5f7e1b34"));
 
-  /// The sign-ins with the upstream provider at the callback, which are entities of the session only, so that the code
-  /// and the tokens of the upstream provider, and the secret of the sign-in, never enter the event log. Only the user
-  /// signed in, or the failure, is passed on to the authorization.
-  static EntityModel upstreamSignIn(OpenIdConnectClient upstream) {
-    return EntityModel.notStored("Upstream sign-in", UUID.fromString("9f2d6b8e-3a1c-4e57-b9d4-6c0a2e8f1b73"), () -> signInTransitions(upstream));
-  }
-
-  private static Map<State, List<TransitionModel<?, ?>>> signInTransitions(OpenIdConnectClient upstream) {
-    return Map.of(
-        Begin, List.of(
-            onEvent(CallbackReceived).to(SignInStates.Redeemed)
-                .assembleReactive(c -> outcome(upstream, c.input()))
-                .when(o -> o.signIn() != null).then(passOn(UpstreamUserSignedIn, UserAuthenticated, Outcome::signIn), o -> o)
-                .when(o -> o.failure() != null).then(passOn(UpstreamSignInFailed, UserAuthenticationFailed, Outcome::failure), o -> o)
-                .otherwise(unanswerable(), _ -> null)
-        ),
-        SignInStates.Redeemed, List.of()
-    );
-  }
-
-  /// Passes the outcome on to the authorization, which answers the user. One it can't be passed on to is answered with
-  /// an error page.
-  private static <T> TransitionModel<Outcome, Void> passOn(EventType<Outcome, Void> type, EventType<T, ?> event, java.util.function.Function<Outcome, T> data) {
-    return onEvent(type).to(SignInStates.Redeemed)
-        .assembleInput()
-        .trigger(event).with(data).on(Authorization).identifiedBy(o -> EntitySelector.entityId(o.authorization()))
-        // isRejected() marks a rejected event as handled
-        .when(d -> d.t2().isRejected() || !d.t2().isAccepted()).then(unanswerable(), _ -> null)
-        .otherwise(onEvent(SignInPassedOn).to(SignInStates.Redeemed).output(), _ -> null);
-  }
-
-  private static TransitionModel<Void, Void> unanswerable() {
-    return onEvent(SignInUnanswerable).to(SignInStates.Redeemed)
-        .trigger(Inbox.ReplyCreated).with(_ -> new Reply(400, "{}")).on(Request).identifiedBy(entityIdFromSession())
-        .output();
-  }
-
-  /// Redeems the code of the upstream provider, unless it returned an error
-  private static Mono<Outcome> outcome(OpenIdConnectClient upstream, Callback callback) {
-    UUID authorization = callback.authorization();
-    if (callback.upstreamError() != null || callback.upstreamCode() == null) {
-      // The error of the upstream provider is passed on only if it is one of the known ones, which are short
-      String error = callback.upstreamError() != null && upstreamErrors.contains(callback.upstreamError()) ? callback.upstreamError() : "server_error";
-      return Mono.just(new Outcome(authorization, null, new Failure(error, "The sign-in failed at the identity provider: " + error)));
-    }
-    return upstream.redeem(callback.upstreamCode(), callback.secret())
-        .map(Authorizations::user)
-        .map(user -> user.subject() == null ?
-            new Outcome(authorization, null, null) :
-            new Outcome(authorization, new SignIn(user, Secrets.hash(callback.code()), callback.code()), null))
-        .onErrorResume(e -> {
-          System.err.println("Sign-in with the upstream provider failed for authorization " + authorization + ": " + e);
-          return Mono.just(new Outcome(authorization, null, new Failure("server_error", "The sign-in with the identity provider failed")));
-        });
-  }
-
   /// The user of the claims of the upstream ID token. The upstream provider's code and tokens never enter the event
   /// log, only these claims.
-  private static User user(JWTClaimsSet claims) {
+  static User user(JWTClaimsSet claims) {
     try {
       return new User(
           claims.getSubject(),

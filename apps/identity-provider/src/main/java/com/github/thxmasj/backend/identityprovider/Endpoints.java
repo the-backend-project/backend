@@ -307,8 +307,8 @@ final class Endpoints {
       case 200 -> {
         String authorization = DataType.objectMapper.readTree(response.body()).get("authorization").asString();
         String secret = Secrets.generate();
-        // The upstream provider is discovered by the constructor, and its discovery is remembered, so the URL is there
-        // at once, on this thread
+        // The upstream provider is discovered by the constructor, before any request, and its discovery is kept, so the
+        // URL is there at once, on this thread, whatever the timing
         URI url = upstream.authorizationUrl(authorization, secret).toFuture().getNow(null);
         if (url == null)
           throw new IllegalStateException("The upstream provider is not discovered");
@@ -343,8 +343,7 @@ final class Endpoints {
     return null;
   }
 
-  /// The return of the user from the upstream provider, with the code generated for the client, which only its
-  /// redirect to the client has
+  /// The return of the user from the upstream provider
   static Validated<Authorizations.Callback> callback(HttpRequest<byte[]> request) {
     Map<String, String> query = query(request);
     String authorization = query.get("state");
@@ -352,8 +351,7 @@ final class Endpoints {
         UUID.fromString(authorization),
         query.get("code"),
         query.get("error"),
-        Cookies.value(request.headerValue("Cookie"), cookiePrefix + authorization),
-        Secrets.generate()
+        Cookies.value(request.headerValue("Cookie"), cookiePrefix + authorization)
     ));
   }
 
