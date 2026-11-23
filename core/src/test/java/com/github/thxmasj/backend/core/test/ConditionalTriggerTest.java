@@ -14,6 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.github.thxmasj.backend.core.BasicEventType;
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntitySelector;
 import com.github.thxmasj.backend.core.EventLog;
 import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.IndexEntityModel;
@@ -35,8 +36,13 @@ public class ConditionalTriggerTest {
 
   enum BatchStates implements State {Open, Waiting, Closed}
 
+  enum CheckStates implements State {Done}
+
   static EntityModel Order = EntityModel.of("Order", UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b01"), ConditionalTriggerTest::orderTransitions);
   static EntityModel Batch = EntityModel.of("Batch", UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b02"), ConditionalTriggerTest::batchTransitions);
+  /// A check of a batch, which is not stored, so it is an entity of the session only. Its conditional trigger is on the
+  /// batch, which is stored, and must be deleted as it fires.
+  static EntityModel Check = EntityModel.notStored("Check", UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b10"), ConditionalTriggerTest::checkTransitions);
   static EventType<UUID, UUID> orderReferenced = IndexEntityModel.referenceEventType(
       "Order referenced",
       UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b03")
@@ -100,6 +106,18 @@ public class ConditionalTriggerTest {
       UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b0e")
   );
 
+  static EventType<UUID, UUID> CheckRequestedWhenShipped = BasicEventType.of(
+      "Check requested when shipped",
+      UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b11"),
+      DataType.uuid()
+  );
+  /// Its data is the id of the batch checked
+  static EventType<UUID, UUID> CheckRun = BasicEventType.of(
+      "Check run",
+      UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b12"),
+      DataType.uuid()
+  );
+
   private String schema;
   private EventsByEntityId eventsByEntityId;
 
@@ -110,7 +128,7 @@ public class ConditionalTriggerTest {
   }
 
   private static List<EntityModel> entityModels() {
-    return List.of(Order, Batch, Index);
+    return List.of(Order, Batch, Index, Check);
   }
 
   private static Map<State, List<TransitionModel<?, ?>>> orderTransitions() {
@@ -156,6 +174,15 @@ public class ConditionalTriggerTest {
                 .trigger(BatchNoted).on(Batch).identifiedBy(entityIdFromSession())
                 .output(),
             onEvent(BatchNoted).toSelf().output(),
+            onEvent(CheckRequestedWhenShipped).toSelf()
+                .assemble(c -> tuple(c.input(), c.log().entityId()))
+                .trigger(CheckRun)
+                .when(orderReferenced, t -> t.t1())
+                .is(OrderShipped)
+                .with(t -> t.t2())
+                .on(Check)
+                .identifiedBy(EntitySelector.newEntityId())
+                .output(),
             onEvent(SessionBatchCloseRequestedWhenShipped).to(BatchStates.Waiting)
                 .assemble(c -> c.input())
                 .trigger(BatchClosed)
@@ -181,10 +208,22 @@ public class ConditionalTriggerTest {
   }
 
 
+  private static Map<State, List<TransitionModel<?, ?>>> checkTransitions() {
+    return Map.<State, List<TransitionModel<?, ?>>>of(
+        Begin, List.of(
+            onEvent(CheckRun).to(CheckStates.Done)
+                .assemble(c -> c.input())
+                .trigger(BatchNoted).with(_ -> null).on(Batch).identifiedBy(batchId -> entityId(batchId))
+                .output()
+        ),
+        CheckStates.Done, List.of()
+    );
+  }
+
   private EventLog batchLog(UUID batchId) {
     return eventsByEntityId.execute(
         Batch,
-        List.of(BatchOpened, BatchCloseRequestedWhenShipped, SessionBatchCloseRequestedWhenShipped, BatchCloseRequestedWhenShippedOrCancelled, BatchCheckRequestedWhenShipped, BatchNoted, BatchClosed),
+        List.of(BatchOpened, CheckRequestedWhenShipped, BatchCloseRequestedWhenShipped, SessionBatchCloseRequestedWhenShipped, BatchCloseRequestedWhenShippedOrCancelled, BatchCheckRequestedWhenShipped, BatchNoted, BatchClosed),
         batchId
     ).block();
   }
@@ -224,6 +263,25 @@ public class ConditionalTriggerTest {
     awaitBatchEvents(machine, batch.entityId(), 3);
     assertEquals(3, batchEventCount(machine, batch.entityId()));
     assertEquals(0, conditionalTriggerCount());
+  }
+
+  /// A conditional trigger on an entity of the session only, as its model is not stored, is deleted as it fires, rather
+  /// than firing again
+  @Test
+  public void conditionalTriggerOnAnEntityOfTheSessionOnlyIsDeleted() throws Exception {
+    var machine = stateMachine(UUID.randomUUID().toString());
+    UUID key = UUID.randomUUID();
+    var order = machine.onEvent(trigger(OrderCreated, Order), key).blockFirst();
+    var batch = machine.onEvent(trigger(BatchOpened, Batch)).blockFirst();
+    machine.onEvent(trigger(CheckRequestedWhenShipped, Batch, batch.entityId()), key).blockFirst();
+    assertEquals(1, conditionalTriggerCount());
+
+    machine.onEvent(trigger(OrderShipped, Order, order.entityId())).blockFirst();
+    // The check notes the batch once, which is stored
+    awaitBatchEvents(machine, batch.entityId(), 3);
+    assertEquals(0, conditionalTriggerCount());
+    Thread.sleep(2500);
+    assertEquals(3, batchEventCount(machine, batch.entityId()));
   }
 
   @Test

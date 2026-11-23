@@ -143,14 +143,10 @@ public final class IdentityProvider {
     return new Keys(config.signingKeys(), config.issuer(), config.audience(), clock);
   }
 
-  /// The client of the upstream provider, which is discovered at once, so that the identity provider fails to start
-  /// if the upstream provider is misconfigured or can't be reached
+  /// The client of the upstream provider, which the endpoints discover when they are created, so that the identity
+  /// provider fails to start if the upstream provider is misconfigured or can't be reached
   static OpenIdConnectClient upstream(Config.Upstream upstream, URI issuer) {
-    var client = new OpenIdConnectClient(upstream.client(issuer));
-    client.discover()
-        .onErrorMap(e -> new IllegalStateException("The upstream provider of UPSTREAM_ISSUER can't be used: " + e.getMessage(), e))
-        .block();
-    return client;
+    return new OpenIdConnectClient(upstream.client(issuer));
   }
 
   /// Serves the inbox, whose requests handle the credentials themselves, so it has no filter in front of it

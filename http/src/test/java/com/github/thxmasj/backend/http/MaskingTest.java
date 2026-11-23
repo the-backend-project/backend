@@ -44,6 +44,18 @@ public class MaskingTest {
     assertEquals("***", new String(masking.mask(json).body(), UTF_8));
   }
 
+  /// The form fields of the requests don't mask a response which isn't a form, e.g. a page or a JSON body
+  @Test
+  public void formFieldsLeaveAResponseWhichIsntAFormAsItIs() {
+    var masking = Masking.CREDENTIALS.andFormFields("code");
+    var json = new HttpResponse<>(200, "OK", Map.of("Content-Type", "application/json", "Set-Cookie", "s=1"), "{\"code\":\"abc\"}".getBytes(UTF_8));
+    var stored = masking.mask(json);
+    assertEquals("{\"code\":\"abc\"}", new String(stored.body(), UTF_8));
+    assertEquals("***", stored.headerValue("Set-Cookie"));
+    assertEquals(false, masking.appliesTo(new HttpResponse<>(200, "OK", Map.of("Content-Type", "text/html"), "<p>".getBytes(UTF_8))));
+    assertEquals("code=***", new String(masking.mask(new HttpResponse<>(200, "OK", form, "code=abc".getBytes(UTF_8))).body(), UTF_8));
+  }
+
   @Test
   public void aParameterWhoseNameCantBeDecodedIsMaskedAsAWhole() {
     var request = new HttpRequest<>(Method.POST, URI.create("/token"), form, "a=1&%zz=2".getBytes(UTF_8));

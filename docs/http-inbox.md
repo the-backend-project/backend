@@ -360,6 +360,10 @@ What is masked is replaced by `***` in the event log, e.g. `GET /callback?state=
 transitions see the whole request: the content parser, the authorizer and the process read the code and the cookie,
 and the application's response is sent to the client as it gave it, with its `Set-Cookie`.
 
+Form fields are masked in the bodies of requests and responses declared `application/x-www-form-urlencoded`. The body
+of a request which isn't declared a form is masked as a whole, as the client may have sent the fields with another
+content type by mistake, while that of a response which isn't a form, e.g. a JSON body or a page, is stored as it is.
+
 As the event log only has the masked request, a retried request with the same message id is compared with the first
 one after masking both: a retry may differ from the first request in its credentials, e.g. in a refreshed access token.
 An inbox request which masks more of its requests than their credentials, e.g. a query parameter, can't have

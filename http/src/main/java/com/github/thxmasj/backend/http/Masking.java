@@ -30,8 +30,9 @@ import java.util.stream.Stream;
 ///                        without case
 /// @param queryParameters the names of the query parameters of a request whose values are masked
 /// @param formFields      the names of the fields of an `application/x-www-form-urlencoded` body whose values are
-///                        masked, in requests and responses. A body which isn't declared a form is masked as a
-///                        whole, as it may have the fields all the same.
+///                        masked, in requests and responses. The body of a request which isn't declared a form is
+///                        masked as a whole, as the client may have sent the fields all the same, while that of a
+///                        response is masked only if it is a form, e.g. not a JSON or HTML response.
 /// @param wholeResponseBody whether the body of a response is masked as a whole, e.g. one with a token
 public record Masking(Set<String> headers, Set<String> queryParameters, Set<String> formFields, boolean wholeResponseBody) {
 
@@ -110,14 +111,16 @@ public record Masking(Set<String> headers, Set<String> queryParameters, Set<Stri
   public HttpRequest<byte[]> mask(HttpRequest<byte[]> request) {
     if (request == null || !appliesTo(request))
       return request;
-    return new HttpRequest<>(request.method(), maskQuery(request.uri()), maskHeaders(request.headers()), maskForm(request));
+    return new HttpRequest<>(request.method(), maskQuery(request.uri()), maskHeaders(request.headers()), maskFormOrWhole(request));
   }
 
   /// The response as it is stored, with what is masked replaced by [#MASK]
   public HttpResponse<byte[]> mask(HttpResponse<byte[]> response) {
     if (response == null || !appliesTo(response))
       return response;
-    byte[] body = wholeResponseBody && response.body() != null ? MASK.getBytes(UTF_8) : maskForm(response);
+    byte[] body = wholeResponseBody && response.body() != null ? MASK.getBytes(UTF_8)
+        : isForm(response) ? maskForm(response.body())
+        : response.body();
     return new HttpResponse<>(response.statusCode(), response.reasonPhrase(), maskHeaders(response.headers()), body);
   }
 
@@ -134,7 +137,7 @@ public record Masking(Set<String> headers, Set<String> queryParameters, Set<Stri
   public boolean appliesTo(HttpResponse<?> response) {
     return hasMaskedHeader(response.headers())
         || (wholeResponseBody && response.body() != null)
-        || (!formFields.isEmpty() && response.body() != null);
+        || (!formFields.isEmpty() && response.body() != null && isForm(response));
   }
 
   /// Whether this masking masks more of requests than the other one does: other headers, or query parameters or form
@@ -189,14 +192,19 @@ public record Masking(Set<String> headers, Set<String> queryParameters, Set<Stri
     );
   }
 
-  /// The body with the form fields masked. A body which isn't declared a form is masked as a whole, as it may have the
-  /// fields all the same, e.g. sent with another content type by mistake.
-  private byte[] maskForm(HttpMessage<byte[]> message) {
-    byte[] body = message.body();
+  /// The body of the request with the form fields masked. A body which isn't declared a form is masked as a whole, as
+  /// it may have the fields all the same, e.g. sent with another content type by mistake.
+  private byte[] maskFormOrWhole(HttpRequest<byte[]> request) {
+    if (formFields.isEmpty() || request.body() == null || isForm(request))
+      return maskForm(request.body());
+    return MASK.getBytes(UTF_8);
+  }
+
+  /// The form body with the form fields masked. Only called for a request or response declared a form, as one which
+  /// isn't has no form fields to mask.
+  private byte[] maskForm(byte[] body) {
     if (formFields.isEmpty() || body == null)
       return body;
-    if (!isForm(message))
-      return MASK.getBytes(UTF_8);
     return maskParameters(new String(body, UTF_8), formFields).getBytes(UTF_8);
   }
 

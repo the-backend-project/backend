@@ -980,7 +980,12 @@ public class StateMachine implements AutoCloseable {
     return initial;
   }
 
+  /// Whether the change is stored. The deletion of the trigger which fired the transaction always is, as the trigger is
+  /// stored whatever its entity, which may be one of the session only, e.g. of a model not stored, and would otherwise
+  /// fire again.
   private static boolean isStored(Change change, Set<EntityKey> sessionOnly) {
+    if (change.firedTrigger() != null)
+      return true;
     if (sessionOnly.contains(EntityKey.of(change)))
       return false;
     return change.newEvent() == null || change.newEvent().type().stored();

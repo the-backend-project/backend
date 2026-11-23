@@ -588,6 +588,17 @@ public class IdentityProviderTest {
     assertThat(userInfo.propertyNames()).containsExactly("sub");
   }
 
+  /// A callback sent again, with the same code of the upstream provider and the same cookie, gets no second code, as the
+  /// authorization no longer waits for the user, though the upstream code isn't redeemed again within a minute
+  @Test
+  public void whenCallbackIsSentAgainThenItIsRefused() throws Exception {
+    registerWebApp("replayed");
+    signIn("replayed", "openid email", null);
+    HttpResponse<String> again = send(lastCallback);
+    assertThat(again.statusCode()).as(again.body()).isEqualTo(400);
+    assertThat(again.headers().firstValue("Location")).isEmpty();
+  }
+
   @Test
   public void whenCodeIsRedeemedTwiceThenInvalidGrant() throws Exception {
     String secret = registerWebApp("twice");
@@ -841,6 +852,9 @@ public class IdentityProviderTest {
     assertThat(parameters).containsEntry("error", error).containsEntry("state", state).doesNotContainKey("code");
   }
 
+  /// The last request to the callback a browser sent, with its cookies, to send again
+  private static HttpRequest lastCallback;
+
   /// Where a browser ends up: redirected to the app, or shown a page
   private record Landing(URI location, HttpResponse<String> page) {}
 
@@ -852,6 +866,8 @@ public class IdentityProviderTest {
       var request = HttpRequest.newBuilder(uri).GET();
       if (uri.getPort() == issuer.getPort() && !cookies.isEmpty())
         request.header("Cookie", String.join("; ", cookies.entrySet().stream().map(e -> e.getKey() + "=" + e.getValue()).toList()));
+      if (uri.getPort() == issuer.getPort() && uri.getPath().equals("/callback"))
+        lastCallback = request.build();
       HttpResponse<String> response = send(request.build());
       for (String setCookie : response.headers().allValues("Set-Cookie")) {
         String pair = setCookie.split(";")[0];

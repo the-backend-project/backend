@@ -51,7 +51,7 @@ public record EventLog(
   public <T> T last(DataType<T> dataType) {
     T result = effectiveEvents().reversed().stream()
         .filter(e -> dataType.equals(e.type().outputDataType()))
-        .map(e -> ((Event<T>)e).getUnmarshalledData())
+        .map(e -> EventLog.<T>data(e))
         .findFirst()
         .orElseThrow(() -> new NoSuchElementException("last(" + dataType.name() + ")"));
     return result;
@@ -73,7 +73,7 @@ public record EventLog(
   public final <T> T one(EventType<?, T>... eventTypes) {
     return effectiveEvents().stream()
         .filter(e -> Stream.of(eventTypes).map(EventType::id).toList().contains(e.type().id()))
-        .map(e -> ((Event<T>)e).getUnmarshalledData())
+        .map(e -> EventLog.<T>data(e))
         .findFirst()
         .orElseThrow();
   }
@@ -81,14 +81,14 @@ public record EventLog(
   public <T> Optional<T> oneIfExists(EventType<?, T> eventType) {
     return effectiveEvents().stream()
         .filter(e -> Stream.of(eventType).map(EventType::id).toList().contains(e.type().id()))
-        .map(e -> ((Event<T>)e).getUnmarshalledData())
+        .map(e -> EventLog.<T>data(e))
         .findFirst();
   }
 
   public <T> T last(EventType<?, T> eventType) {
     return effectiveEvents().reversed().stream()
         .filter(e -> e.type().id().equals(eventType.id()))
-        .map(e -> ((Event<T>)e).getUnmarshalledData())
+        .map(e -> EventLog.<T>data(e))
         .findFirst()
         .orElseThrow(() -> new NoSuchElementException("last(" + eventType.name() + ")"));
   }
@@ -96,14 +96,14 @@ public record EventLog(
   public <T> Optional<T> lastIfExists(EventType<?, T> eventType) {
     return effectiveEvents().reversed().stream()
         .filter(e -> e.type().id().equals(eventType.id()))
-        .map(e -> ((Event<T>)e).getUnmarshalledData())
+        .map(e -> EventLog.<T>data(e))
         .findFirst();
   }
 
   public <T> List<T> all(EventType<?, T> eventType) {
     return effectiveEvents().stream()
         .filter(e -> e.type().id().equals(eventType.id()))
-        .map(e -> ((Event<T>)e).getUnmarshalledData())
+        .map(e -> EventLog.<T>data(e))
         .toList();
   }
 
@@ -117,7 +117,7 @@ public record EventLog(
   }
 
   public long count(EventType<?, ?> eventType) {
-    return all(eventType).size();
+    return effectiveEvents().stream().filter(e -> e.type().id().equals(eventType.id())).count();
   }
 
   public boolean exists(EventType<?, ?> eventType) {
@@ -161,8 +161,9 @@ public record EventLog(
   }
 
 
-  /// The data of the event, as it is stored, unmarshalled for each reader, except for a masked event of the transaction,
-  /// whose whole data is only the one the transaction has
+  /// The data of the event, as it is stored, unmarshalled for each reader, so that one changing it doesn't change what
+  /// the others read, except for a masked event of the transaction, whose whole data is only the one the transaction
+  /// has. Every accessor of the data reads it by this.
   @SuppressWarnings("unchecked")
   private static <T> T data(Event<?> event) {
     Event<T> typed = (Event<T>) event;

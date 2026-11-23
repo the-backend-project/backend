@@ -57,10 +57,16 @@ final class Endpoints {
   private final Map<String, String> importedSecretHashes;
 
   /// @param keys     the signing keys, or null for an inbox only giving its entity models
-  /// @param upstream the client of the provider users sign in with, or null if users can't sign in
+  /// @param upstream the client of the provider users sign in with, or null if users can't sign in. It is discovered
+  ///                 here, if it isn't already, as the response to an authorization request is created at once with
+  ///                 the URL of the provider, so it blocks until the provider has answered, or fails if it can't be used.
   Endpoints(Keys keys, OpenIdConnectClient upstream, Map<String, String> importedSecretHashes) {
     this.keys = keys;
     this.upstream = upstream;
+    if (upstream != null && keys != null)
+      upstream.discover()
+          .onErrorMap(e -> new IllegalStateException("The upstream provider of UPSTREAM_ISSUER can't be used: " + e.getMessage(), e))
+          .block();
     this.metadata = keys != null ? metadata(keys, upstream != null) : null;
     this.importedSecretHashes = Map.copyOf(importedSecretHashes);
   }
@@ -161,10 +167,10 @@ final class Endpoints {
   /// The request to the token endpoint, which is always valid, as a refusal is answered by the token requests. One
   /// which isn't authenticated is answered at once, and doesn't get here.
   Validated<TokenEndpointRequest> tokenEndpointRequest(HttpRequest<byte[]> request) {
-    Tokens.Refusal unauthenticated = unauthenticated(request);
-    if (unauthenticated != null)
-      return valid(new TokenEndpointRequest(unauthenticated, null, null));
-    String[] credentials = basicCredentials(request.headerValue("Authorization")).orElseThrow();
+    Optional<String[]> basic = basicCredentials(request.headerValue("Authorization"));
+    if (!Masking.isForm(request) || basic.isEmpty())
+      return valid(new TokenEndpointRequest(unauthenticated(request), null, null));
+    String[] credentials = basic.get();
     String clientId = credentials[0];
     Map<String, String> form;
     try {
@@ -301,7 +307,8 @@ final class Endpoints {
       case 200 -> {
         String authorization = DataType.objectMapper.readTree(response.body()).get("authorization").asString();
         String secret = Secrets.generate();
-        // The upstream provider is discovered when the identity provider starts, so the URL is there at once
+        // The upstream provider is discovered by the constructor, and its discovery is remembered, so the URL is there
+        // at once, on this thread
         URI url = upstream.authorizationUrl(authorization, secret).toFuture().getNow(null);
         if (url == null)
           throw new IllegalStateException("The upstream provider is not discovered");

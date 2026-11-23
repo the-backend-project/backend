@@ -152,10 +152,9 @@ public final class OpenIdConnectClient {
   /// How long a redemption is remembered, see [#redeem(String, String)]
   private static final Duration redemptionMemory = Duration.ofMinutes(1);
 
-  /// A redemption of a code with a secret, by the hash of the two, and when it was started
-  private record Redemption(Mono<JWTClaimsSet> result, long startedAt) {}
-
-  private final Map<String, Redemption> redemptions = new ConcurrentHashMap<>();
+  /// The redemptions of the last minute, by the hash of the code and the secret. Each is forgotten a minute after it
+  /// started, or as soon as it fails.
+  private final Map<String, Mono<JWTClaimsSet>> redemptions = new ConcurrentHashMap<>();
 
   /// Redeems the code the user returned with, by sending the [token request][#tokenRequest(String, String)] with the
   /// HTTP client of the JDK, and [verifies][#verify(String, String)] the response. Fails if the code is refused or the
@@ -165,19 +164,19 @@ public final class OpenIdConnectClient {
   /// the first redemption, rather than a refusal of the provider: a transition redeeming the code may be calculated
   /// again, e.g. after a concurrent change of its entity. A redemption which failed is not remembered, so it is tried
   /// again.
+  ///
+  /// The provider therefore doesn't see a code used again within the minute, e.g. a callback the browser sends twice.
+  /// The application must refuse a sign-in it has already completed by its own state, as the identity provider's
+  /// authorization does, which no longer waits for the user once it has been answered.
   public Mono<JWTClaimsSet> redeem(String code, String secret) {
-    long now = System.nanoTime();
-    redemptions.values().removeIf(r -> now - r.startedAt() > redemptionMemory.toNanos());
     String key = Secrets.hash(code + "\n" + secret);
     return redemptions.computeIfAbsent(key, _ -> {
-      var redemption = new AtomicReference<Redemption>();
+      var redemption = new AtomicReference<Mono<JWTClaimsSet>>();
       // A redemption which failed is forgotten, as the failure may be of the moment, e.g. the provider out of reach
-      redemption.set(new Redemption(
-          redeemed(code, secret).doOnError(_ -> redemptions.remove(key, redemption.get())).cache(),
-          now
-      ));
+      redemption.set(redeemed(code, secret).doOnError(_ -> redemptions.remove(key, redemption.get())).cache());
+      Mono.delay(redemptionMemory).subscribe(_ -> redemptions.remove(key, redemption.get()));
       return redemption.get();
-    }).result();
+    });
   }
 
   private Mono<JWTClaimsSet> redeemed(String code, String secret) {
