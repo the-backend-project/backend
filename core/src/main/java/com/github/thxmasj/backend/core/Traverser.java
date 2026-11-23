@@ -48,8 +48,10 @@ class Traverser {
       for (var transition : fromState) {
         requireStoredEventOfConditionalTrigger(transition);
         requireAtMostOneDelayedTrigger(transition, 0);
-        if (mayBeOfAnEntityOfTheSessionOnly(reachedBySessionOnly, from, transition))
+        if (mayBeOfAnEntityOfTheSessionOnly(reachedBySessionOnly, from, transition)) {
           requireNoLaterTrigger(transition);
+          requireNoIdOrIndex(transition);
+        }
       }
     });
   }
@@ -97,6 +99,24 @@ class Traverser {
 
   /// An entity of the session only is not found after its session, so its transitions, and those they may choose, can't
   /// have delayed or conditional triggers, which fire in a session of their own
+  /// An entity of the session only is never stored, so an id or index event, by which an entity is found later, would
+  /// point to an entity which doesn't exist, and an id would be claimed for good. Its transitions, and those they may
+  /// choose, therefore can't trigger events on an id or index model.
+  private void requireNoIdOrIndex(TransitionModel<?, ?> transition) {
+    for (var trigger : transition.triggers())
+      if (trigger.entityModel() instanceof IdEntityModel || trigger.entityModel() instanceof IndexEntityModel)
+        throw new IllegalArgumentException(String.format(
+            "The transition on %s may be of an entity of the session only, which is never stored, so it can't trigger %s " +
+                "on the %s model %s, which would point to an entity which doesn't exist",
+            transition.eventType().name(),
+            trigger.eventSpec().eventType().name(),
+            trigger.entityModel() instanceof IdEntityModel ? "id" : "index",
+            trigger.entityModel().name()
+        ));
+    for (var filter : transition.filters())
+      requireNoIdOrIndex(filter.alternative().model());
+  }
+
   private void requireNoLaterTrigger(TransitionModel<?, ?> transition) {
     boolean conditional = transition.triggers().stream().anyMatch(trigger -> trigger.condition() != null);
     if (conditional || !transition.delayedEventTypes().isEmpty())

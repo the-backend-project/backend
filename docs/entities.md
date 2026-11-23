@@ -144,8 +144,11 @@ tested, drawn in the state diagrams and told the [monitoring](monitoring.md), wi
   entity model whose `stored()` is false, e.g. one of `EntityModel.notStored(name, id, transitions)`. None of its
   events are stored, whatever their types, so its transitions may go to any state, also on events not stored. The
   [session](#sessions) finds it among the events of its transactions, but no other session does, so it can't have
-  delayed or conditional triggers, which fire in a session of their own: the change fails if it has one. An inbox request which is
-  [not stored](http-inbox.md#requests-not-stored) is one.
+  delayed or conditional triggers, which fire in a session of their own: the change fails if it has one. Nor can its
+  transitions trigger events on an id or index model (`IdEntityModel`, `IndexEntityModel`), which would point to an
+  entity which doesn't exist, and claim an id for good. The state machine refuses both when it is created. An inbox
+  request which is [not stored](http-inbox.md#requests-not-stored) is one, and isn't indexed by the entity of the
+  application.
 * **A masked event** is stored with its output masked: `.masked(mask)` on a transition, after `to(...)`, gives the
   output as it is stored. The event in the transaction has the whole output, which its triggers, the one who triggered
   it and the transitions of the same transaction see, while the event log has the masked one. A later transaction, also

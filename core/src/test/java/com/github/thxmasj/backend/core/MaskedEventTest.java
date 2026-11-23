@@ -112,8 +112,8 @@ public class MaskedEventTest {
   @SuppressWarnings({"unchecked", "rawtypes"})
   static EventType<ArrayList<String>, ArrayList<String>> Scanned = BasicEventType.of("Scanned", UUID.fromString("2b4d6f8a-0c1e-4a3c-95e7-a9cbedf10b46"), (DataType) DataType.json(ArrayList.class));
 
-  /// Each reader of the log gets the data of its own, which it may change, except of a masked event of the
-  /// transaction, whose whole data is only the one the transaction has
+  /// Each reader of the log gets the data of its own, which it may change, also of a masked event of the transaction,
+  /// whose whole data it gets
   @Test
   public void eachReaderOfTheLogGetsTheDataOfItsOwn() {
     var event = new Event<>(UUID.randomUUID(), 1, Scanned, ZonedDateTime.now(), new ArrayList<>(List.of("a")));
@@ -122,5 +122,20 @@ public class MaskedEventTest {
     assertEquals(List.of("a"), log.one(Scanned));
     var masked = new Event<>(UUID.randomUUID(), 1, PasswordSet, ZonedDateTime.now(), "hunter2", _ -> "***");
     assertEquals("hunter2", new EventLog(Account, masked.entityId(), List.of(masked)).one(PasswordSet));
+  }
+
+  static IdEntityModel AccountIds = IdEntityModel.of("Account ids", UUID.fromString("4d6f8a0c-2e1b-4c5e-a7c9-ebdf1f3b5d79"), PasswordSet);
+
+  /// An entity of the session only is never stored, so it can't claim an id or be indexed, which would point to an
+  /// entity which doesn't exist, while a stored one can
+  @Test
+  public void aTransitionOfAnEntityOfTheSessionOnlyCantTriggerAnIdOrIndexEvent() {
+    var claiming = onEvent(Touched).to(States.Open)
+        .assemble(c -> c.log().entityId())
+        .trigger(PasswordSet).with(_ -> "id").on(AccountIds).identifiedBy(EntitySelector::entityId)
+        .output();
+    var e = assertThrows(IllegalArgumentException.class, () -> new Traverser(Map.of(Begin, List.of(claiming), States.Open, List.of()), false));
+    assertTrue(e.getMessage().contains("can't trigger Password set on the id model Account ids"), e.getMessage());
+    assertDoesNotThrow(() -> new Traverser(Map.of(Begin, List.of(claiming), States.Open, List.of()), true));
   }
 }
