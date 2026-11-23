@@ -39,8 +39,9 @@ class Traverser {
         .flatMap(transition -> leaves(transition).stream())
         .anyMatch(leaf -> !leaf.eventType().stored());
     transitions.forEach(this::requireUniquePaths);
+    requireReachableFromBegin();
     var reachedBySessionOnly = stored ? statesOfEntitiesOfTheSessionOnly() : transitions.keySet();
-    var reached = stored ? statesOfStoredEntities(reachedBySessionOnly) : Set.<State>of();
+    var reached = stored ? statesOfStoredEntities() : Set.<State>of();
     transitions.forEach((from, fromState) -> {
       if (reached.contains(from))
         requireNotStoredToSelf(from, fromState);
@@ -93,16 +94,45 @@ class Traverser {
       requireNoLaterTrigger(filter.alternative().model());
   }
 
-  /// The states an entity which is stored may be in: every state but `Begin`, except those which only entities of the
-  /// session only reach, which may be left by events not stored. An entity may be created otherwise than from `Begin`,
-  /// so a state isn't left out for not being reached from it.
-  private Set<State> statesOfStoredEntities(Set<State> reachedBySessionOnly) {
-    var reachedByStored = statesReachedFromBegin(EventType::stored);
-    var states = new HashSet<State>();
-    for (State state : transitions.keySet())
-      if (state != Begin && (reachedByStored.contains(state) || !reachedBySessionOnly.contains(state)))
-        states.add(state);
-    return states;
+  /// Every entity is created from `Begin`, as its state is found by replaying its events from there, so a state with
+  /// transitions which `Begin` doesn't lead to could never be left, and is refused, as is a model with transitions but
+  /// none from `Begin`
+  private void requireReachableFromBegin() {
+    if (transitions.values().stream().allMatch(List::isEmpty))
+      return;
+    if (transitions.getOrDefault(Begin, List.of()).isEmpty())
+      throw new IllegalArgumentException("The model has transitions, but none from Begin, from which every entity is created");
+    var reached = new HashSet<State>();
+    var toVisit = new ArrayDeque<State>(List.of(Begin));
+    while (!toVisit.isEmpty())
+      for (var transition : transitions.getOrDefault(toVisit.removeFirst(), List.of()))
+        for (State target : targets(transition))
+          if (reached.add(target))
+            toVisit.add(target);
+    for (var entry : transitions.entrySet())
+      if (entry.getKey() != Begin && !entry.getValue().isEmpty() && !reached.contains(entry.getKey()))
+        throw new IllegalArgumentException(String.format(
+            "State %s is not reached from Begin, from which every entity is created, so its transitions are never taken",
+            entry.getKey().name()
+        ));
+  }
+
+  /// The states the transition may lead to: those of the transitions it may choose, and its own, as a choice without
+  /// `otherwise` falls through to it (see #315)
+  private static List<State> targets(TransitionModel<?, ?> transition) {
+    var targets = new ArrayList<State>();
+    if (transition.toState() != null)
+      targets.add(transition.toState());
+    for (var filter : transition.filters())
+      targets.addAll(targets(filter.alternative().model()));
+    return targets;
+  }
+
+  /// The states an entity which is stored reaches: from `Begin` by the events stored, as one created by an event not
+  /// stored is an entity of the session only, and from there by any event. The states only entities of the session
+  /// reach may be left by events not stored.
+  private Set<State> statesOfStoredEntities() {
+    return statesReachedFromBegin(EventType::stored);
   }
 
   /// The states an entity of the session only of a stored model reaches: from `Begin` by the events not stored, which

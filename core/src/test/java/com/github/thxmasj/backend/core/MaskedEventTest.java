@@ -35,13 +35,16 @@ public class MaskedEventTest {
     assertEquals("***", new String(event.getMarshalledData()));
   }
 
+  /// The transition creating an account, from `Begin`, from which every entity is created
+  private static final TransitionModel<String, String> opening = onEvent(PasswordSet).to(States.Open).assembleInput().output(d -> d);
+
   @Test
   public void aTransitionOnAnEventNotStoredCantHaveAConditionalTrigger() {
     var conditional = onEvent(Viewed).toSelf()
         .assemble(c -> c.log().entityId())
         .trigger(Touched).when(PasswordSet, id -> id).is(Touched).with(_ -> null).on(Account).identifiedBy(EntitySelector::entityId)
         .output();
-    var e = assertThrows(IllegalArgumentException.class, () -> new Traverser(Map.of(Begin, List.of(), States.Open, List.of(conditional))));
+    var e = assertThrows(IllegalArgumentException.class, () -> new Traverser(Map.of(Begin, List.of(opening), States.Open, List.of(conditional))));
     assertTrue(e.getMessage().startsWith("The transition on Viewed has a conditional trigger, which refers to its event"), e.getMessage());
   }
 
@@ -53,7 +56,7 @@ public class MaskedEventTest {
         .trigger(Touched).when(PasswordSet, id -> id).is(Touched).with(_ -> null).on(Account).identifiedBy(EntitySelector::entityId)
         .when(_ -> true).then(onEvent(Viewed).toSelf().output(), _ -> null)
         .otherwise(onEvent(Touched).toSelf().output(), _ -> null);
-    var e = assertThrows(IllegalArgumentException.class, () -> new Traverser(Map.of(Begin, List.of(), States.Open, List.of(choosing))));
+    var e = assertThrows(IllegalArgumentException.class, () -> new Traverser(Map.of(Begin, List.of(opening), States.Open, List.of(choosing))));
     assertTrue(e.getMessage().contains("but the transition on Viewed, which it may choose, is not stored"), e.getMessage());
   }
 
@@ -65,13 +68,6 @@ public class MaskedEventTest {
     var e = assertThrows(IllegalArgumentException.class, () -> new Traverser(Map.of(Begin, List.of(delaying), States.Open, List.of()), false));
     assertTrue(e.getMessage().contains("can't have a delayed trigger"), e.getMessage());
     assertDoesNotThrow(() -> new Traverser(Map.of(Begin, List.of(delaying), States.Open, List.of()), true));
-  }
-
-  /// A stored model whose entities are created elsewhere, without transitions from `Begin`, may have delayed triggers
-  @Test
-  public void aStoredModelWithoutTransitionsFromBeginMayHaveDelayedTriggers() {
-    var delaying = onEvent(Touched).toSelf().trigger(Touched).after(_ -> java.time.Duration.ofMinutes(1)).output();
-    assertDoesNotThrow(() -> new Traverser(Map.of(States.Open, List.of(delaying)), true));
   }
 
   @Test

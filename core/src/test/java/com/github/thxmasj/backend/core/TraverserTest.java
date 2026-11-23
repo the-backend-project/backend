@@ -108,13 +108,20 @@ public class TraverserTest {
     assertTrue(e.getMessage().startsWith("Event type Viewed is not stored, but its transition from Accepted goes to Rejected"), e.getMessage());
   }
 
-  /// An entity created otherwise than from `Begin` is stored too, so its states are checked
+  /// Every entity is created from `Begin`, so a model without transitions from it, or with a state it doesn't lead to,
+  /// is refused
   @Test
-  public void anEventNotStoredChangingTheStateOfAStoredEntityNotReachedFromBeginIsRejected() {
-    var e = assertThrows(IllegalArgumentException.class, () -> new Traverser(Map.of(
+  public void aStateNotReachedFromBeginIsRejected() {
+    var noBegin = assertThrows(IllegalArgumentException.class, () -> new Traverser(Map.of(
         States.Accepted, List.of(onEvent(Viewed).to(States.Rejected).output())
     )));
-    assertTrue(e.getMessage().startsWith("Event type Viewed is not stored, but its transition from Accepted goes to Rejected"), e.getMessage());
+    assertTrue(noBegin.getMessage().startsWith("The model has transitions, but none from Begin"), noBegin.getMessage());
+    var unreached = assertThrows(IllegalArgumentException.class, () -> new Traverser(Map.of(
+        Begin, List.of(acceptance),
+        States.Accepted, List.of(),
+        States.Rejected, List.of(onEvent(Viewed).to(States.Requested).output())
+    )));
+    assertTrue(unreached.getMessage().startsWith("State Rejected is not reached from Begin"), unreached.getMessage());
   }
 
   @Test

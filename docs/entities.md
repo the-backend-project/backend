@@ -7,6 +7,10 @@ entity model, identified by a UUID. Its events are stored in its event log, and 
 events lead to from the initial state `Begin`. The event logs are the source of truth; see the
 [data model](data-model.md).
 
+Every entity is created by a transition from `Begin`, as its state is found by replaying its events from there. The
+state machine therefore refuses, when it is created, an entity model which has transitions but none from `Begin`, or a
+state with transitions which no transition from `Begin` leads to, as no entity could ever be in it.
+
 The transitions of an entity model are declared with `TransitionModelBuilder`. A transition is taken on an event of a
 type, assembles data from the event and the entity's event log, and can trigger events on other entities:
 
