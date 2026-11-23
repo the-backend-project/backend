@@ -431,13 +431,8 @@ public class TransitionModelBuilder<I, T, O> {
         return complete().reversible(reverseModel);
       }
 
-      public TransitionModel<I, O> output(Function<Tuple2<T, ProcessResult<O1>>, O> f) {
+      public TransitionModel.WithOutput<I, O> output(Function<Tuple2<T, ProcessResult<O1>>, O> f) {
         return complete().output(f);
-      }
-
-      /// The output, masked when the event is stored, see [TransitionModelBuilder#outputWithMask(Function, UnaryOperator)]
-      public TransitionModel<I, O> outputWithMask(Function<Tuple2<T, ProcessResult<O1>>, O> f, UnaryOperator<O> mask) {
-        return complete().outputWithMask(f, mask);
       }
 
       public TransitionModel<I, O> output() {
@@ -843,8 +838,9 @@ public class TransitionModelBuilder<I, T, O> {
     return unmodifiableList(l);
   }
 
-  public TransitionModel<I, O> output(Function<T, O> f) {
-    return new TransitionModel<>(
+  /// The transition with the output of the data adapter, which may be [masked][TransitionModel.WithOutput#masked]
+  public TransitionModel.WithOutput<I, O> output(Function<T, O> f) {
+    return new TransitionModel.WithOutput<>(
         modelContext,
         builderFunction.andThen(a -> a.flatMap(b -> step(b, () -> Mono.just(new OutputStep<>(
             b,
@@ -857,24 +853,15 @@ public class TransitionModelBuilder<I, T, O> {
     );
   }
 
-  /// The output of the transition, masked when its event is stored, e.g. to keep a secret or bulky data out of the event
-  /// log. The event in the transaction has the whole output: the transition's triggers, the one who triggered the
-  /// event, and the transitions of the same transaction reading the entity's log see it. The event log stores the
-  /// masked output, which is what a later transaction reads of a stored entity, also one of the same session, so the
-  /// state of the entity must not depend on what is masked. A transition which chooses another one stores the event of
-  /// the chosen transition, with the mask of that one.
-  ///
-  /// @param mask gives the output as it is stored, or null for no data
-  public TransitionModel<I, O> outputWithMask(Function<T, O> f, UnaryOperator<O> mask) {
-    return new TransitionModelBuilder<>(modelContext.withMask(requireNonNull(mask, "mask is null")), builderFunction).output(f);
-  }
-
-  /// The event of the transition with the output, stored masked if the transition has a mask
+  /// The event of the transition with the output, stored masked if the transition has a mask. The mask is that of the
+  /// transition calculated, which [TransitionModel.WithOutput#masked] adds after the output.
+  @SuppressWarnings("unchecked")
   private Event<O> event(InputStep<?> inputStep, O output) {
     int number = inputStep.log().lastEventNumber() + 1;
-    var event = modelContext.mask() == null ?
+    var mask = inputStep.transitionModel() != null ? ((TransitionModel<?, O>) inputStep.transitionModel()).mask() : modelContext.mask();
+    var event = mask == null ?
         Event.marshalledWhenAskedFor(inputStep.log().entityId(), number, modelContext.eventType(), inputStep.timestamp(), output) :
-        new Event<>(inputStep.log().entityId(), number, modelContext.eventType(), inputStep.timestamp(), output, modelContext.mask());
+        new Event<>(inputStep.log().entityId(), number, modelContext.eventType(), inputStep.timestamp(), output, mask);
     // An event which is stored is masked and marshalled in the step, so that a failure of either is one of the
     // transition, while one which isn't stored is never marshalled for storing
     if (modelContext.eventType().stored() && !inputStep.log().isSessionOnlyWith(event))

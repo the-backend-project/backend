@@ -90,7 +90,7 @@ public class MaskedEventTest {
     var event = new Event<>(UUID.randomUUID(), 1, PasswordSet, ZonedDateTime.now(), "hunter2", _ -> null);
     assertEquals(null, event.getMarshalledData());
     assertEquals("hunter2", event.getUnmarshalledData());
-    var built = onEvent(PasswordSet).toSelf().assembleInput().outputWithMask(d -> d, _ -> null);
+    var built = onEvent(PasswordSet).toSelf().assembleInput().output(d -> d).masked(_ -> null);
     assertEquals(PasswordSet, built.eventType());
   }
 

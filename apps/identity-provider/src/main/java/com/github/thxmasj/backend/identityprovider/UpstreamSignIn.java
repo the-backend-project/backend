@@ -123,7 +123,7 @@ final class UpstreamSignIn {
                     onEvent(UpstreamCodeRedemptionRequested).to(States.Redeeming)
                         .assemble(c -> tuple(new Redemption(c.input().upstreamCode(), c.input().secret()), DispatchContext.of(c), c.input()))
                         .trigger(tokenRequests.requestDispatched()).withReactive(d -> tokenRequests.input(d.t2(), d.t1())).on(tokenRequests.outbox()).identifiedBy(newEntityId())
-                        .outputWithMask(d -> d.t1().t3(), Redeeming::stored),
+                        .output(d -> d.t1().t3()).masked(Redeeming::stored),
                     UpstreamSignIn::redeeming
                 )
         ),

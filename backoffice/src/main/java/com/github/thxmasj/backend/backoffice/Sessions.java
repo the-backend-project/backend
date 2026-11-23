@@ -440,7 +440,7 @@ final class Sessions {
                     onEvent(SignInStarted).to(States.SigningIn)
                         .assemble(c -> tuple(c.input(), c.log().entityId()))
                         .trigger(ReplyCreated).with(d -> signInPage(d.t1(), d.t2())).on(Request).identifiedBy(entityIdFromSession())
-                        .outputWithMask(d -> d.t1().t1(), Start::stored),
+                        .output(d -> d.t1().t1()).masked(Start::stored),
                     Optional::get
                 ),
             // Signing out without a session
@@ -463,7 +463,7 @@ final class Sessions {
                     onEvent(CodeRedemptionRequested).to(States.Redeeming)
                         .assemble(c -> tuple(new Redemption(c.input().code(), c.input().secret()), DispatchContext.of(c), c.input()))
                         .trigger(tokenRequests.requestDispatched()).withReactive(d -> tokenRequests.input(d.t2(), d.t1())).on(tokenRequests.outbox()).identifiedBy(newEntityId())
-                        .outputWithMask(d -> d.t1().t3(), Callback::stored),
+                        .output(d -> d.t1().t3()).masked(Callback::stored),
                     Tuple2::t1
                 )
         ),
@@ -569,7 +569,7 @@ final class Sessions {
             onEvent(CallbackRefused).toSelf()
                 .assembleInput()
                 .trigger(ReplyCreated).with(_ -> page(400, "Sign-in failed", "The sign-in has already been used. Please sign in again.", "Sign in again")).on(Request).identifiedBy(entityIdFromSession())
-                .outputWithMask(Tuple2::t1, Callback::stored),
+                .output(Tuple2::t1).masked(Callback::stored),
             d -> d
         );
   }

@@ -14,6 +14,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.function.Function;
+import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import reactor.core.publisher.Mono;
@@ -43,6 +44,14 @@ public class TransitionModel<I, O> {
   @Override
   public String toString() {
     return String.format("onEvent(%s).to(%s)", (modelContext.eventType() != null ? modelContext.eventType().name() : "N/A") , modelContext.to() != null ? modelContext.to().name() : "<self>");
+  }
+
+  ModelContext<I, O> modelContext() {
+    return modelContext;
+  }
+
+  Function<Mono<InputStep<I>>, Mono<OutputStep<O>>> chain() {
+    return chain;
   }
 
   TransitionModel(
@@ -117,4 +126,31 @@ public class TransitionModel<I, O> {
   public List<Action<?>> actions() {
     return modelContext.actions();
   }
+
+  /// The mask of the output of the transition, or null if it isn't masked
+  UnaryOperator<O> mask() {
+    return modelContext.mask();
+  }
+
+  /// A transition with an output, which may be masked when its event is stored
+  public static final class WithOutput<I, O> extends TransitionModel<I, O> {
+
+    WithOutput(ModelContext<I, O> modelContext, Function<Mono<InputStep<I>>, Mono<OutputStep<O>>> chain) {
+      super(modelContext, chain);
+    }
+
+    /// The transition with its output masked when its event is stored, e.g. to keep a secret or bulky data out of the
+    /// event log. The event in the transaction has the whole output: the transition's triggers, the one who triggered
+    /// the event, and the transitions of the same transaction reading the entity's log see it. The event log stores
+    /// the masked output, which is what a later transaction reads of a stored entity, also one of the same session, so
+    /// the state of the entity must not depend on what is masked. A transition which chooses another one stores the
+    /// event of the chosen transition, with the mask of that one.
+    ///
+    /// @param mask gives the output as it is stored, or null for no data
+    public TransitionModel<I, O> masked(UnaryOperator<O> mask) {
+      return new TransitionModel<>(modelContext().withMask(Objects.requireNonNull(mask, "mask is null")), chain());
+    }
+
+  }
+
 }
