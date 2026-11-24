@@ -132,6 +132,8 @@ public class TraverserTest {
     assertTrue(e.getMessage().startsWith("The transition on Retried has a delayed trigger, and triggers Quietly retried"), e.getMessage());
     var quietWithoutDelay = onEvent(QuietlyRetried).toSelf().output();
     assertDoesNotThrow(() -> new Traverser(Map.of(Begin, List.of(acceptance), States.Accepted, List.of(delayedThenQuiet, quietWithoutDelay))));
+    // On another model, the two delayed triggers are on different entities
+    assertDoesNotThrow(() -> new Traverser(Map.of(Begin, List.of(acceptance), States.Accepted, List.of(delayedThenQuiet, quiet)), true, UUID.randomUUID()));
   }
 
   /// All the refusals of a model are reported together, so it is fixed in one go

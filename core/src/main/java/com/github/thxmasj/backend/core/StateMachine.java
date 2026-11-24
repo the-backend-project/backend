@@ -162,7 +162,7 @@ public class StateMachine implements AutoCloseable {
     List<EntityModel> models = resolved.entityModels();
     this.models = resolved;
     Debug.log("Supported entity models:\n" + models.stream().map(EntityModel::name).collect(joining("\n")));
-    this.traversers = models.stream().collect(toMap(m -> m, StateMachine::checkedTraverser));
+    this.traversers = checkedTraversers(models);
     this.eventTypesByEntityModel = resolved.eventTypesByEntityModel();
     this.delayer = delayer != null ? delayer : _ -> Mono.empty();
     if (schemaDataSource != null) {
@@ -210,14 +210,23 @@ public class StateMachine implements AutoCloseable {
     client.close();
   }
 
-  /// The traverser of the transitions of the model, which checks them, failing with the model named
-  private static Traverser checkedTraverser(EntityModel model) {
-    try {
-      return new Traverser(model.transitions(), model.stored());
-    } catch (IllegalArgumentException e) {
-      throw new IllegalArgumentException("The transitions of entity model " + model.name() + " are refused: " + e.getMessage(), e);
+  /// The traversers of the transitions of the models, which check them. Fails with the refusals of every model, each
+  /// named, so that the models are fixed in one go.
+  private static Map<EntityModel, Traverser> checkedTraversers(List<EntityModel> models) {
+    var traversers = new HashMap<EntityModel, Traverser>();
+    var refusals = new ArrayList<String>();
+    for (var model : models) {
+      try {
+        traversers.put(model, new Traverser(model.transitions(), model.stored(), model.id()));
+      } catch (IllegalArgumentException e) {
+        refusals.add("The transitions of entity model " + model.name() + " are refused: " + e.getMessage());
+      }
     }
+    if (!refusals.isEmpty())
+      throw new IllegalArgumentException(String.join("\n", refusals));
+    return traversers;
   }
+
 
     private EventLog emptyEventLog(EntityModel entityModel) {
     return new EventLog(entityModel, Identifiers.newId(), List.of());

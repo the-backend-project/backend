@@ -95,7 +95,7 @@ public class RollbackTest {
                     assemble((log, _) -> speedId(log))
                         .trigger(SpeedDecreased).on(Speed).identifiedBy(EntitySelector::entityId)
                 )
-                .output(),
+                .output(d -> d.t1()),
             onEvent(PacmanStopped).to(Stopped).output(),
             onEvent(PacmanCrashed).to(Dead).output()//,
             //onEvent(EventsRolledBack).toSelf().assembleInput().output(d -> d)

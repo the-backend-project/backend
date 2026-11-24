@@ -137,7 +137,7 @@ public class ConditionalTriggerTest {
             onEvent(OrderCreated).to(OrderStates.Created)
                 .assemble(c -> tuple(c.input(), c.entityId()))
                 .trigger(orderReferenced).with(t -> t.t1()).on(Index).identifiedBy(t -> newEntityId(t.t2()))
-                .output()
+                .output(d -> d.t1().t1())
         ),
         OrderStates.Created, List.of(
             onEvent(OrderShipped).to(OrderStates.Shipped).output(),
@@ -160,7 +160,7 @@ public class ConditionalTriggerTest {
                 .with(_ -> null)
                 .on(Batch)
                 .identifiedBy(t -> entityId((UUID) t.t2()))
-                .output(),
+                .output(d -> d.t1()),
             onEvent(BatchCheckRequestedWhenShipped).toSelf()
                 .assemble(c -> c.input())
                 .trigger(BatchChecked)
@@ -169,7 +169,7 @@ public class ConditionalTriggerTest {
                 .with(_ -> null)
                 .on(Batch)
                 .identifiedBy(entityIdFromSession())
-                .output(),
+                .output(d -> d),
             onEvent(BatchChecked).toSelf()
                 .trigger(BatchNoted).on(Batch).identifiedBy(entityIdFromSession())
                 .output(),
@@ -182,7 +182,7 @@ public class ConditionalTriggerTest {
                 .with(t -> t.t2())
                 .on(Check)
                 .identifiedBy(EntitySelector.newEntityId())
-                .output(),
+                .output(d -> d.t1()),
             onEvent(SessionBatchCloseRequestedWhenShipped).to(BatchStates.Waiting)
                 .assemble(c -> c.input())
                 .trigger(BatchClosed)
@@ -191,7 +191,7 @@ public class ConditionalTriggerTest {
                 .with(_ -> null)
                 .on(Batch)
                 .identifiedBy(entityIdFromSession())
-                .output(),
+                .output(d -> d),
             onEvent(BatchCloseRequestedWhenShippedOrCancelled).to(BatchStates.Waiting)
                 .assemble(c -> c.input())
                 .trigger(BatchClosed)
@@ -200,7 +200,7 @@ public class ConditionalTriggerTest {
                 .with(_ -> null)
                 .on(Batch)
                 .identifiedBy(entityIdFromSession())
-                .output()
+                .output(d -> d)
         ),
         BatchStates.Waiting, List.of(onEvent(BatchClosed).to(BatchStates.Closed).output()),
         BatchStates.Closed, List.of()
@@ -214,7 +214,7 @@ public class ConditionalTriggerTest {
             onEvent(CheckRun).to(CheckStates.Done)
                 .assemble(c -> c.input())
                 .trigger(BatchNoted).with(_ -> null).on(Batch).identifiedBy(batchId -> entityId(batchId))
-                .output()
+                .output(d -> d.t1())
         ),
         CheckStates.Done, List.of()
     );

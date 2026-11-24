@@ -18,11 +18,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import java.util.function.Predicate;
 
 class Traverser {
 
   private final Map<State, List<TransitionModel<?, ?>>> transitions;
+  private final UUID modelId;
   /// Why the transitions are refused, all of them, so that a model is fixed in one go rather than one refusal at a time
   private final List<String> refusals = new ArrayList<>();
   /// Whether entities of the session only are of the model: all of them if it is not stored, and those an event not
@@ -36,7 +38,14 @@ class Traverser {
   /// @param stored whether the entities are stored (see [EntityModel#stored()]), so that an event which is not
   ///               stored must not change their state
   public Traverser(Map<State, List<TransitionModel<?, ?>>> transitions, boolean stored) {
+    this(transitions, stored, null);
+  }
+
+  /// @param modelId the id of the entity model of the transitions, by which a trigger on the model is told from one on
+  ///                another, or null if not known, when a trigger of an event type of the model is taken to be on it
+  public Traverser(Map<State, List<TransitionModel<?, ?>>> transitions, boolean stored, UUID modelId) {
     this.transitions = transitions;
+    this.modelId = modelId;
     this.hasEntitiesOfTheSessionOnly = !stored || transitions.getOrDefault(Begin, List.of()).stream()
         .flatMap(transition -> leaves(transition).stream())
         .anyMatch(leaf -> !leaf.eventType().stored());
@@ -50,6 +59,7 @@ class Traverser {
         requireNotStoredToSelf(from, fromState);
       for (var transition : fromState) {
         requireStoredEventOfConditionalTrigger(transition);
+        requireDataOfEventTypesWithData(transition);
         requireAtMostOneDelayedTrigger(transition, 0);
         requireNoDelayedTriggerNumberedAlike(transition, 0, List.of(), delayingNotStored);
         if (mayBeOfAnEntityOfTheSessionOnly(reachedBySessionOnly, from, transition)) {
@@ -94,6 +104,20 @@ class Traverser {
       requireStoredEventOfConditionalTrigger(filter.alternative().model());
   }
 
+  /// An event of a type with data has data: `output()` without a data adapter, which gives an event without data, is
+  /// only for an event type without data, of [DataType#none()]. Otherwise the event is stored without data, which its
+  /// readers would have to expect.
+  private void requireDataOfEventTypesWithData(TransitionModel<?, ?> transition) {
+    for (var leaf : leaves(transition))
+      if (leaf.withoutData() && !(leaf.eventType().outputDataType() instanceof DataType.NoneDataType))
+        refuse(String.format(
+            "The transition on %s has no output, but its event type has data, of %s. Give its output with " +
+                "output(dataAdapter), or use an event type without data",
+            leaf.eventType().name(),
+            leaf.eventType().outputDataType().name()
+        ));
+  }
+
   /// An entity has at most one pending delayed trigger, which the next event stored on it replaces, so a transition,
   /// with the one it chooses, can't trigger two delayed events, as the second would replace the first
   private void requireAtMostOneDelayedTrigger(TransitionModel<?, ?> transition, int inherited) {
@@ -127,9 +151,9 @@ class Traverser {
   /// A delayed trigger is numbered after the event of its transition if that is stored, and with its number if it
   /// isn't. So a transition with a delayed trigger which triggers, on its own entity, an event not stored whose
   /// transition has a delayed trigger too, would have two delayed triggers on the entity with the same number, of which
-  /// only one can be pending. The entity a trigger is on is only known when it is taken, so an event not stored of this
-  /// model with a delayed trigger is taken to be on the same entity, which is refused, as the transaction would fail
-  /// when stored.
+  /// only one can be pending. The entity a trigger is on is only known when it is taken, so a trigger on this model of
+  /// an event not stored with a delayed trigger is taken to be on the same entity, which is refused, as the transaction
+  /// would fail when stored. A trigger on another model is not.
   private void requireNoDelayedTriggerNumberedAlike(
       TransitionModel<?, ?> transition,
       int inheritedDelayed,
@@ -143,7 +167,7 @@ class Traverser {
       if (delayed == 0)
         return;
       for (var trigger : triggers)
-        if (trigger.condition() == null && delayingNotStored.contains(trigger.eventSpec().eventType()))
+        if (trigger.condition() == null && delayingNotStored.contains(trigger.eventSpec().eventType()) && isOnTheModel(trigger))
           refuse(String.format(
               "The transition on %s has a delayed trigger, and triggers %s, which isn't stored and has a delayed trigger " +
                   "too. On the same entity, the two would have the same number, but an entity has at most one pending " +
@@ -172,6 +196,11 @@ class Traverser {
         ));
     for (var filter : transition.filters())
       requireNoIdOrIndex(filter.alternative().model());
+  }
+
+  /// Whether the trigger is on the entity model of the transitions, or may be, if the model isn't known
+  private boolean isOnTheModel(EventTrigger<?, ?, ?> trigger) {
+    return modelId == null || trigger.entityModel() == null || trigger.entityModel().id().equals(modelId);
   }
 
   /// An entity of the session only is not found after its session, so its transitions, and those they may choose, can't

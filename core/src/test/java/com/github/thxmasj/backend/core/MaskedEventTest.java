@@ -86,12 +86,18 @@ public class MaskedEventTest {
   }
 
   @Test
-  public void aMaskGivingNullStoresNoData() {
+  public void aMaskGivingNullIsRefused() {
     var event = new Event<>(UUID.randomUUID(), 1, PasswordSet, ZonedDateTime.now(), "hunter2", _ -> null);
-    assertEquals(null, event.getMarshalledData());
+    var e = assertThrows(IllegalStateException.class, event::getMarshalledData);
+    assertTrue(e.getMessage().contains("The mask of Password set gives null"), e.getMessage());
     assertEquals("hunter2", event.getUnmarshalledData());
-    var built = onEvent(PasswordSet).toSelf().assembleInput().output(d -> d).masked(_ -> null);
-    assertEquals(PasswordSet, built.eventType());
+  }
+
+  /// An event of a type with data has data, so a transition on it can't end in output() without a data adapter
+  @Test
+  public void anEventTypeWithDataCantHaveATransitionWithoutData() {
+    var e = assertThrows(IllegalArgumentException.class, () -> new Traverser(Map.of(Begin, List.of(onEvent(PasswordSet).to(States.Open).output()), States.Open, List.of())));
+    assertTrue(e.getMessage().startsWith("The transition on Password set has no output, but its event type has data"), e.getMessage());
   }
 
   /// The data is masked when it is first marshalled, which only storing it asks for

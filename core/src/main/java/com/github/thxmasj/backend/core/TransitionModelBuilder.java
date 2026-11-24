@@ -47,6 +47,8 @@ public class TransitionModelBuilder<I, T, O> {
   /// @param severity the severity of the event the transition accepts
   /// @param mask     masks the output of the transition when its event is stored, or null to store it as it is
   /// @param delayedEventTypes the types of the delayed events the transition triggers
+  /// @param withoutData whether the transition's event has no data, as it ends in `output()` without a data adapter,
+  ///                    which only an event type without data may
   public record ModelContext<I, O>(
       boolean reversal,
       State to,
@@ -57,41 +59,46 @@ public class TransitionModelBuilder<I, T, O> {
       TransitionModel<Data, Data> reverseModel,
       Severity severity,
       UnaryOperator<O> mask,
-      List<EventType<?, ?>> delayedEventTypes
+      List<EventType<?, ?>> delayedEventTypes,
+      boolean withoutData
   ) {
 
     /// The context of a transition on the event type to the state, or to itself if the state is null, with nothing
     /// declared yet
     static <I, O> ModelContext<I, O> of(boolean reversal, State to, EventType<I, O> eventType) {
-      return new ModelContext<>(reversal, to, eventType, List.of(), List.of(), List.of(), null, Severity.Info, null, List.of());
+      return new ModelContext<>(reversal, to, eventType, List.of(), List.of(), List.of(), null, Severity.Info, null, List.of(), false);
     }
 
     ModelContext<I, O> withTriggers(List<EventTrigger<?, ?, ?>> triggers) {
-      return new ModelContext<>(reversal, to, eventType, triggers, actions, filters, reverseModel, severity, mask, delayedEventTypes);
+      return new ModelContext<>(reversal, to, eventType, triggers, actions, filters, reverseModel, severity, mask, delayedEventTypes, withoutData);
     }
 
     ModelContext<I, O> withActions(List<Action<?>> actions) {
-      return new ModelContext<>(reversal, to, eventType, triggers, actions, filters, reverseModel, severity, mask, delayedEventTypes);
+      return new ModelContext<>(reversal, to, eventType, triggers, actions, filters, reverseModel, severity, mask, delayedEventTypes, withoutData);
     }
 
     ModelContext<I, O> withFilters(List<Filter<?, ?, ?>> filters) {
-      return new ModelContext<>(reversal, to, eventType, triggers, actions, filters, reverseModel, severity, mask, delayedEventTypes);
+      return new ModelContext<>(reversal, to, eventType, triggers, actions, filters, reverseModel, severity, mask, delayedEventTypes, withoutData);
     }
 
     ModelContext<I, O> withReverseModel(TransitionModel<Data, Data> reverseModel) {
-      return new ModelContext<>(reversal, to, eventType, triggers, actions, filters, reverseModel, severity, mask, delayedEventTypes);
+      return new ModelContext<>(reversal, to, eventType, triggers, actions, filters, reverseModel, severity, mask, delayedEventTypes, withoutData);
     }
 
     ModelContext<I, O> withSeverity(Severity severity) {
-      return new ModelContext<>(reversal, to, eventType, triggers, actions, filters, reverseModel, severity, mask, delayedEventTypes);
+      return new ModelContext<>(reversal, to, eventType, triggers, actions, filters, reverseModel, severity, mask, delayedEventTypes, withoutData);
     }
 
     ModelContext<I, O> withMask(UnaryOperator<O> mask) {
-      return new ModelContext<>(reversal, to, eventType, triggers, actions, filters, reverseModel, severity, mask, delayedEventTypes);
+      return new ModelContext<>(reversal, to, eventType, triggers, actions, filters, reverseModel, severity, mask, delayedEventTypes, withoutData);
+    }
+
+    ModelContext<I, O> asWithoutData() {
+      return new ModelContext<>(reversal, to, eventType, triggers, actions, filters, reverseModel, severity, mask, delayedEventTypes, true);
     }
 
     ModelContext<I, O> withDelayedEventType(EventType<?, ?> delayedEventType) {
-      return new ModelContext<>(reversal, to, eventType, triggers, actions, filters, reverseModel, severity, mask, join(delayedEventTypes, delayedEventType));
+      return new ModelContext<>(reversal, to, eventType, triggers, actions, filters, reverseModel, severity, mask, join(delayedEventTypes, delayedEventType), withoutData);
     }
 
     public String description() {
@@ -853,21 +860,28 @@ public class TransitionModelBuilder<I, T, O> {
     );
   }
 
-  /// The event of the transition with the output, stored masked if the transition has a mask. The mask is that of the
-  /// transition calculated, which [TransitionModel.WithOutput#masked] adds after the output.
-  @SuppressWarnings("unchecked")
+  /// The event of the transition with the output
   private Event<O> event(InputStep<?> inputStep, O output) {
-    int number = inputStep.log().lastEventNumber() + 1;
-    var mask = inputStep.transitionModel() != null ? ((TransitionModel<?, O>) inputStep.transitionModel()).mask() : modelContext.mask();
-    var event = mask == null ?
-        Event.marshalledWhenAskedFor(inputStep.log().entityId(), number, modelContext.eventType(), inputStep.timestamp(), output) :
-        new Event<>(inputStep.log().entityId(), number, modelContext.eventType(), inputStep.timestamp(), output, mask);
-    // An event which is stored is masked and marshalled in the step, so that a failure of either is one of the
-    // transition, while one which isn't stored is never marshalled for storing
-    if (modelContext.eventType().stored() && !inputStep.log().isSessionOnlyWith(event))
+    if (output == null)
+      throw new IllegalStateException(String.format(
+          "The output of the transition on %s is null, which an event can't have. An event without data, of an event " +
+              "type without data, is made by output()",
+          modelContext.eventType().name()
+      ));
+    return marshalledIfStored(
+        inputStep,
+        Event.marshalledWhenAskedFor(inputStep.log().entityId(), inputStep.log().lastEventNumber() + 1, modelContext.eventType(), inputStep.timestamp(), output)
+    );
+  }
+
+  /// The event, marshalled in the step if it is stored, so that a failure of masking or marshalling it is one of the
+  /// transition, while one which isn't stored is never marshalled for storing
+  static <O> Event<O> marshalledIfStored(InputStep<?> inputStep, Event<O> event) {
+    if (event.type().stored() && !inputStep.log().isSessionOnlyWith(event))
       event.getMarshalledData();
     return event;
   }
+
 
   private TransitionModel<I, O> complete() {
     return new TransitionModel<>(
@@ -890,9 +904,12 @@ public class TransitionModelBuilder<I, T, O> {
     );
   }
 
+  /// The transition with an event without data, which only an event type without data, of [DataType#none()], may have,
+  /// as the state machine checks when it is created. An event type with data has an output, of
+  /// [#output(Function)].
   public TransitionModel<I, O> output() {
     return new TransitionModel<>(
-        modelContext,
+        modelContext.asWithoutData(),
         builderFunction.andThen(a -> a.flatMap(b -> step(b, () -> Mono.just(new OutputStep<>(
             b,
             ProcessResult.accepted(

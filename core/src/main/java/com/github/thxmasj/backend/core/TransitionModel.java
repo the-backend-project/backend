@@ -5,6 +5,8 @@ import static com.github.thxmasj.backend.core.TransitionModelBuilder.log;
 import com.github.thxmasj.backend.core.BasicEventType.Rollback.Data;
 import com.github.thxmasj.backend.core.TransitionModelBuilder.Filter;
 import com.github.thxmasj.backend.core.TransitionModelBuilder.ModelContext;
+import com.github.thxmasj.backend.core.StateMachine.ProcessResult;
+import com.github.thxmasj.backend.core.StateMachine.ProcessResult.Accepted;
 import com.github.thxmasj.backend.core.Tuples.Tuple4;
 import com.github.thxmasj.backend.core.internal.TransitionStep.InputStep;
 import com.github.thxmasj.backend.core.internal.TransitionStep.OutputStep;
@@ -127,9 +129,9 @@ public class TransitionModel<I, O> {
     return modelContext.actions();
   }
 
-  /// The mask of the output of the transition, or null if it isn't masked
-  UnaryOperator<O> mask() {
-    return modelContext.mask();
+  /// Whether the transition's event has no data, as it ends in `output()` without a data adapter
+  boolean withoutData() {
+    return modelContext.withoutData();
   }
 
   /// A transition with an output, which may be masked when its event is stored
@@ -146,9 +148,21 @@ public class TransitionModel<I, O> {
     /// the state of the entity must not depend on what is masked. A transition which chooses another one stores the
     /// event of the chosen transition, with the mask of that one.
     ///
-    /// @param mask gives the output as it is stored, or null for no data
+    /// @param mask gives the output as it is stored, which must not be null
     public TransitionModel<I, O> masked(UnaryOperator<O> mask) {
-      return new TransitionModel<>(modelContext().withMask(Objects.requireNonNull(mask, "mask is null")), chain());
+      Objects.requireNonNull(mask, "mask is null");
+      return new TransitionModel<>(modelContext().withMask(mask), chain().andThen(output -> output.map(step -> masked(step, mask))));
+    }
+
+    /// The output step with its event masked when stored
+    private static <O> OutputStep<O> masked(OutputStep<O> step, UnaryOperator<O> mask) {
+      if (!(step.stepOutput() instanceof Accepted<O>(Event<O> event, EntityModel entityModel, Severity severity)))
+        return step;
+      var masked = new Event<>(event.entityId(), event.eventNumber(), event.type(), event.timestamp(), event.getUnmarshalledData(), mask);
+      return new OutputStep<>(
+          step.previous(),
+          ProcessResult.accepted(TransitionModelBuilder.marshalledIfStored(step.inputStep(), masked), entityModel, severity)
+      );
     }
 
   }

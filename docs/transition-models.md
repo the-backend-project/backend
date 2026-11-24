@@ -9,7 +9,9 @@ An event type has two type parameters, `EventType<I, O>`, and so does the transi
   it, by the caller of `StateMachine.onEvent`, or by a delayed or conditional trigger, which stores it until the
   trigger fires. The transition calculates its event from it.
 * **`O`, the output**, is the data of the event the transition stores in the entity's event log. `output(f)` calculates
-  it from the data of the last step, and `output()` stores the event without data. The output is also what a
+  it from the data of the last step, and must not give null, which fails the transition. `output()` stores the event
+  without data, which only an event type without data, of `DataType.none()`, may have: the state machine refuses a
+  transition on an event type with data which ends in `output()`, when it is created. The output is also what a
   transition triggering the event gets back.
 
 `BasicEventType.of(name, id, dataType)` gives an event type whose input and output are the same, and

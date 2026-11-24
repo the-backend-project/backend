@@ -233,16 +233,14 @@ public class HttpInboxTest {
   );
   static EventType<BasicEventType.Rollback.Data, BasicEventType.Rollback.Data>
       ProcessingCancelled = new BasicEventType.Cancel("Processing cancelled", UUID.fromString("d94c29c8-f113-4dee-921f-1a8e58f916f4"));
-  static EventType<String, String>
+  static EventType<Void, Void>
       ExternalProcessingRequested = BasicEventType.of(
       "External processing requested",
-      UUID.fromString("12a97e70-58cc-46a8-aed9-f867cfc7375f"),
-      DataType.string()
+      UUID.fromString("12a97e70-58cc-46a8-aed9-f867cfc7375f")
   ),
       LongExternalProcessingRequested = BasicEventType.of(
           "Long external processing requested",
-          UUID.fromString("6ebcbbec-5bbc-4c05-96fd-41ad0bbc097a"),
-          DataType.string()
+          UUID.fromString("6ebcbbec-5bbc-4c05-96fd-41ad0bbc097a")
       );
   static EventType<Void, Void>
       LampSwitchedOn = BasicEventType.of("Lamp switched on", UUID.fromString("5e9a8a9d-6a21-41cf-82dc-857fe1e4c4e0")),

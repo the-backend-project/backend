@@ -17,8 +17,9 @@ public interface SettlementEvent {
   /// until the first response.
   EventType<MerchantId, BatchNumber> InitialSettlementOpened =
       BasicEventType.of("Initial settlement opened", UUID.fromString("5b0c7f0e-0f6b-4d0e-9a0f-3f2c1c6e8d21"), DataType.json(MerchantId.class), DataType.json(BatchNumber.class));
-  /// Assigns the acquirer's batch number to a settlement which is awaiting it, recording it. Has no effect in other
-  /// states, and records nothing.
+  /// Assigns the acquirer's batch number to a settlement which is awaiting it, recording it. In other states it has no
+  /// effect: the number given is recorded, but the first one assigned stays the settlement's. Events of it stored
+  /// before had no data in those states.
   EventType<AcquirerBatchNumber, AcquirerBatchNumber> AcquirerBatchNumberAssigned =
       BasicEventType.of("Acquirer batch number assigned", UUID.fromString("7d3f1b6e-4a52-4c0e-b1d8-5e9a2c4f6a10"), DataType.json(AcquirerBatchNumber.class));
   EventType<CutOff, CutOff> CutOffRequested =

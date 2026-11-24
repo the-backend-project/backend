@@ -157,13 +157,13 @@ public class SettlementTransitions {
             onEvent(CurrentBatchNumberLookedUp).toSelf().assemble(c -> batchNumber(c.log())).output(d -> d)
         ), openTransitions(reconciliationToAcquirer)),
         Open, join(List.of(
-            onEvent(AcquirerBatchNumberAssigned).toSelf().assembleInput().output(),
+            onEvent(AcquirerBatchNumberAssigned).toSelf().assembleInput().output(d -> d),
             onEvent(BatchNumberLookedUp).toSelf().assemble(c -> batchNumber(c.log())).output(d -> d),
             onEvent(AcquirerBatchNumberLookedUp).toSelf().assemble(d -> acquirerBatchNumber(d.log()).orElseThrow()).output(d -> d),
             onEvent(CurrentBatchNumberLookedUp).toSelf().assemble(c -> batchNumber(c.log())).output(d -> d)
         ), openTransitions(reconciliationToAcquirer)),
         ProcessingSettlement, List.of(
-            onEvent(AcquirerBatchNumberAssigned).toSelf().assembleInput().output(),
+            onEvent(AcquirerBatchNumberAssigned).toSelf().assembleInput().output(d -> d),
             onEvent(BatchNumberLookedUp).toSelf().assemble(c -> batchNumber(c.log())).output(d -> d),
             onEvent(CurrentBatchNumberLookedUp).toSelf().assemble(c -> batchNumber(c.log())).output(d -> d),
             // For previous batch to stay open for ongoing capture exchanges when cut-off is performed
@@ -207,7 +207,7 @@ public class SettlementTransitions {
         ),
         Reconciled, List.of(),
         Error, List.of(
-            onEvent(AcquirerBatchNumberAssigned).toSelf().assembleInput().output(),
+            onEvent(AcquirerBatchNumberAssigned).toSelf().assembleInput().output(d -> d),
             onEvent(BatchNumberLookedUp).toSelf().assemble(c -> batchNumber(c.log())).output(d -> d),
             onEvent(CurrentBatchNumberLookedUp).toSelf().assemble(c -> batchNumber(c.log())).output(d -> d)
         )
@@ -222,7 +222,8 @@ public class SettlementTransitions {
   /// The acquirer's batch number, assigned when the settlement was opened or when first seen in a response
   private static Optional<AcquirerBatchNumber> acquirerBatchNumber(EventLog log) {
     return log.oneIfExists(SettlementEvent.SettlementOpened).map(Opened::acquirerBatchNumber)
-        // Assigning it when it is already known records nothing
+        // The first assigned. Assigning it again when it is known records the number given, which doesn't change it, and
+        // events stored before that recorded nothing, which is read as null.
         .or(() -> log.all(AcquirerBatchNumberAssigned).stream().filter(Objects::nonNull).findFirst());
   }
 

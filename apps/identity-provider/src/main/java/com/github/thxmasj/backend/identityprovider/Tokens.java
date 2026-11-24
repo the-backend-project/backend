@@ -186,7 +186,7 @@ public interface Tokens {
             onEvent(UserInfoRequested).toSelf()
                 .assemble((_, log) -> log.one(UserTokensIssued))
                 .trigger(Inbox.ReplyCreated).with(d -> Reply.json(200, userInfo(d.idToken()))).on(Request).identifiedBy(entityIdFromSession())
-                .output(_ -> null)
+                .output()
         ),
         States.Refused, List.of()
     );

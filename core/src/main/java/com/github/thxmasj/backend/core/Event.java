@@ -61,7 +61,7 @@ public final class Event<T> {
   /// data, while [#getMarshalledData()], which is what is stored, has the stored form of the data, which is made when
   /// it is first asked for, as an event which is not stored never is.
   ///
-  /// @param storedForm gives the data as it is stored, or null for no data
+  /// @param storedForm gives the data as it is stored, which must not be null
   public Event(UUID entityId, int eventNumber, EventType<?, T> type, ZonedDateTime timestamp, T data, UnaryOperator<T> storedForm) {
     requireNonNull(type, "type is null");
     this.entityId = entityId;
@@ -144,7 +144,9 @@ public final class Event<T> {
   public byte[] getMarshalledData() {
     if (data == null && unmarshalledData != null && !marshalled) {
       T stored = storedForm != null ? storedForm.apply(unmarshalledData) : unmarshalledData;
-      data = stored != null ? type.outputDataType().marshal(stored) : null;
+      if (stored == null)
+        throw new IllegalStateException("The mask of " + type.name() + " gives null, which an event can't be stored with");
+      data = type.outputDataType().marshal(stored);
       marshalled = true;
     }
     return data;

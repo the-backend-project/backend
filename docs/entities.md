@@ -150,8 +150,8 @@ tested, drawn in the state diagrams and told the [monitoring](monitoring.md), wi
   request which is [not stored](http-inbox.md#requests-not-stored) is one, and isn't indexed by the entity of the
   application.
 * **A masked event** is stored with its output masked: `.masked(mask)` after `.output(dataAdapter)` gives the output
-  as it is stored. A transition without an output has nothing to mask, so `.output()` without a data adapter, and a
-  transition which chooses another one, can't be masked. The event in the transaction has the whole output, which its triggers, the one who triggered
+  as it is stored, which must not be null. A transition without an output has nothing to mask, so `.output()` without
+  a data adapter, and a transition which chooses another one, can't be masked. The event in the transaction has the whole output, which its triggers, the one who triggered
   it and the transitions of the same transaction see, while the event log has the masked one. A later transaction, also
   one of the same [session](#sessions), reads a stored entity from the event log, masked. The [inbox](http-inbox.md#masking) masks the credentials of the requests it stores this way.
 
