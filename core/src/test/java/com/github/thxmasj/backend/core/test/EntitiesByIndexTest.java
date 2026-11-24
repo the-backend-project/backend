@@ -45,7 +45,7 @@ public class EntitiesByIndexTest {
             onEvent(OrderCreated).to(OrderStates.Created)
                 .assemble(c -> tuple(c.input(), c.entityId()))
                 .trigger(customerReferenced).with(t -> t.t1()).on(Index).identifiedBy(t -> newEntityId(t.t2()))
-                .output()
+                .output(d -> d.t1().t1())
         ),
         OrderStates.Created, List.of(
             onEvent(OrderShipped).to(OrderStates.Shipped).output()
@@ -60,7 +60,7 @@ public class EntitiesByIndexTest {
             onEvent(InvoiceCreated).to(OrderStates.Created)
                 .assemble(c -> tuple(c.input(), c.entityId()))
                 .trigger(customerReferenced).with(t -> t.t1()).on(Index).identifiedBy(t -> newEntityId(t.t2()))
-                .output()
+                .output(d -> d.t1().t1())
         ),
         OrderStates.Created, List.of()
     );

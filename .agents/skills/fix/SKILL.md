@@ -34,26 +34,44 @@ git remote -v
    git branch --list 'issue-N-*'
    ```
 
-   If one exists, continue in it instead of creating a new one (skip step 5), or
-   ask the user if it is unclear whether that work should be kept.
+   A worktree or branch found here may belong to another agent working on the issue
+   right now, in this checkout or another one. Never continue in it on your own:
+   tell the user what you found (path, branch, last commit, uncommitted changes) and
+   ask whether it is their earlier work. Continue in it (skip step 5) only if they
+   say so. Otherwise leave it untouched and work in a new worktree.
 
-2. **Read the issue:** `gh issue view N --json number,title,body,state,comments`.
-   If it is closed, stop and tell the user.
+2. **Read the issue:**
+   `gh issue view N --json number,title,body,state,comments,assignees`.
+   If it is closed, stop and tell the user. If anyone other than the user `gh` is
+   logged in as (`gh api user --jq .login`) is assigned, such as another person or
+   another agent's account, someone may already be working on it: stop and ask the
+   user whether to go on before assigning it or moving it on the board.
 
 3. **Assign it** to the user `gh` is logged in as:
    `gh issue edit N --add-assignee @me`
 
 4. **Move it to In Progress.** `item-add` is idempotent and returns the existing
-   item if the issue is already on the board:
+   item if the issue is already on the board. It prints the item's id:
 
    ```sh
-   ITEM=$(gh project item-add 1 --owner the-backend-project \
-     --url https://github.com/the-backend-project/backend/issues/N --format json --jq .id)
-   gh project item-edit --id "$ITEM" \
+   gh project item-add 1 --owner the-backend-project \
+     --url https://github.com/the-backend-project/backend/issues/N --format json --jq .id
+   ```
+
+   Then run a separate command that sets the item's Status, with the printed id in
+   place of `<item-id>`:
+
+   ```sh
+   gh project item-edit --id <item-id> \
      --project-id PVT_kwDOCtCyDc4An_-_ \
      --field-id PVTSSF_lADOCtCyDc4An_-_zgfpLXU \
      --single-select-option-id 47fc9ee4
    ```
+
+   Run these and the other commands of this skill as they are written: don't pass
+   values between them through shell variables or command substitution (`$(...)`).
+   Agents ask before running commands that use them, even ones the project's
+   settings allow.
 
    Status option IDs: Todo `f75ad846`, In Progress `47fc9ee4`, Done `98236657`.
    These are the ids of the board, its Status field and the field's options. If the
@@ -74,7 +92,9 @@ git remote -v
    ```
 
    `<slug>` is the issue title lowercased, non-alphanumerics replaced by `-`,
-   trimmed to a few words (e.g. `issue-136-timeout-rows-not-deleted`).
+   trimmed to a few words (e.g. `issue-136-timeout-rows-not-deleted`). If that
+   branch or worktree already exists and the user did not say it is theirs (step 1),
+   choose a different slug instead of reusing it.
 
    Do all the remaining steps in that worktree: edit files under its path and
    run git, Maven and the docs build there. When searching the main checkout,

@@ -1,9 +1,5 @@
-package com.github.thxmasj.backend.backoffice;
+package com.github.thxmasj.backend.http;
 
-import com.github.thxmasj.backend.http.Headers;
-import com.github.thxmasj.backend.http.HttpClient;
-import com.github.thxmasj.backend.http.HttpRequest;
-import com.github.thxmasj.backend.http.HttpResponse;
 import java.net.ConnectException;
 import java.net.http.HttpConnectTimeoutException;
 import java.net.http.HttpRequest.BodyPublishers;
@@ -13,13 +9,14 @@ import java.util.Set;
 import java.util.concurrent.CompletionException;
 import reactor.core.publisher.Mono;
 
-/// The HTTP client the token requests of the sign-ins are sent with, by the HTTP client of the JDK, as the OpenID
-/// Connect provider is called otherwise. The client of reactor-netty can't be built into a native image with its TLS
-/// context, which holds a `SecureRandom` created when the image is built.
+/// An HTTP client of the JDK, e.g. for the token requests an at-most-once outbox sends to an OpenID Connect provider,
+/// which the backoffice and the identity provider send with it as they call the provider with the HTTP client of the
+/// JDK otherwise. The [NettyHttpClient] can't be built into a native image with its TLS context, which holds a
+/// `SecureRandom` created when the image is built.
 ///
 /// A connection which fails is told the outbox as a [ConnectException], as the outbox treats it as a request never
 /// sent.
-final class JdkHttpClient implements HttpClient {
+public final class JdkHttpClient implements HttpClient {
 
   private static final Duration timeout = Duration.ofSeconds(10);
   /// The headers the HTTP client of the JDK sets itself

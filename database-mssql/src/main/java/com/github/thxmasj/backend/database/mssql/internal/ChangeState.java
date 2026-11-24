@@ -9,6 +9,7 @@ import com.github.thxmasj.backend.core.IndexEntityModel;
 import com.github.thxmasj.backend.core.TriggerType;
 import com.github.thxmasj.backend.core.database.DatabaseClient;
 import com.github.thxmasj.backend.core.internal.DelayedEvent;
+import com.github.thxmasj.backend.core.internal.database.ChangeState.Change.FiredTrigger;
 import com.github.thxmasj.backend.core.internal.database.ConditionalTrigger;
 import java.time.Clock;
 import java.util.HexFormat;
@@ -17,6 +18,16 @@ import java.util.stream.IntStream;
 
 /// Stores the changes in a single batch with an explicit transaction
 class ChangeState extends com.github.thxmasj.backend.core.internal.database.ChangeState {
+
+  /// The error number the deletion of the trigger which fired a transaction throws with if it deletes nothing
+  private static final int TRIGGER_FIRED_ELSEWHERE = 50001;
+
+  /// SQL Server's error of the THROW, by its number
+  @Override
+  protected boolean isTriggerFiredElsewhere(Throwable failure) {
+    return databaseError(failure) instanceof java.sql.SQLException e && e.getErrorCode() == TRIGGER_FIRED_ELSEWHERE;
+  }
+
 
   private final String schema;
 
@@ -34,15 +45,7 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
         DECLARE @OutboxElement         TABLE (ChangeIndex TINYINT, MessageIndex TINYINT, RequestId BINARY(16));
         DECLARE @QueueElement          TABLE (ChangeIndex TINYINT, MessageIndex TINYINT, RequestId BINARY(16), ElementId BINARY(8), Guaranteed BIT);
         DECLARE @QueueElementToProcess TABLE (ChangeIndex TINYINT, MessageIndex TINYINT, RequestId BINARY(16), ElementId BINARY(8));
-        """ + IntStream.range(0, changes.size()).mapToObj(i -> insertSql(
-            i,
-            "p" + i + "_",
-            changes.get(i).entityModel(),
-            changes.get(i).newEvent(),
-            changes.get(i).delayedEvent(),
-            changes.get(i).conditionalTrigger(),
-            changes.get(i).triggerType()
-        )).collect(joining("\n")) +
+        """ + IntStream.range(0, changes.size()).mapToObj(i -> insertSql(i, "p" + i + "_", changes.get(i))).collect(joining("\n")) +
             """
             INSERT INTO @QueueElementToProcess (ChangeIndex, MessageIndex, RequestId, ElementId)
             SELECT ChangeIndex, MessageIndex, RequestId, ElementId FROM @QueueElement
@@ -56,12 +59,13 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
   private String insertSql(
       int changeIndex,
       String parameterPrefix,
-      EntityModel entityModel,
-      Event<?> event,
-      DelayedEvent<?> delayedEvent,
-      ConditionalTrigger<?> conditionalTrigger,
-      TriggerType triggerType
+      Change change
   ) {
+    EntityModel entityModel = change.entityModel();
+    Event<?> event = change.newEvent();
+    DelayedEvent<?> delayedEvent = change.delayedEvent();
+    ConditionalTrigger<?> conditionalTrigger = change.conditionalTrigger();
+    FiredTrigger firedTrigger = change.firedTrigger();
     String sql =
         """
         DECLARE @entityId{changeIndex} BINARY(16)
@@ -118,13 +122,23 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
           )
           """.replace("{schema}", schema)
               .replace("{changeIndex}", String.valueOf(changeIndex));
-      if (triggerType == TriggerType.CONDITIONAL) {
-        sql +=
-            """
-            DELETE [{schema}].[ConditionalTrigger]
-            WHERE Id=:triggerId;
-            """.replace("{schema}", schema);
-      }
+    }
+
+    if (firedTrigger != null) {
+      // The trigger fired an event which isn't stored, which would otherwise have deleted it. If it is gone, another
+      // transaction fired it first, e.g. of another instance which picked it too, so this one fails, as the event it
+      // fired would otherwise be taken twice. A delayed trigger is the one of its number, type and correlation id, as
+      // one which replaced it may have its number.
+      sql += (firedTrigger.type() == TriggerType.DELAYED ?
+          """
+          DELETE [{schema}].[DelayedTrigger] FROM [{schema}].[DelayedTrigger] WITH (INDEX([ixEntityId]))
+          WHERE EntityId=@entityId{changeIndex} AND EventNumber=:eventNumber AND Type=:firedType AND CorrelationId=:correlationId;
+          """.replace("{changeIndex}", String.valueOf(changeIndex)).replace("{schema}", schema) :
+          """
+          DELETE [{schema}].[ConditionalTrigger]
+          WHERE Id=:triggerId;
+          """.replace("{schema}", schema))
+          + "IF @@ROWCOUNT = 0 THROW " + TRIGGER_FIRED_ELSEWHERE + ", 'The trigger was fired by another transaction', 1;\n";
     }
 
     if (conditionalTrigger != null) {
@@ -156,11 +170,14 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
     }
 
     if (delayedEvent != null) {
-      // Replace the previous delayed trigger, which may not have been deleted yet by the new event's change
+      // Replace the previous delayed trigger, which may not have been deleted yet by the new event's change. One of a
+      // transition on an event not stored has the number of the pending one, which it replaces. The state machine leaves out
+      // a delayed trigger of the transaction which a later event stored on the entity replaces, and refuses two with the
+      // same number, so this only deletes those of earlier transactions.
       sql +=
           """
           DELETE [{schema}].[DelayedTrigger] FROM [{schema}].[DelayedTrigger] WITH (INDEX([ixEntityId]))
-          WHERE EntityId=@entityId{changeIndex} AND EventNumber<:eventNumber;
+          WHERE EntityId=@entityId{changeIndex} AND EventNumber<=:eventNumber;
           """.replace("{changeIndex}", String.valueOf(changeIndex))
               .replace("{schema}", schema);
       sql +=

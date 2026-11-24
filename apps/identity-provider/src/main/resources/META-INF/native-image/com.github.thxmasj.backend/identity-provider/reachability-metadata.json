@@ -7,6 +7,12 @@
       "allDeclaredConstructors": true
     },
     {
+      "type": "com.github.thxmasj.backend.identityprovider.Authorizations$Callback",
+      "allDeclaredFields": true,
+      "allDeclaredMethods": true,
+      "allDeclaredConstructors": true
+    },
+    {
       "type": "com.github.thxmasj.backend.identityprovider.Authorizations$Failure",
       "allDeclaredFields": true,
       "allDeclaredMethods": true,
@@ -14,6 +20,18 @@
     },
     {
       "type": "com.github.thxmasj.backend.identityprovider.Authorizations$Granted",
+      "allDeclaredFields": true,
+      "allDeclaredMethods": true,
+      "allDeclaredConstructors": true
+    },
+    {
+      "type": "com.github.thxmasj.backend.identityprovider.Authorizations$Outcome",
+      "allDeclaredFields": true,
+      "allDeclaredMethods": true,
+      "allDeclaredConstructors": true
+    },
+    {
+      "type": "com.github.thxmasj.backend.identityprovider.Authorizations$Redeeming",
       "allDeclaredFields": true,
       "allDeclaredMethods": true,
       "allDeclaredConstructors": true
@@ -56,6 +74,12 @@
     },
     {
       "type": "com.github.thxmasj.backend.identityprovider.Clients$Registration",
+      "allDeclaredFields": true,
+      "allDeclaredMethods": true,
+      "allDeclaredConstructors": true
+    },
+    {
+      "type": "com.github.thxmasj.backend.identityprovider.Clients$RegistrationRequest",
       "allDeclaredFields": true,
       "allDeclaredMethods": true,
       "allDeclaredConstructors": true
@@ -104,6 +128,12 @@
     },
     {
       "type": "com.github.thxmasj.backend.identityprovider.Tokens$UserTokens",
+      "allDeclaredFields": true,
+      "allDeclaredMethods": true,
+      "allDeclaredConstructors": true
+    },
+    {
+      "type": "com.github.thxmasj.backend.identityprovider.UpstreamSignIn$Redemption",
       "allDeclaredFields": true,
       "allDeclaredMethods": true,
       "allDeclaredConstructors": true

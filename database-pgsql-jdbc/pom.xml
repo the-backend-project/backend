@@ -26,7 +26,11 @@
         <configuration>
           <dependenciesToScan>com.github.thxmasj.backend:core:test-jar:tests</dependenciesToScan>
           <!-- The other tests of the core module are in packages of its named module, which are not found on the class path -->
-          <includes>com/github/thxmasj/backend/core/test/**</includes>
+          <includes>
+            <include>com/github/thxmasj/backend/core/test/**</include>
+            <!-- The module's own tests, of its store, which run with the database tests -->
+            <include>com/github/thxmasj/backend/database/pgsql/**</include>
+          </includes>
           <groups>database</groups>
           <systemPropertyVariables>
             <database>pgsql-jdbc</database>

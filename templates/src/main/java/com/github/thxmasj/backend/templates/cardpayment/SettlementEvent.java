@@ -1,7 +1,6 @@
 package com.github.thxmasj.backend.templates.cardpayment;
 
 import com.github.thxmasj.backend.core.BasicEventType;
-import com.github.thxmasj.backend.core.BasicEventType.ReadOnly;
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.templates.cardpayment.AcquirerResponse.ReconciliationValues;
@@ -18,10 +17,14 @@ public interface SettlementEvent {
   /// until the first response.
   EventType<MerchantId, BatchNumber> InitialSettlementOpened =
       BasicEventType.of("Initial settlement opened", UUID.fromString("5b0c7f0e-0f6b-4d0e-9a0f-3f2c1c6e8d21"), DataType.json(MerchantId.class), DataType.json(BatchNumber.class));
-  /// Assigns the acquirer's batch number to a settlement which is awaiting it, recording it. Has no effect in other
-  /// states, and records nothing.
+  /// Assigns the acquirer's batch number to a settlement which is awaiting it, recording it. In other states, where it is
+  /// already known, it is taken as [#AcquirerBatchNumberKnown].
   EventType<AcquirerBatchNumber, AcquirerBatchNumber> AcquirerBatchNumberAssigned =
       BasicEventType.of("Acquirer batch number assigned", UUID.fromString("7d3f1b6e-4a52-4c0e-b1d8-5e9a2c4f6a10"), DataType.json(AcquirerBatchNumber.class));
+  /// The acquirer's batch number assigned to a settlement which already has it, which changes nothing, and so isn't
+  /// stored
+  EventType<Void, Void> AcquirerBatchNumberKnown =
+      BasicEventType.notStored("Acquirer batch number known", UUID.fromString("9f8f1a33-b4cf-40f7-9ed0-9f7cb60cfc3a"));
   EventType<CutOff, CutOff> CutOffRequested =
       BasicEventType.of("Cut off requested", UUID.fromString("2163fbfa-3870-43cd-8025-ec3fd9689bd2"), DataType.json(CutOff.class));
   EventType<AcquirerResponse, Void> ReconciliationRequested =
@@ -39,13 +42,13 @@ public interface SettlementEvent {
   EventType<Long, Long> MerchantDebitReversed =
       BasicEventType.of("Merchant debit reversed", UUID.fromString("9b51bf01-bdaa-4284-a853-bdceab8d8c04"), DataType.json(Long.class));
   EventType<MerchantId, AcquirerBatchNumber> AcquirerBatchNumberLookedUp =
-      new ReadOnly<>("Acquirer batch number looked up", UUID.fromString("01700fc1-fa15-4142-a673-ba0e9a2768b6"), DataType.json(MerchantId.class), DataType.json(AcquirerBatchNumber.class));
+      BasicEventType.notStored("Acquirer batch number looked up", UUID.fromString("01700fc1-fa15-4142-a673-ba0e9a2768b6"), DataType.json(MerchantId.class), DataType.json(AcquirerBatchNumber.class));
   /// Looks up the batch number of a settlement without assigning the acquirer's batch number to it.
   EventType<MerchantId, BatchNumber> CurrentBatchNumberLookedUp =
-      new ReadOnly<>("Current batch number looked up", UUID.fromString("e2f3a0a4-6c1d-4a58-8f57-2b6f9c1d7a35"), DataType.json(MerchantId.class), DataType.json(BatchNumber.class));
+      BasicEventType.notStored("Current batch number looked up", UUID.fromString("e2f3a0a4-6c1d-4a58-8f57-2b6f9c1d7a35"), DataType.json(MerchantId.class), DataType.json(BatchNumber.class));
   /// Looks up the batch number of a settlement.
   EventType<AcquirerBatchNumber, BatchNumber> BatchNumberLookedUp =
-      new ReadOnly<>("Batch number looked up", UUID.fromString("ad4a9ec8-d0e6-44ce-bef3-d2bd20709005"), DataType.json(AcquirerBatchNumber.class), DataType.json(BatchNumber.class));
+      BasicEventType.notStored("Batch number looked up", UUID.fromString("ad4a9ec8-d0e6-44ce-bef3-d2bd20709005"), DataType.json(AcquirerBatchNumber.class), DataType.json(BatchNumber.class));
 
   record Opened(BatchNumber batchNumber, AcquirerBatchNumber acquirerBatchNumber) {}
   record CutOff(String merchantId, long batchNumber, String merchantAggregatorId, String merchantAggregatorBaseUrl) {}

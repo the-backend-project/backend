@@ -16,16 +16,20 @@ public class CookiesTest {
   }
 
   @Test
-  public void cookieIsFoundInAnyCookieHeader() {
-    var request = request(Headers.builder().add("Cookie", "a=1; b=2").add("cookie", "c=3").build());
-    assertEquals("2", Cookies.value(request, "b"));
-    assertEquals("3", Cookies.value(request, "c"));
-    assertNull(Cookies.value(request, "d"));
+  public void theCookieIsFoundByItsName() {
+    assertEquals("T", Cookies.value(request(Headers.of("Cookie", "a=1; backoffice_session=T")), "backoffice_session"));
+    assertNull(Cookies.value(request(Headers.of("Cookie", "a=1")), "backoffice_session"));
+    assertNull(Cookies.value(request(Headers.of("Cookie", "backoffice_session=")), "backoffice_session"));
+    assertNull(Cookies.value(request(Headers.none()), "backoffice_session"));
   }
 
+  /// The cookies may come in several `Cookie` headers, e.g. split by HTTP/2, which the inbox keeps apart
   @Test
-  public void cookieWithEmptyValueOrNoCookieHeaderIsNone() {
-    assertNull(Cookies.value(request(Headers.of("Cookie", "a=")), "a"));
-    assertNull(Cookies.value(request(Headers.none()), "a"));
+  public void theCookieIsFoundInAnyOfSeveralHeaders() {
+    var request = request(Headers.builder().add("Cookie", "a=1; b=2").add("cookie", "backoffice_session=T").build());
+    assertEquals("2", Cookies.value(request, "b"));
+    assertEquals("T", Cookies.value(request, "backoffice_session"));
+    assertNull(Cookies.value(request, "c"));
   }
+
 }

@@ -1,4 +1,4 @@
-package com.github.thxmasj.backend.backoffice;
+package com.github.thxmasj.backend.http;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

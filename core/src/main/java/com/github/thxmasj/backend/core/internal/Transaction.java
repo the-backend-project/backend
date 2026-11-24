@@ -15,11 +15,11 @@ import java.util.Set;
 import java.util.function.Supplier;
 import reactor.core.publisher.Mono;
 
-/// The calculation of the changes of an event, by the steps of its transition and of the transitions it triggers. The
-/// result of each step is recorded, such that the changes can be calculated again from the trigger of an id found to
-/// exist when storing them: The steps before the trigger are then not executed again, but get the results recorded for
+/// The transaction of an event: the steps of its transition and of the transitions it triggers, whose changes are stored
+/// together, in one database transaction. The result of each step is recorded, such that the changes can be calculated
+/// again from the trigger of an id found to exist when storing them: The steps before the trigger are then not executed again, but get the results recorded for
 /// them, so the transition steps up to the trigger are the same.
-public final class Calculation {
+public final class Transaction {
 
   /// @param context the transition step the step was taken from
   /// @param result  the result of the step, or null if it failed
@@ -32,8 +32,8 @@ public final class Calculation {
   // The failures told the listener, by identity, as a failure passes through the transitions triggering the one it was
   // thrown in, and may be recorded for a step and given again when the changes are calculated again
   private final Set<Throwable> failures = Collections.newSetFromMap(new IdentityHashMap<>());
-  // The number of steps taken by the ongoing calculation. The steps recorded from here on are those of the previous
-  // calculation that are not executed again.
+  // The number of steps taken since the changes were last calculated from the start or again. The steps recorded from
+  // here on are those of the previous time that are not executed again.
   private int position;
 
   /// The result of a step in the given transition step, which is the result of executing it, unless the changes are
@@ -72,7 +72,7 @@ public final class Calculation {
   ///
   /// @return false if calculating again would not change anything, as the id is not triggered by a step, or as it was
   ///         found to exist before
-  public boolean recalculateWith(IdExists<?> existing) {
+  public boolean recomputeWith(IdExists<?> existing) {
     // The triggers of an id found to exist result in it existing. So when it is found to exist once more, it is not
     // recognised by the data it is triggered with, and would be found to exist over and over again.
     if (existingIds.stream().anyMatch(known -> isSameId(known.idEvent(), existing.idEvent())))
@@ -94,7 +94,7 @@ public final class Calculation {
   /// transition calculating it, or -1 if there is none
   private int firstTrigger(Event<?> idEvent) {
     for (Step step : steps) {
-      if (step.result() instanceof OutputStep<?> output && isCalculationOf(idEvent, output)) {
+      if (step.result() instanceof OutputStep<?> output && isTransactionOf(idEvent, output)) {
         var initial = output.inputStep();
         for (int i = 0; i < steps.size(); i++) {
           if (steps.get(i).result() == initial)
@@ -105,7 +105,7 @@ public final class Calculation {
     return -1;
   }
 
-  private static boolean isCalculationOf(Event<?> idEvent, OutputStep<?> output) {
+  private static boolean isTransactionOf(Event<?> idEvent, OutputStep<?> output) {
     return output.stepOutput() instanceof Accepted<?> accepted
         && accepted.entityModel() instanceof IdEntityModel
         && isSameId(accepted.event(), idEvent);
@@ -117,7 +117,7 @@ public final class Calculation {
   }
 
 
-  /// Whether the failure is new to the calculation, which it is the first time it is given
+  /// Whether the failure is new to the transaction, which it is the first time it is given
   public boolean isNewFailure(Throwable failure) {
     return failures.add(failure);
   }

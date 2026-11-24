@@ -24,9 +24,10 @@ import com.github.thxmasj.backend.core.Tuples.Tuple2;
 import com.github.thxmasj.backend.core.Validated;
 import com.github.thxmasj.backend.http.Headers;
 import com.github.thxmasj.backend.http.HttpClient;
-import com.github.thxmasj.backend.http.HttpRequest;
 import com.github.thxmasj.backend.http.HttpRequest.Method;
+import com.github.thxmasj.backend.http.HttpRequest;
 import com.github.thxmasj.backend.http.HttpResponse;
+import com.github.thxmasj.backend.http.Masking;
 import com.github.thxmasj.backend.http.inbox.Cookies;
 import com.github.thxmasj.backend.http.inbox.Form;
 import com.github.thxmasj.backend.http.inbox.HttpInbox;
@@ -58,12 +59,14 @@ import reactor.core.publisher.Mono;
 /// in a new session, which redirects the user to the provider. The provider redirects the user back with a code, which
 /// the session has redeemed by an at-most-once outbox request, as a code can be redeemed only once. The outbox tells
 /// the session the response, from which it verifies the ID token, decides by the claims whether the user may use the
-/// backoffice, and answers the browser. Every page viewed is an event of the session, and is rendered by its
-/// transition. The requests not of a session, e.g. for the static files and the health check, are entities of their
-/// own, `BackofficeResource`.
+/// backoffice, and answers the browser. Every page viewed is an event of the session, and is rendered
+/// by its transition. The requests not of a session, e.g. for the static files and the health check, are entities of
+/// their own, `BackofficeResource`, of the session only.
 ///
-/// Everything is stored, including the cookies, the secret of a sign-in, the code and the token response, until the
-/// state machine can keep such data out of the event log (#285).
+/// The event log keeps who signed in and which pages they viewed, but no secrets: the cookies, the code and the token
+/// requests and responses are masked, and of the secret of a sign-in only its hash and the nonce derived from it are
+/// stored. The pages
+/// rendered are not stored either, only which ones were viewed.
 final class Sessions {
 
   /// The most events a session has, after which the user must sign in again. The event numbers of an entity are
@@ -123,9 +126,25 @@ final class Sessions {
   /// A sign-in started for a page requested without a session
   ///
   /// @param returnPath       the page to return to after signing in
-  /// @param secret           the secret the PKCE verifier and the nonce are derived from, also kept in the browser
+  /// @param secret           the secret the PKCE verifier and the nonce are derived from, kept in the browser, which
+  ///                         is null in the event log
+  /// @param secretHash       the hash of the secret, by which the callback is found to be of the browser the sign-in
+  ///                         was started in
+  /// @param nonce            the nonce of the secret, which the ID token must have
   /// @param authorizationUrl where the user signs in, with the entity id of the session as state
-  record Start(String returnPath, String secret, boolean htmx, URI authorizationUrl) {}
+  record Start(String returnPath, String secret, String secretHash, String nonce, boolean htmx, URI authorizationUrl) {
+
+    /// The sign-in as stored, without the secret
+    Start stored() {
+      return new Start(returnPath, null, secretHash, nonce, htmx, authorizationUrl);
+    }
+
+    /// Whether the secret of the cookie is the one of the sign-in, by its hash
+    boolean isSecret(String cookieSecret) {
+      return cookieSecret != null && Secrets.matches(Secrets.hash(cookieSecret), secretHash);
+    }
+
+  }
 
   /// The user returning from the provider
   ///
@@ -133,9 +152,17 @@ final class Sessions {
   /// @param code   the code, if the user signed in
   /// @param error  the error, if the user didn't
   /// @param secret the secret of the sign-in from the cookie of the browser, or null if it has none
-  record Callback(String state, String code, String error, String secret) {}
+  record Callback(String state, String code, String error, String secret) {
 
-  /// The code to redeem, with the secret its PKCE verifier is derived from
+    /// The callback as stored, without the code and the secret
+    Callback stored() {
+      return new Callback(state, null, error, null);
+    }
+
+  }
+
+  /// The code to redeem, with the secret its PKCE verifier is derived from, which the outbox request is created from and
+  /// which is not stored
   record Redemption(String code, String secret) {}
 
   /// A user signed in
@@ -199,6 +226,7 @@ final class Sessions {
       DataType.json(Callback.class),
       DataType.none()
   );
+  /// The code dispatched to be redeemed by an outbox request. The code and the secret are masked in the event log.
   static final EventType<Callback, Callback> CodeRedemptionRequested = BasicEventType.of(
       "Code redemption requested",
       UUID.fromString("e9b1d5f3-8c2a-4e67-a3d0-7f4c1b9e6d25"),
@@ -259,7 +287,8 @@ final class Sessions {
       "User signed out",
       UUID.fromString("3c8e5b2a-7d4f-4e10-9b6c-2f1a8d5e7c03")
   );
-  static final EventType<ResourceRequest, ResourceRequest> ResourceRequested = BasicEventType.of(
+  /// Not stored, so a resource is an entity of the session only
+  static final EventType<ResourceRequest, ResourceRequest> ResourceRequested = BasicEventType.notStored(
       "Resource requested",
       UUID.fromString("4c9e2a7d-1b5f-4a63-8d0e-6f3b9a2c5e81"),
       DataType.json(ResourceRequest.class)
@@ -308,6 +337,8 @@ final class Sessions {
     this.files = Map.copyOf(files);
     this.session = EntityModel.of("BackofficeSession", UUID.fromString("4b6f2c8e-1d3a-4f57-9e0b-7a2c5d8f3e61"), this::sessionTransitions);
     this.resource = EntityModel.of("BackofficeResource", UUID.fromString("8e3c1a6f-4b2d-4d97-a5e0-2f7b9c4d1e83"), this::resourceTransitions);
+    // The token request is masked in the event log, its code, PKCE verifier and client secret, and the tokens of its
+    // response
     AtMostOnce<String, Void> tokenRequest = HttpOutboxRequest.atMostOnce()
         .requestPayloadType(DataType.string())
         .responsePayloadType(DataType.string())
@@ -321,16 +352,22 @@ final class Sessions {
         .contentParser(m -> valid(m.body() != null ? new String(m.body(), UTF_8) : ""))
         .onSuccess(TokenReceived, HttpResponse::body)
         .onFailure(TokenRequestFailed)
+        // A valid response which is neither accepted nor rejected, e.g. a 204 or a redirect, fails the sign-in too, so
+        // that it is answered
+        .onValidResponseUnknown(TokenRequestFailed)
         .isAccepted(r -> r.statusCode() == 200)
         .isRejected(r -> r.statusCode() >= 400)
         .isRejectedByInvalidResponse(d -> d.t1().statusCode() >= 400)
+        .masking(Masking.formFields("code", "code_verifier").andResponseBody())
         .build("BackofficeTokenRequest", UUID.fromString("1e5a8c3f-9b2d-4f60-a7e4-5c9b2d6f8a13"));
     this.tokenRequests = AtMostOnceDispatcher.reactive(tokenRequest, (_, r) -> provider.tokenRequest(r.code(), r.secret()));
-
     // The user returning from the provider, with the session as state
     HttpInboxRequest<Callback> callbackRequest = HttpInboxRequest
         .matching(m -> m.method() == Method.GET && m.uri().getPath().equals(Path + "/callback"))
         .contentParser(Sessions::callback)
+        // The code and the cookie with the secret of the sign-in, which every cookie is, are masked. The pages are not
+        // kept in the event log, as for every request of a session.
+        .masking(Masking.queryParameters("code").andResponseBody())
         .process(CallbackReceived, session, r -> r.body(), (_, callback) -> HttpInboxRequest.entityId(callback.state()))
         .response(ReplyCreated, c -> response(c.input(), c.correlationId()))
         .build("BackofficeCallbackRequest", UUID.fromString("6b2e9c4f-3a7d-4f15-9e80-1c5d8a3f7b62"));
@@ -338,6 +375,7 @@ final class Sessions {
     HttpInboxRequest<Void> signOutRequest = HttpInboxRequest
         .matching(m -> m.method() == Method.POST && m.uri().getPath().equals(Path + "/signout"))
         .noContent()
+        .masking(Masking.responseBody())
         .process(UserSignedOut, session, (m, _) -> valid(session(m)))
         .response(ReplyCreated, c -> response(c.input(), c.correlationId()))
         .build("BackofficeSignOutRequest", UUID.fromString("e6b9d2f4-8c1a-4a53-9f70-1d4e8b3c5a27"));
@@ -345,6 +383,8 @@ final class Sessions {
     HttpInboxRequest<View> viewRequest = HttpInboxRequest
         .matching(m -> m.method() == Method.GET && m.uri().getPath().startsWith(Path + "/") && !m.uri().getPath().startsWith(Path + "/static/"))
         .contentParser(Sessions::view)
+        // A page is rendered when it is viewed, from the entities of the application, so it is not kept in the event log
+        .masking(Masking.responseBody())
         .process(ViewRequested, session, r -> r.body(), (m, _) -> valid(session(m)))
         .response(ReplyCreated, c -> response(c.input(), c.correlationId()))
         .build("BackofficeViewRequest", UUID.fromString("7f2d5a8e-3b6c-4e19-b4a7-0c8e1f5d9b62"));
@@ -352,6 +392,7 @@ final class Sessions {
     HttpInboxRequest<ResourceRequest> resourceRequest = HttpInboxRequest
         .matching(_ -> true)
         .contentParser(m -> valid(new ResourceRequest(m.method().name(), m.uri().getPath())))
+        .notStored()
         .process(ResourceRequested, resource, r -> r.body(), HttpInboxRequest.newEntity())
         .response(ReplyCreated, c -> response(c.input(), c.correlationId()))
         .build("BackofficeResourceRequest", UUID.fromString("9d4f1b7e-2c6a-4e83-a5b9-0e7c3f8d1a26"));
@@ -391,7 +432,7 @@ final class Sessions {
                   String secret = Secrets.generate();
                   String returnPath = c.input().pathAndQuery().length() > maxReturnPathLength ? Path + "/" : c.input().pathAndQuery();
                   return provider.authorizationUrl(c.log().entityId().toString(), secret)
-                      .map(url -> Optional.of(new Start(returnPath, secret, c.input().htmx(), url)))
+                      .map(url -> Optional.of(new Start(returnPath, secret, Secrets.hash(secret), OpenIdConnectClient.nonce(secret), c.input().htmx(), url)))
                       .onErrorResume(e -> {
                         System.err.println("Backoffice can't reach the identity provider: " + e);
                         return Mono.just(Optional.empty());
@@ -405,10 +446,11 @@ final class Sessions {
                     _ -> new Failure("temporarily_unavailable", "The identity provider can't be reached. Please try again later.", 502)
                 )
                 .otherwise(
+                    // The secret is kept in the browser, and only its hash and its nonce in the event log
                     onEvent(SignInStarted).to(States.SigningIn)
                         .assemble(c -> tuple(c.input(), c.log().entityId()))
                         .trigger(ReplyCreated).with(d -> signInPage(d.t1(), d.t2())).on(Request).identifiedBy(entityIdFromSession())
-                        .output(d -> d.t1().t1()),
+                        .output(d -> d.t1().t1()).masked(Start::stored),
                     Optional::get
                 ),
             // Signing out without a session
@@ -417,7 +459,7 @@ final class Sessions {
         States.SigningIn, List.of(
             onEvent(CallbackReceived).to(States.Redeeming)
                 .assemble(c -> tuple(c.input(), c.log().one(SignInStarted)))
-                .when(d -> d.t1().secret() == null || !Secrets.matches(d.t1().secret(), d.t2().secret())).then(
+                .when(d -> !d.t2().isSecret(d.t1().secret())).then(
                     signInFailed(),
                     _ -> new Failure("invalid_request", "The sign-in has expired, or was started in another browser. Please sign in again.", 400)
                 )
@@ -426,20 +468,22 @@ final class Sessions {
                     d -> new Failure(d.t1().error() != null ? d.t1().error() : "server_error", "The sign-in failed at the identity provider: " + d.t1().error(), 401)
                 )
                 .otherwise(
-                    // The outbox tells the session the response, which then answers the browser
+                    // The outbox tells the session the response, which then answers the browser. The code and the secret,
+                    // which is the one of the cookie, are given the outbox request, and masked in the event log.
                     onEvent(CodeRedemptionRequested).to(States.Redeeming)
-                        .assemble(c -> tuple(new Redemption(c.input().code(), c.log().one(SignInStarted).secret()), DispatchContext.of(c), c.input()))
+                        .assemble(c -> tuple(new Redemption(c.input().code(), c.input().secret()), DispatchContext.of(c), c.input()))
                         .trigger(tokenRequests.requestDispatched()).withReactive(d -> tokenRequests.input(d.t2(), d.t1())).on(tokenRequests.outbox()).identifiedBy(newEntityId())
-                        .output(d -> d.t1().t3()),
+                        .output(d -> d.t1().t3()).masked(Callback::stored),
                     Tuple2::t1
                 )
         ),
         States.Redeeming, List.of(
+            // The ID token is verified against the nonce, which is stored, as the secret isn't
             onEvent(TokenReceived).to(States.SignedIn)
                 .assembleReactive(c -> {
                   Start start = c.log().one(SignInStarted);
                   long now = c.timestamp().toEpochSecond();
-                  return provider.verify(c.input(), start.secret())
+                  return provider.verifyWithNonce(c.input(), start.nonce())
                       .map(Optional::of)
                       .onErrorResume(e -> {
                         System.err.println("Backoffice can't verify the ID token: " + e);
@@ -535,7 +579,7 @@ final class Sessions {
             onEvent(CallbackRefused).toSelf()
                 .assembleInput()
                 .trigger(ReplyCreated).with(_ -> page(400, "Sign-in failed", "The sign-in has already been used. Please sign in again.", "Sign in again")).on(Request).identifiedBy(entityIdFromSession())
-                .output(Tuple2::t1),
+                .output(Tuple2::t1).masked(Callback::stored),
             d -> d
         );
   }
