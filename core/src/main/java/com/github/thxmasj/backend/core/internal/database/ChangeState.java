@@ -256,7 +256,7 @@ public abstract class ChangeState {
         .all()
         .onErrorMap(PrimaryKeyConstraintViolation.class, primaryKeyConstraintViolationMapper(changes))
         .onErrorMap(UniqueIndexConstraintViolation.class, uniqueIndexConstraintViolationMapper(changes))
-        ;
+        .onErrorMap(TriggerFiredElsewhere::isCause, TriggerFiredElsewhere::new);
   }
 
   /// The SQL storing the changes in a single transaction, in the dialect of the database. Parameters are prefixed with

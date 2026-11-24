@@ -79,6 +79,12 @@
       "allDeclaredConstructors": true
     },
     {
+      "type": "com.github.thxmasj.backend.identityprovider.Clients$RegistrationRequest",
+      "allDeclaredFields": true,
+      "allDeclaredMethods": true,
+      "allDeclaredConstructors": true
+    },
+    {
       "type": "com.github.thxmasj.backend.identityprovider.Inbox$Redirect",
       "allDeclaredFields": true,
       "allDeclaredMethods": true,

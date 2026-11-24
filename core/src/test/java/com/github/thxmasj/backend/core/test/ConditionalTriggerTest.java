@@ -265,6 +265,33 @@ public class ConditionalTriggerTest {
     assertEquals(0, conditionalTriggerCount());
   }
 
+  /// A conditional trigger which another transaction fires first, e.g. of another instance which picked it too, is
+  /// taken once: the transaction finding it gone when stored fails, rather than storing the events it triggers again
+  @Test
+  public void conditionalTriggerFiredByAnotherTransactionFirstIsTakenOnce() throws Exception {
+    this.schema = UUID.randomUUID().toString();
+    eventsByEntityId = Init.storage(schema, entityModels()).eventsByEntityId();
+    // Deletes the trigger just before the transaction it fired is stored, as the other transaction would
+    var machine = Init.stateMachine(schema, entityModels(), java.time.Clock.systemUTC(), new com.github.thxmasj.backend.core.JsonLinesListener(_ -> {}, java.time.Clock.systemUTC()), keys ->
+        keys.stream().anyMatch(key -> key.endsWith(BatchChecked.id().toString())) ?
+            Init.client().sql("DELETE FROM \"" + schema + "\".\"ConditionalTrigger\"").name("Test.DeleteConditionalTriggers").update().then() :
+            reactor.core.publisher.Mono.empty()
+    );
+    UUID key = UUID.randomUUID();
+    var order = machine.onEvent(trigger(OrderCreated, Order), key).blockFirst();
+    var batch = machine.onEvent(trigger(BatchOpened, Batch)).blockFirst();
+    machine.onEvent(trigger(BatchCheckRequestedWhenShipped, Batch, batch.entityId()), key).blockFirst();
+    assertEquals(1, conditionalTriggerCount());
+
+    machine.onEvent(trigger(OrderShipped, Order, order.entityId())).blockFirst();
+    long deadline = System.currentTimeMillis() + Duration.ofSeconds(10).toMillis();
+    while (System.currentTimeMillis() < deadline && conditionalTriggerCount() > 0) Thread.sleep(200);
+    Thread.sleep(2500);
+    assertEquals(0, conditionalTriggerCount());
+    // Batch noted, which the fired Batch checked triggers, is not stored, as the transaction failed
+    assertEquals(2, batchEventCount(machine, batch.entityId()));
+  }
+
   /// A conditional trigger on an entity of the session only, as its model is not stored, is deleted as it fires, rather
   /// than firing again
   @Test

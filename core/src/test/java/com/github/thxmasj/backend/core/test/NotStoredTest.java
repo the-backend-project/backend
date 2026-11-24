@@ -6,6 +6,7 @@ import static com.github.thxmasj.backend.core.EntitySelector.entityIdFromSession
 import static com.github.thxmasj.backend.core.EntitySelector.newEntityId;
 import static com.github.thxmasj.backend.core.EventTrigger.trigger;
 import static com.github.thxmasj.backend.core.TransitionModelBuilder.WithEvent.onEvent;
+import static com.github.thxmasj.backend.core.Tuples.tuple;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -117,6 +118,40 @@ public class NotStoredTest {
       DeliveryStates.Delivered, List.of()
   ));
 
+  enum LockerStates implements State { Opened, Armed, Checked }
+
+  /// The code of a locker, which is stored masked
+  static EventType<String, String> LockerOpened = BasicEventType.of("Locker opened", UUID.fromString("49b386d7-abb1-4081-9563-adc0fbf662ef"), DataType.string());
+  static EventType<Void, Void> LockerArmed = BasicEventType.of("Locker armed", UUID.fromString("82198210-6f2a-44cc-a80d-45cf01fa8144"));
+  static EventType<Void, Void> LockerChecked = BasicEventType.of("Locker checked", UUID.fromString("b9da0f06-c22b-42cf-a10f-72e50f5a23a3"));
+  /// The codes the checks of lockers read
+  static final List<String> checkedCodes = new CopyOnWriteArrayList<>();
+  static Action<String> lockerCheck = new Action<>() {
+    @Override public String name() {return "Locker check";}
+    @Override public Mono<InputEvent<?>> execute(String data) {
+      return Mono.<InputEvent<?>>just(new InputEvent<>(LockerChecked, null));
+    }
+  };
+  /// A locker opened with a code, which arms itself in the same transaction, with an action whose result is taken in a
+  /// later transaction, which reads the code
+  static EntityModel Locker = EntityModel.of("Locker", UUID.fromString("833ebdd8-56d4-4d26-bb5e-ca8d4f312e6c"), () -> Map.<State, List<TransitionModel<?, ?>>>of(
+      Begin, List.of(
+          onEvent(LockerOpened).to(LockerStates.Opened)
+              .assemble(c -> tuple(c.input(), c.log().entityId()))
+              .trigger(LockerArmed).on(NotStoredTest.Locker).identifiedBy(d -> entityId(d.t2()))
+              .output(d -> d.t1().t1()).masked(_ -> "***")
+      ),
+      LockerStates.Opened, List.of(
+          onEvent(LockerArmed).to(LockerStates.Armed).assemble(_ -> "").trigger(lockerCheck).with(d -> d).output()
+      ),
+      LockerStates.Armed, List.of(
+          onEvent(LockerChecked).to(LockerStates.Checked)
+              .assemble(c -> checkedCodes.add(c.log().one(LockerOpened)))
+              .output()
+      ),
+      LockerStates.Checked, List.of()
+  ));
+
   private static final List<String> lines = new CopyOnWriteArrayList<>();
   private static final String schema = UUID.randomUUID().toString();
   private static final StateMachine machine = Init.stateMachine(
@@ -127,7 +162,7 @@ public class NotStoredTest {
   );
 
   private static List<EntityModel> entityModels() {
-    return List.of(Account, Views, SignIn, Session, Visit, Watcher);
+    return List.of(Account, Views, SignIn, Session, Visit, Watcher, Locker);
   }
 
   private static Map<State, List<TransitionModel<?, ?>>> accountTransitions() {
@@ -326,5 +361,20 @@ public class NotStoredTest {
     assertEquals(0, delayedTriggerCount(account));
     Thread.sleep(500);
     assertEquals(List.of("1:Account opened", "2:Timeout set", "3:Account touched"), events(log(Account, List.of(AccountOpened, TimeoutSet, AccountTouched, AccountTimedOut), account)));
+  }
+
+  /// The transaction of an action's result, a later one, reads the entity as stored, also an event masked earlier in
+  /// the transaction of the action
+  @Test
+  public void anActionsTransactionReadsAMaskedEventOfTheTransactionMasked() throws InterruptedException {
+    UUID locker = machine.onEvent(trigger(LockerOpened, Locker), "c0de").blockFirst().entityId();
+    List<String> events = List.of();
+    for (int i = 0; i < 50 && events.size() < 3; i++) {
+      Thread.sleep(100);
+      events = events(log(Locker, List.of(LockerOpened, LockerArmed, LockerChecked), locker));
+    }
+    assertEquals(List.of("1:Locker opened", "2:Locker armed", "3:Locker checked"), events);
+    // Read once by each calculation of the check's transition, of which there may be more than one
+    assertEquals(List.of("***"), checkedCodes.stream().distinct().toList());
   }
 }

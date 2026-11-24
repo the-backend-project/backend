@@ -11,6 +11,7 @@ import com.github.thxmasj.backend.core.database.DatabaseClient;
 import com.github.thxmasj.backend.core.internal.DelayedEvent;
 import com.github.thxmasj.backend.core.internal.database.ChangeState.Change.FiredTrigger;
 import com.github.thxmasj.backend.core.internal.database.ConditionalTrigger;
+import com.github.thxmasj.backend.core.internal.database.TriggerFiredElsewhere;
 import java.time.Clock;
 import java.util.HexFormat;
 import java.util.List;
@@ -115,8 +116,10 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
     }
 
     if (firedTrigger != null) {
-      // The trigger fired an event which isn't stored, which would otherwise have deleted it
-      sql += firedTrigger.type() == TriggerType.DELAYED ?
+      // The trigger fired an event which isn't stored, which would otherwise have deleted it. If it is gone, another
+      // transaction fired it first, e.g. of another instance which picked it too, so this one fails, as the event it
+      // fired would otherwise be taken twice.
+      sql += (firedTrigger.type() == TriggerType.DELAYED ?
           """
           DELETE [{schema}].[DelayedTrigger] FROM [{schema}].[DelayedTrigger] WITH (INDEX([ixEntityId]))
           WHERE EntityId=@entityId{changeIndex} AND EventNumber<=:eventNumber;
@@ -124,7 +127,8 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
           """
           DELETE [{schema}].[ConditionalTrigger]
           WHERE Id=:triggerId;
-          """.replace("{schema}", schema);
+          """.replace("{schema}", schema))
+          + "IF @@ROWCOUNT = 0 THROW 50001, '" + TriggerFiredElsewhere.MARKER + "', 1;\n";
     }
 
     if (conditionalTrigger != null) {

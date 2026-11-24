@@ -533,12 +533,14 @@ public class StateMachine implements AutoCloseable {
   }
 
   /// The action trigger with the log of its entity as the transaction of the action's result reads it, a later one: with
-  /// the event of the transition as stored, e.g. masked, and without it if it isn't stored, as the next event stored
-  /// follows. An entity of the session only has its events in the session, as they are.
-  private static ActionTrigger<?> withEventAsRead(ActionTrigger<?> actionTrigger, Event<?> event) {
+  /// its events as stored, e.g. masked, also those of the same transaction before the transition's, and with the
+  /// event of the transition if it is stored, as the next event stored follows one which isn't. An entity of the
+  /// session only has its events in the session, as they are.
+  private static <T> ActionTrigger<T> withEventAsRead(ActionTrigger<T> actionTrigger, Event<?> event) {
     if (actionTrigger.eventLog().isSessionOnlyWith(event))
       return actionTrigger.withEvent(event);
-    return event.type().stored() ? actionTrigger.withEvent(event.asStored()) : actionTrigger;
+    var asRead = new ActionTrigger<>(actionTrigger.action(), actionTrigger.data(), actionTrigger.eventLog().asStored());
+    return event.type().stored() ? asRead.withEvent(event.asStored()) : asRead;
   }
 
   private List<ActionTrigger<?>> actionTriggers(@NotNull TransitionStep<?> tail) {

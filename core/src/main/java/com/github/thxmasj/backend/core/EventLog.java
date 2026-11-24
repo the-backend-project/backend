@@ -148,6 +148,11 @@ public record EventLog(
     return unmodifiableList(effectiveEventsReversed.reversed());
   }
 
+  /// The log with its events as they are stored, e.g. masked, as a later transaction reads it
+  EventLog asStored() {
+    return new EventLog(entityModel(), entityId(), events().stream().<Event<?>>map(Event::asStored).toList());
+  }
+
   public EventLog withNewEvent(Event<?> newEvent) {
     return new EventLog(
         entityModel(),
