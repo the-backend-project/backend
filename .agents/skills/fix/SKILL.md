@@ -51,16 +51,27 @@ git remote -v
    `gh issue edit N --add-assignee @me`
 
 4. **Move it to In Progress.** `item-add` is idempotent and returns the existing
-   item if the issue is already on the board:
+   item if the issue is already on the board. It prints the item's id:
 
    ```sh
-   ITEM=$(gh project item-add 1 --owner the-backend-project \
-     --url https://github.com/the-backend-project/backend/issues/N --format json --jq .id)
-   gh project item-edit --id "$ITEM" \
+   gh project item-add 1 --owner the-backend-project \
+     --url https://github.com/the-backend-project/backend/issues/N --format json --jq .id
+   ```
+
+   Then run a separate command that sets the item's Status, with the printed id in
+   place of `<item-id>`:
+
+   ```sh
+   gh project item-edit --id <item-id> \
      --project-id PVT_kwDOCtCyDc4An_-_ \
      --field-id PVTSSF_lADOCtCyDc4An_-_zgfpLXU \
      --single-select-option-id 47fc9ee4
    ```
+
+   Run these and the other commands of this skill as they are written: don't pass
+   values between them through shell variables or command substitution (`$(...)`).
+   Agents ask before running commands that use them, even ones the project's
+   settings allow.
 
    Status option IDs: Todo `f75ad846`, In Progress `47fc9ee4`, Done `98236657`.
    These are the ids of the board, its Status field and the field's options. If the
