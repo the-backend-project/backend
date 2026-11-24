@@ -141,7 +141,7 @@ class PgsqlR2dbcClient implements DatabaseClient {
       if (error instanceof MappingFailure)
         return error;
       String message = "Query " + queryName + " failed: " + error.getMessage() + "\nParameters:\n" +
-          parameters.entrySet().stream().map(e -> e.getKey() + "\t" + e.getValue()).collect(joining("\n")) +
+          parameters.entrySet().stream().map(e -> e.getKey() + "\t" + e.getValue().described()).collect(joining("\n")) +
           "\nSQL:\n" + sql;
       Throwable violation = null;
       if (error instanceof PostgresqlException e) {

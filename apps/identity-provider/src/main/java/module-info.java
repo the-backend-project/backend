@@ -3,6 +3,8 @@
 @SuppressWarnings("module")
 module com.github.thxmasj.backend.identityprovider {
   requires com.github.thxmasj.backend.http.inbox;
+  // The code of the upstream provider is redeemed by an outbox request
+  requires com.github.thxmasj.backend.http.outbox;
   requires com.nimbusds.jose.jwt;
   requires spring.security.crypto;
   // The databases are found by the core with the service loader, as selected by configuration

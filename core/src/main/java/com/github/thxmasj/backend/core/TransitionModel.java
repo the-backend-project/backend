@@ -5,16 +5,19 @@ import static com.github.thxmasj.backend.core.TransitionModelBuilder.log;
 import com.github.thxmasj.backend.core.BasicEventType.Rollback.Data;
 import com.github.thxmasj.backend.core.TransitionModelBuilder.Filter;
 import com.github.thxmasj.backend.core.TransitionModelBuilder.ModelContext;
+import com.github.thxmasj.backend.core.StateMachine.ProcessResult;
+import com.github.thxmasj.backend.core.StateMachine.ProcessResult.Accepted;
 import com.github.thxmasj.backend.core.Tuples.Tuple4;
+import com.github.thxmasj.backend.core.internal.TransitionStep.ChoiceStep;
 import com.github.thxmasj.backend.core.internal.TransitionStep.InputStep;
 import com.github.thxmasj.backend.core.internal.TransitionStep.OutputStep;
-import com.github.thxmasj.backend.core.internal.Transitions;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.function.Function;
+import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import reactor.core.publisher.Mono;
@@ -46,6 +49,14 @@ public class TransitionModel<I, O> {
     return String.format("onEvent(%s).to(%s)", (modelContext.eventType() != null ? modelContext.eventType().name() : "N/A") , modelContext.to() != null ? modelContext.to().name() : "<self>");
   }
 
+  ModelContext<I, O> modelContext() {
+    return modelContext;
+  }
+
+  Function<Mono<InputStep<I>>, Mono<OutputStep<O>>> chain() {
+    return chain;
+  }
+
   TransitionModel(
       ModelContext<I, O> modelContext,
       Function<Mono<InputStep<I>>, Mono<OutputStep<O>>> chain
@@ -62,18 +73,14 @@ public class TransitionModel<I, O> {
     return null;
   }
 
-  static {
-    Transitions.register(new Transitions.Calculator() {
-      @Override
-      public <I, O> Mono<OutputStep<O>> calculate(TransitionModel<I, O> transition, InputStep<I> inputStep) {
-        return transition.calculate(inputStep);
-      }
-    });
-  }
-
-  Mono<OutputStep<O>> calculate(InputStep<I> inputStep) {
-    log(modelContext, "calculate [" + eventType().name() + "] on [" + inputStep.log().entityModel().name() + ":" + inputStep.log().entityId() + "] (input: " + inputStep.input() + ")");
+  /// Calculates the transition from its input step, without storing its changes. The input step is internal to the
+  /// library, as its package is exported to the library's own modules only, so only the library calls this: the state
+  /// machine, and the tests of the transitions of the library's modules.
+  public Mono<OutputStep<O>> calculate(InputStep<I> inputStep) {
+    // Without the input, which may be a secret, e.g. the credentials of a request
+    log(modelContext, "calculate [" + eventType().name() + "] on [" + inputStep.log().entityModel().name() + ":" + inputStep.log().entityId() + "]");
     return chain.apply(Mono.just(inputStep))
+        .map(TransitionModel::marshalledIfStored)
         .doOnError(e -> inputStep.stateMachine().transitionFailed(inputStep, e));
   }
 
@@ -116,7 +123,58 @@ public class TransitionModel<I, O> {
     return modelContext.triggers();
   }
 
+  /// The types of the delayed events the transition triggers
+  List<EventType<?, ?>> delayedEventTypes() {
+    return modelContext.delayedEventTypes();
+  }
+
   public List<Action<?>> actions() {
     return modelContext.actions();
   }
+
+  /// Whether the transition's event has no data, as it ends in `output()` without a data adapter
+  boolean withoutData() {
+    return modelContext.withoutData();
+  }
+
+  /// The output step with its event marshalled, after its mask, if it is stored, so that a failure of masking or
+  /// marshalling it is one of the transition, and the event is marshalled once. An event which isn't stored is never
+  /// marshalled for storing, nor is the event of a transition which chose another one, which isn't stored either.
+  private static <O> OutputStep<O> marshalledIfStored(OutputStep<O> step) {
+    if (!(step.previous() instanceof ChoiceStep<?>)
+        && step.stepOutput() instanceof Accepted<O>(Event<O> event, _, _)
+        && event.type().stored()
+        && !step.inputStep().log().isSessionOnlyWith(event))
+      event.getMarshalledData();
+    return step;
+  }
+
+  /// A transition with an output, which may be masked when its event is stored
+  public static final class WithOutput<I, O> extends TransitionModel<I, O> {
+
+    /// The steps of the transition with its output masked by a mask, or not if it is null
+    private final Function<UnaryOperator<O>, Function<Mono<InputStep<I>>, Mono<OutputStep<O>>>> masking;
+
+    WithOutput(ModelContext<I, O> modelContext, Function<UnaryOperator<O>, Function<Mono<InputStep<I>>, Mono<OutputStep<O>>>> masking) {
+      super(modelContext, masking.apply(null));
+      this.masking = masking;
+    }
+
+    /// The transition with its output masked when its event is stored, e.g. to keep a secret or bulky data out of the
+    /// event log. The event in the transaction has the whole output: the transition's triggers, the one who triggered
+    /// the event, and the transitions of the same transaction reading the entity's log see it. The event log stores
+    /// the masked output, which is what a later transaction reads of a stored entity, also one of the same session, so
+    /// the state of the entity must not depend on what is masked. A transition which chooses another one stores the
+    /// event of the chosen transition, with the mask of that one. The event is masked in the transition's output
+    /// step, the one the transaction records.
+    ///
+    /// @param mask gives the output as it is stored, which must not be null
+    public TransitionModel<I, O> masked(UnaryOperator<O> mask) {
+      Objects.requireNonNull(mask, "mask is null");
+      return new TransitionModel<>(modelContext(), masking.apply(mask));
+    }
+
+  }
+
+
 }

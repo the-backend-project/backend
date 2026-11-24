@@ -11,7 +11,7 @@ The project aims for stable, robust and long-lived systems, and it judges change
 
 ### Where to start
 
-* Issues labelled [good first issue](https://github.com/the-backend-project/tits/labels/good%20first%20issue) are
+* Issues labelled [good first issue](https://github.com/the-backend-project/backend/labels/good%20first%20issue) are
   small and self-contained. The Todo column of the [project board](https://github.com/orgs/the-backend-project/projects/1)
   lists what is planned next.
 * To learn the code, read [Getting started](docs/getting-started.md) and the [architecture](docs/architecture.md), and
@@ -25,6 +25,7 @@ The project aims for stable, robust and long-lived systems, and it judges change
 |-----------------------------------------------------|----------------------------------------------------------------------------------|
 | [core](core)                                        | The state machine, `TransitionModelBuilder` and the interface of the databases   |
 | [database-mssql](database-mssql), `database-pgsql-*` | The SQL and driver of each database, and the tests of core that need a database  |
+| [http](http)                                        | HTTP messages and clients, shared by the inbox and the outbox                    |
 | [http-inbox](http-inbox), [http-outbox](http-outbox) | Receiving and sending HTTP requests as entities                                  |
 | [backoffice](backoffice)                            | The web application for looking into the entities of an application              |
 | [test-api](test-api)                                | The API for tests to look into and manipulate the database of a state machine    |

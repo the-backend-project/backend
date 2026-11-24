@@ -20,9 +20,11 @@ import com.github.thxmasj.backend.core.IdEntityModel;
 import com.github.thxmasj.backend.core.State;
 import com.github.thxmasj.backend.core.StateMachine;
 import com.github.thxmasj.backend.core.TransitionModel;
-import com.github.thxmasj.backend.core.message.http.HttpRequestMessage.Method;
+import com.github.thxmasj.backend.http.HttpRequest.Method;
 import com.github.thxmasj.backend.core.test.Init;
+import com.github.thxmasj.backend.http.inbox.Form;
 import com.github.thxmasj.backend.http.inbox.HttpInbox;
+import com.github.thxmasj.backend.http.inbox.Secrets;
 import com.github.thxmasj.backend.http.inbox.HttpInboxListener;
 import com.github.thxmasj.backend.http.inbox.HttpInboxRequest;
 import java.net.URI;
@@ -34,7 +36,6 @@ import java.net.http.HttpResponse.BodyHandlers;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -55,7 +56,7 @@ public class BackofficeTest {
   /// An application placing orders, each found by its order number
   enum OrderStates implements State {Placed}
 
-  static final EntityModel Order = EntityModel.of("Order", UUID.fromString("0a3e6c1d-7b92-4f58-a4e0-2d9c5f8b1e63"));
+  static final EntityModel Order = EntityModel.of("Order", UUID.fromString("0a3e6c1d-7b92-4f58-a4e0-2d9c5f8b1e63"), BackofficeTest::orderTransitions);
   static final EventType<String, String> OrderPlaced = BasicEventType.of("Order placed", UUID.fromString("b6d1f8a3-2c4e-4a97-8e05-9f3b7d1c5a28"), DataType.string());
   static final EventType<String, String> OrderNumberClaimed = BasicEventType.of("Order number claimed", UUID.fromString("e2c9a5f7-4b1d-4d63-9a80-6c2e8f4b1d95"), DataType.string());
   static final IdEntityModel OrderNumbers = IdEntityModel.of("OrderNumbers", UUID.fromString("5f8b2d6e-9a3c-4e17-b0d4-1e7a3c9f5b82"), OrderNumberClaimed);
@@ -72,7 +73,7 @@ public class BackofficeTest {
   private static final ProviderStub provider = provider();
   private static final ProviderStub.User ada = new ProviderStub.User("user-ada", "ada@example.com", "Ada Lovelace", List.of("backoffice"));
   private static final ProviderStub.User bob = new ProviderStub.User("user-bob", "bob@example.com", "Bob", List.of("sales"));
-  private static Map<EntityModel, Map<State, List<TransitionModel<?, ?>>>> transitions;
+  private static HttpInbox inbox;
   private static StateMachine stateMachine;
   private static StateMachine backofficeStateMachine;
   private static StateMachine shortLivedStateMachine;
@@ -85,8 +86,21 @@ public class BackofficeTest {
 
   @BeforeAll
   static void setUp() {
-    var application = new HashMap<EntityModel, Map<State, List<TransitionModel<?, ?>>>>();
-    application.put(Order, Map.of(
+    inbox = HttpInbox.of(List.of(PlaceOrder));
+    stateMachine = Init.stateMachine(schema, inbox.entityModels());
+    BackofficeTest.application = new HttpInboxListener(stateMachine, inbox).listen(0);
+    int port = freePort();
+    var backoffice = backoffice(config(port, Duration.ofHours(1)));
+    backofficeStateMachine = backofficeStateMachine(backofficeSchema, backoffice);
+    server = new HttpInboxListener(backofficeStateMachine, backoffice.inbox()).listen(port);
+    int shortLivedPort = freePort();
+    var shortLivedBackoffice = backoffice(config(shortLivedPort, Duration.ofSeconds(1)));
+    shortLivedStateMachine = backofficeStateMachine(shortLivedSchema, shortLivedBackoffice);
+    shortLived = new HttpInboxListener(shortLivedStateMachine, shortLivedBackoffice.inbox()).listen(shortLivedPort);
+  }
+
+  private static Map<State, List<TransitionModel<?, ?>>> orderTransitions() {
+    return Map.of(
         Begin, List.of(
             onEvent(OrderPlaced).to(OrderStates.Placed)
                 .assemble(c -> tuple(c.input(), c.entityId(), c.eventReference()))
@@ -95,27 +109,21 @@ public class BackofficeTest {
                 .output(d -> d.t1().t1().t1())
         ),
         OrderStates.Placed, List.of()
-    ));
-    application.put(OrderNumbers, OrderNumbers.transitions());
-    transitions = HttpInbox.transitions(List.of(PlaceOrder), application);
-    stateMachine = Init.stateMachine(schema, transitions);
-    BackofficeTest.application = new HttpInboxListener(stateMachine).listen(0);
-    int port = freePort();
-    backofficeStateMachine = backofficeStateMachine(backofficeSchema, config(port, Duration.ofHours(1)));
-    server = new HttpInboxListener(backofficeStateMachine).listen(port);
-    int shortLivedPort = freePort();
-    shortLivedStateMachine = backofficeStateMachine(shortLivedSchema, config(shortLivedPort, Duration.ofSeconds(1)));
-    shortLived = new HttpInboxListener(shortLivedStateMachine).listen(shortLivedPort);
+    );
+  }
+
+  /// The backoffice of the application
+  private static Backoffice backoffice(Backoffice.Config config) {
+    return new Backoffice("Orders", config, Init.client(), schema, inbox.entityModels());
   }
 
   /// The state machine of a backoffice, in a schema of its own, reading the schema of the application. It has a
   /// database client of its own, as when it is deployed: closing a state machine closes its client, which must not be
   /// the one of the application's state machine.
-  private static StateMachine backofficeStateMachine(String backofficeSchema, Backoffice.Config config) {
-    var backoffice = new Backoffice("Orders", config, Init.client(), schema, transitions);
+  private static StateMachine backofficeStateMachine(String backofficeSchema, Backoffice backoffice) {
     return new StateMachine(
         _ -> Mono.empty(),
-        backoffice.transitions(),
+        backoffice.inbox().entityModels(),
         Init.database(),
         Init.newClient(),
         Init.migrationDataSource(),
@@ -295,6 +303,43 @@ public class BackofficeTest {
   }
 
   @Test
+  void noSecretsEnterTheEventLog() throws Exception {
+    provider.signInAs(ada);
+    var start = get(server, "/backoffice/", null);
+    String signInCookie = start.headers().firstValue("Set-Cookie").orElseThrow().split(";")[0];
+    String secret = signInCookie.substring(signInCookie.indexOf('=') + 1);
+    var authorized = http.send(HttpRequest.newBuilder(URI.create(start.headers().firstValue("Location").orElseThrow())).build(), BodyHandlers.ofString());
+    URI callback = URI.create(authorized.headers().firstValue("Location").orElseThrow());
+    String code = Form.parse(callback.getRawQuery()).get("code");
+    var signedIn = get(server, callback.getRawPath() + "?" + callback.getRawQuery(), signInCookie);
+    String cookie = sessionCookie(signedIn);
+    assertThat(get(server, "/backoffice/", cookie).statusCode()).isEqualTo(200);
+
+    List<String> stored = allEventData(backofficeSchema);
+    assertThat(stored).isNotEmpty().noneSatisfy(data -> assertThat(data).contains(secret));
+    assertThat(stored).noneSatisfy(data -> assertThat(data).contains(code));
+    assertThat(stored).noneSatisfy(data -> assertThat(data).containsAnyOf(tokens.toArray(String[]::new)));
+    // No token of the provider, which are JWTs, nor a page rendered
+    assertThat(stored).noneSatisfy(data -> assertThat(data).contains("eyJ"));
+    assertThat(stored).noneSatisfy(data -> assertThat(data).contains("<html"));
+    // But the sign-in is recorded, by the hash of its secret
+    assertThat(eventData(backofficeSchema, Sessions.SignInStarted)).anySatisfy(data -> assertThat(data).contains(Secrets.hash(secret)));
+  }
+
+  @Test
+  void resourcesAreNotStored() throws Exception {
+    assertThat(get(server, "/health", null).statusCode()).isEqualTo(200);
+    assertThat(get(server, "/backoffice/static/backoffice.css", null).statusCode()).isEqualTo(200);
+    long resources = Init.client().sql("SELECT CAST(COUNT(*) AS INT) AS N FROM \"" + backofficeSchema + "\".\"Entity\" WHERE EntityModelId=:model")
+        .name("Test.Resources")
+        .bind("model", UUID.fromString("8e3c1a6f-4b2d-4d97-a5e0-2f7b9c4d1e83"))
+        .map(row -> row.get("N", Integer.class).longValue())
+        .one()
+        .block();
+    assertThat(resources).isZero();
+  }
+
+  @Test
   void staticFilesAreServed() throws Exception {
     var htmx = get(server, "/backoffice/static/htmx.min.js", null);
     assertThat(htmx.statusCode()).isEqualTo(200);
@@ -346,6 +391,19 @@ public class BackofficeTest {
     String value = cookie.split(";")[0];
     tokens.add(value.substring(value.indexOf('=') + 1));
     return value;
+  }
+
+  /// The data of all the events in a schema, as text
+  private static List<String> allEventData(String schemaName) {
+    return Init.client().sql("SELECT Data FROM \"" + schemaName + "\".\"Event\"")
+        .name("Test.AllEventData")
+        .map(row -> {
+          byte[] data = row.get("Data", byte[].class);
+          return data != null ? new String(data, UTF_8) : "";
+        })
+        .all()
+        .collectList()
+        .block();
   }
 
   /// The data of the events of a type in a schema, as text

@@ -1,7 +1,5 @@
 package com.github.thxmasj.backend.templates.cardpayment;
 
-import static com.github.thxmasj.backend.templates.cardpayment.Aggregate.Merchant;
-
 import com.github.thxmasj.backend.core.StateMachine;
 import com.github.thxmasj.backend.core.TransitionModel;
 import com.github.thxmasj.backend.core.test.Init;
@@ -20,11 +18,7 @@ public class MerchantTest {
   public static void setup() {
     stateMachine = new StateMachine(
         _ -> Mono.empty(),
-        Map.of(
-            Merchant, new MerchantTransitions().transitions()
-//            ,
-//            inboxExchange, inboxExchange.transitions()
-        ),
+        DummyTransitions.cardPayments().entityModels(),
         Init.database(),
         Init.client(),
         migrationDataSource,
@@ -48,7 +42,7 @@ public class MerchantTest {
 //        UUID.randomUUID().toString(),
 //        false
 //    ));
-//    HttpRequestMessage request = new HttpRequestMessage(Method.POST, URI.create("/merchants"), Map.of(), body);
+//    HttpRequest<byte[]> request = new HttpRequest<>(Method.POST, URI.create("/merchants"), Map.of(), body);
 //    Event<?> result = stateMachine.onEvent(
 //        Optional.ofNullable(request.headerValue("x-correlation-id")).orElse(request.headerValue("tid")),
 //        new EventTrigger<>(
@@ -102,7 +96,7 @@ public class MerchantTest {
 //    );
 //
 //    @Override
-//    protected Map<Predicate<HttpRequestMessage>, Alternative<HttpRequestMessage, ?, ?>> routes() {
+//    protected Map<Predicate<HttpRequest<byte[]>>, Alternative<HttpRequest<byte[]>, ?, ?>> routes() {
 //      return Map.of(
 //          d -> RequestLines.POST_merchant.matches(d.requestLine()),
 //          then(

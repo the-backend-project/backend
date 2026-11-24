@@ -8,10 +8,8 @@ import com.github.thxmasj.backend.core.JsonLinesListener;
 import com.github.thxmasj.backend.core.StateMachine;
 import com.github.thxmasj.backend.core.database.DataSourceBuilder;
 import com.github.thxmasj.backend.core.database.Database;
-import com.github.thxmasj.backend.core.message.http.HttpMessageParser;
-import com.github.thxmasj.backend.core.message.http.HttpRequestMessage;
-import com.github.thxmasj.backend.core.message.http.HttpRequestMessage.Method;
-import com.github.thxmasj.backend.core.message.http.HttpResponseMessage;
+import com.github.thxmasj.backend.http.HttpResponse;
+import com.github.thxmasj.backend.http.JdkHttpClient;
 import com.github.thxmasj.backend.http.inbox.HttpInbox;
 import com.github.thxmasj.backend.http.inbox.HttpInboxListener;
 import com.github.thxmasj.backend.http.inbox.OpenIdConnectClient;
@@ -60,14 +58,23 @@ public final class IdentityProvider {
       case "serve" -> {
         // Invalid keys fail before connecting to the database
         Keys keys = keys(config.requireServing(), Clock.systemUTC());
-        StateMachine stateMachine = stateMachine(config);
+        StateMachine stateMachine;
+        HttpInbox inbox;
         DisposableServer server;
         try {
-          if (config.bootstrapClient() != null)
-            bootstrap(stateMachine, config.bootstrapClient());
-          importClients(stateMachine, config.clients());
           OpenIdConnectClient upstream = config.upstream() != null ? upstream(config.upstream(), config.issuer()) : null;
-          server = serve(stateMachine, keys, upstream, config.port(), config.clients());
+          inbox = inbox(config, keys, upstream);
+          stateMachine = stateMachine(config, inbox);
+        } catch (RuntimeException e) {
+          e.printStackTrace();
+          System.exit(1);
+          return;
+        }
+        try {
+          if (config.bootstrapClient() != null)
+            bootstrap(stateMachine, inbox, config.bootstrapClient());
+          importClients(stateMachine, inbox, config.clients());
+          server = serve(stateMachine, inbox, config.port());
         } catch (RuntimeException e) {
           // The workers of the state machine would keep the process running without serving
           e.printStackTrace();
@@ -109,11 +116,20 @@ public final class IdentityProvider {
         .block();
   }
 
-  public static StateMachine stateMachine(Config config) {
+  /// The inbox of the identity provider, with the keys tokens are signed and verified with
+  ///
+  /// @param upstream the client of the provider users sign in with, or null if users can't sign in
+  static HttpInbox inbox(Config config, Keys keys, OpenIdConnectClient upstream) {
+    var importedSecretHashes = config.clients().stream().collect(toMap(ImportedClient::clientId, ImportedClient::secretHash));
+    return Inbox.inbox(config.tokenLifetime(), keys, upstream, importedSecretHashes, new JdkHttpClient());
+  }
+
+  /// @param inbox the inbox of the identity provider, see [#inbox(Config, Keys, OpenIdConnectClient)]
+  public static StateMachine stateMachine(Config config, HttpInbox inbox) {
     Database database = Database.named(config.database());
     return new StateMachine(
         null,
-        Inbox.transitions(config.tokenLifetime()),
+        inbox.entityModels(),
         new DataSourceBuilder(database, config.databaseConfig()).buildPooled(),
         null, // The schema is created by the migrate admin process
         config.schema(),
@@ -128,27 +144,22 @@ public final class IdentityProvider {
     return new Keys(config.signingKeys(), config.issuer(), config.audience(), clock);
   }
 
-  /// The client of the upstream provider, which is discovered at once, so that the identity provider fails to start
-  /// if the upstream provider is misconfigured or can't be reached
+  /// The client of the upstream provider, which the endpoints discover when they are created, so that the identity
+  /// provider fails to start if the upstream provider is misconfigured or can't be reached
   static OpenIdConnectClient upstream(Config.Upstream upstream, URI issuer) {
-    var client = new OpenIdConnectClient(upstream.client(issuer));
-    client.discover()
-        .onErrorMap(e -> new IllegalStateException("The upstream provider of UPSTREAM_ISSUER can't be used: " + e.getMessage(), e))
-        .block();
-    return client;
+    return new OpenIdConnectClient(upstream.client(issuer));
   }
 
-  /// @param upstream the client of the provider users sign in with, or null if users can't sign in
-  static DisposableServer serve(StateMachine stateMachine, Keys keys, OpenIdConnectClient upstream, int port, List<ImportedClient> importedClients) {
-    var importedSecretHashes = importedClients.stream().collect(toMap(ImportedClient::clientId, ImportedClient::secretHash));
-    return new HttpInboxListener(stateMachine).filter(new Edge(keys, upstream, importedSecretHashes)).listen(port);
+  /// Serves the inbox, whose requests handle the credentials themselves, so it has no filter in front of it
+  static DisposableServer serve(StateMachine stateMachine, HttpInbox inbox, int port) {
+    return new HttpInboxListener(stateMachine, inbox).listen(port);
   }
 
   /// Registers the bootstrap client with the registration scope, unless its client id is taken. A taken client id is
   /// most likely the bootstrap client registered by an earlier start, whose secret is kept.
-  public static void bootstrap(StateMachine stateMachine, BootstrapClient client) {
+  public static void bootstrap(StateMachine stateMachine, HttpInbox inbox, BootstrapClient client) {
     var body = Map.of("client_id", client.id(), "scope", Clients.RegistrationScope);
-    HttpResponseMessage response = register(stateMachine, "bootstrap", body, client.id(), Secrets.hash(client.secret()));
+    HttpResponse<byte[]> response = register(stateMachine, inbox, "bootstrap", body, client.id(), Secrets.hash(client.secret()));
     switch (response.statusCode()) {
       case 201 -> System.out.println("Registered bootstrap client " + client.id());
       case 409 -> System.out.println("Bootstrap client " + client.id() + " is already registered. Its secret is not changed.");
@@ -160,7 +171,7 @@ public final class IdentityProvider {
 
   /// Registers the imported clients whose client ids are not taken. A registered client is kept as is, whatever the
   /// configuration says now.
-  static void importClients(StateMachine stateMachine, List<ImportedClient> clients) {
+  static void importClients(StateMachine stateMachine, HttpInbox inbox, List<ImportedClient> clients) {
     int registered = 0;
     for (ImportedClient client : clients) {
       var body = new LinkedHashMap<String, Object>();
@@ -172,7 +183,7 @@ public final class IdentityProvider {
       body.put("grant_types", client.grantTypes());
       if (!client.redirectUris().isEmpty())
         body.put("redirect_uris", client.redirectUris());
-      HttpResponseMessage response = register(stateMachine, "import", body, ImportedClients.Registrar, ImportedClients.secretHash(client));
+      HttpResponse<byte[]> response = register(stateMachine, inbox, "import", body, ImportedClients.Registrar, ImportedClients.secretHash(client));
       String name = client.clientId() + (client.name() != null ? " (" + client.name() + ")" : "");
       switch (response.statusCode()) {
         case 201 -> registered++;
@@ -186,19 +197,14 @@ public final class IdentityProvider {
       System.out.println("Imported " + clients.size() + " clients, of which " + registered + " were registered now");
   }
 
-  /// Registers a client as the registrar, outside the edge
-  private static HttpResponseMessage register(StateMachine stateMachine, String correlationId, Map<String, ?> body, String registrar, String secretHash) {
-    var request = Edge.registration(
-        Map.of("Content-Type", "application/json"),
-        registrar,
-        secretHash,
-        new HttpRequestMessage(Method.POST, URI.create("/clients"), Map.of(), DataType.objectMapper.writeValueAsBytes(body))
-    );
-    return stateMachine.onEvent(correlationId, HttpInbox.TRIGGER, request)
+  /// Registers a client as the registrar, by a registration of the identity provider itself
+  private static HttpResponse<byte[]> register(StateMachine stateMachine, HttpInbox inbox, String correlationId, Map<String, ?> body, String registrar, String secretHash) {
+    var request = Endpoints.internalRegistration(registrar, secretHash, DataType.objectMapper.writeValueAsBytes(body));
+    return stateMachine.onEvent(correlationId, inbox.trigger(), request)
         // First event is the triggered event, second is the response event
         .skip(1)
         .next()
-        .map(event -> HttpMessageParser.parseResponse(event.data()))
+        .map(event -> HttpResponse.raw(event.getUnmarshalledData()))
         .timeout(Duration.ofSeconds(30))
         .block();
   }

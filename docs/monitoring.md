@@ -83,7 +83,7 @@ The [state diagrams](diagrams.md) show the severity of a transition with a symbo
 The state machine reports to the `Listener` it is created with. `JsonLinesListener` writes the events to stdout:
 
 ```java
-new StateMachine(null, transitions, dataSource, null, schema, null, Clock.systemUTC(), new JsonLinesListener());
+new StateMachine(null, entityModels, dataSource, null, schema, null, Clock.systemUTC(), new JsonLinesListener());
 ```
 
 Every accepted event is a line of JSON, here an outbox request which is given up:
@@ -99,15 +99,17 @@ Every accepted event is a line of JSON, here an outbox request which is given up
 | `message`       | The event in words                                                              |
 | `entityModel`   | The name of the entity model                                                    |
 | `entityId`      | The id of the entity                                                            |
-| `eventNumber`   | The number of the event in the event log of the entity                          |
+| `eventNumber`   | The number of the event in the event log of the entity, left out for an event not stored |
+| `stored`        | `false` for an event which is [not stored](entities.md#events-and-entities-not-stored), and left out otherwise |
 | `eventType`     | The name of the event type                                                      |
 | `correlationId` | The correlation id of what led to the event, e.g. of the request to the [HTTP inbox](http-inbox.md) |
 
 * **The data of the events is not written**, as it may be sensitive. The event log has it, and the entity model,
   entity id and event number of a line find the event there.
 * **Events are written when they have happened.** Delayed events and conditional triggers are not written when they
-  are stored, but as events when they fire. Read-only events are written too, though they are not stored, so the
-  event log does not have them.
+  are stored, but as events when they fire. Events which are [not stored](entities.md#events-and-entities-not-stored),
+  e.g. those reading an entity and the events of a request not stored, are written too, with `"stored":false` and no
+  `eventNumber`, as the event log does not have them.
 * **The events of a transaction are written together**, after it is committed, with those of an entity in the order
   of their numbers. They are written whether or not the one who triggered them still waits for them.
 * **A failed transition** is written as a line of severity `ERROR`. A transition fails when one of its functions
@@ -209,7 +211,7 @@ The prices are those of Sweden Central in November 2026, from the
 
 The rules cost the same whether the application runs or not. The lines are what grows with the traffic, and nine out
 of ten are debug output, which can't be turned off yet
-([#216](https://github.com/the-backend-project/tits/issues/216)). As the traces are not sampled, all of it is
+([#216](https://github.com/the-backend-project/backend/issues/216)). As the traces are not sampled, all of it is
 collected, so keep an eye on the size of the logs of an application with more than a little traffic.
 
 ### Limits
@@ -217,7 +219,7 @@ collected, so keep an eye on the size of the logs of an application with more th
 * **The alerts are only as good as the severities.** An event of a transition with no severity is `Info`, and raises
   nothing.
 * **Only events are monitored**, and failed transitions and failures to process a delayed trigger. Other failures
-  raise no alert ([#216](https://github.com/the-backend-project/tits/issues/216)). A request failing outside a
+  raise no alert ([#216](https://github.com/the-backend-project/backend/issues/216)). A request failing outside a
   transition, e.g. as the database is unavailable, is answered with 500 by the HTTP inbox listener and is among the
   `requests` of Application Insights. A failure of the work in the background, other than a failed transition, is in
   the debug output at best: a conditional trigger failing to fire, or an action failing. The same goes for a delayed trigger

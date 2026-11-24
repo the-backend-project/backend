@@ -219,6 +219,31 @@ The events of an `AtMostOnce` request have no [severity](monitoring.md#severity)
 the outcomes by the callbacks, and its transitions on them declare the severity which fits, e.g. a warning for an
 authorisation whose outcome is unknown.
 
+### Masking
+
+An `AtMostOnce` request stores its request in `Request dispatched` and its response in the event of its outcome, like
+every outbox request. As it is never sent again from the event log, what of it is a secret can be
+[masked](http-inbox.md#masking) there, as the inbox masks its requests: every `AtMostOnce` request masks the headers
+which carry credentials (`Masking.CREDENTIALS`), e.g. its `Authorization`, and `masking(...)`, after
+`isRejectedByInvalidResponse`, adds what else is masked, e.g. the form fields of a token request and the body of its
+response:
+
+```java
+HttpOutboxRequest.atMostOnce()
+    // ...
+    .isRejectedByInvalidResponse(d -> d.t1().statusCode() >= 400)
+    .masking(Masking.formFields("code", "code_verifier").andResponseBody())
+    .build("TokenRequest", UUID.fromString("..."));
+```
+
+The request is sent, and its response given to the callbacks, as they are: only the events stored are masked. What
+reads the request from the event log later gets it masked: a request aware content parser, which parses the response
+in a later transaction, and the rollback message creator, which must create what is masked itself, e.g. take a new
+access token rather than copy the request's `Authorization`, as the rollback is sent. A body which can't be read as
+the payload once masked,
+e.g. a masked JSON body, is stored as none. An `AtLeastOnce` request is sent again from its event log, so it can't be
+masked ([#305](https://github.com/the-backend-project/backend/issues/305)).
+
 ### Rollback
 
 An `AtMostOnce` request can have two rollback models, both `AtLeastOnce` outboxes: one for rolling back a request that
@@ -244,10 +269,10 @@ AtMostOnce<AuthorisationRequest, ReversalRequest> authorisation = HttpOutboxRequ
     .processModel(Payment)
     .onMissingResponse(AuthorisationUnknown)
     .contentParser(JsonResponseValidator.json(AcquirerResponse.class))
-    .onSuccess(AcquirerResponded, TypedHttpResponse::payload)
-    .onFailure(AcquirerDeclined, TypedHttpResponse::payload)
-    .isAccepted(response -> response.payload().approved())
-    .isRejected(response -> !response.payload().approved())
+    .onSuccess(AcquirerResponded, HttpResponse::body)
+    .onFailure(AcquirerDeclined, HttpResponse::body)
+    .isAccepted(response -> response.body().approved())
+    .isRejected(response -> !response.body().approved())
     .isRejectedByInvalidResponse(_ -> false)
     .rollbackOnAcceptedModel(reversal)
     .rollbackOnUnknownModel(reversal)
@@ -274,15 +299,23 @@ the creator of its request message, from data of the transition dispatching it:
 | `BatchedAtMostOnceDispatcher`             | `AtMostOnce`, no rollback | The request message and the id of its batch |
 | `BatchedAtMostOnceWithRollbackDispatcher` | `AtMostOnce`, rollback    | The request message and the id of its batch |
 
+A request message is an `HttpRequest<RQ>`, whose body is the payload, e.g. `HttpRequest.create(POST, uri, payload)`,
+which the outbox marshals with its `requestPayloadType` into the bytes sent, an `HttpRequest<byte[]>`. The callbacks
+get the response the same way, as an `HttpResponse<RS>` with the payload parsed by the `contentParser`. A message as
+sent or received is an `HttpRequest<byte[]>` or `HttpResponse<byte[]>`, which `HttpRequest.raw(..)` and
+`HttpResponse.raw(..)` read from the data of an event, as that is typed as `Object`.
+
 `of(...)` takes a function creating the request message from the data, and `reactive(...)` one creating it
 reactively, from the data and the `DispatchContext` of the dispatching transition. A dispatcher with rollback also
-takes the rollback message creator.
+takes the rollback message creator. The rollback message creator is part of the transitions of the outbox request, so
+the dispatcher's `outbox()` is a copy of the outbox request with it (see `AtMostOnce.withRollback(..)`), with the same
+name and id. Requests are triggered on the dispatcher's `outbox()`, which the state machine thereby runs.
 
 ```java
 var authorisations = AtMostOnceWithRollbackDispatcher.of(
     authorisation,
-    (Authorisation a) -> TypedHttpRequest.create(POST, acquirerUri, new AuthorisationRequest(a)),
-    (context, d) -> Mono.just(TypedHttpRequest.create(POST, reversalUri, new ReversalRequest(d.t2().payload())))
+    (Authorisation a) -> HttpRequest.create(POST, acquirerUri, new AuthorisationRequest(a)),
+    (context, d) -> Mono.just(HttpRequest.create(POST, reversalUri, new ReversalRequest(d.t2().body())))
 );
 ```
 
@@ -301,12 +334,17 @@ onEvent(Authorise).to(Authorising)
 A process rolling the request back triggers `rollbackDispatched()` of the dispatcher on the entity of the request,
 e.g. by the entity id it got back when it was dispatched.
 
-The dispatcher has the transitions of the outbox, and of its rollback models, to register along with those of the
-application:
+The state machine runs the entity models the transitions of its models trigger events on, so the outbox request is
+run because the process triggers requests on it. Its rollback models and `HttpOutboxRequest.Index`, which the requests
+are indexed in (see [below](#finding-the-requests-of-a-process)), are run because the outbox request's transitions
+trigger events on them.
 
-```java
-transitions.putAll(authorisations.transitions());
-```
+The outbox request is built with its process model, `processModel(Payment)`, whose transitions in turn trigger the
+request on the dispatcher's outbox. A process model declared as a constant with `EntityModel.of(name, id, transitions)`
+takes care of that, as its transitions are created when the state machine first asks for them, after the outbox
+requests are built. If one transition triggers on the outbox request the dispatcher was created with, and another on
+its `outbox()`, the state machine finds two entity models with the same id when it is created, and fails. Trigger on
+the `outbox()`.
 
 ## Finding the requests of a process
 

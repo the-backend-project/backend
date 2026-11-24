@@ -6,13 +6,10 @@ import static java.util.Comparator.comparingInt;
 import static java.util.Optional.ofNullable;
 import static java.util.function.Predicate.not;
 import static java.util.stream.Collectors.joining;
-import static java.util.stream.Collectors.toMap;
 
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EntityModel;
 import com.github.thxmasj.backend.core.EventType;
-import com.github.thxmasj.backend.core.IdEntityModel;
-import com.github.thxmasj.backend.core.IndexEntityModel;
 import com.github.thxmasj.backend.core.Severity;
 import com.github.thxmasj.backend.core.State;
 import com.github.thxmasj.backend.core.TransitionModel;
@@ -43,15 +40,10 @@ public class PlantUMLFormatter {
   private final EntityModel model;
   Map<State, List<TransitionModel<?, ?>>> transitions;
 
-  public PlantUMLFormatter(EntityModel model, Map<State, List<TransitionModel<?, ?>>> transitions) {
+  /// A state diagram of the transitions of the entity model
+  public PlantUMLFormatter(EntityModel model) {
     this.model = model;
-    if (model instanceof IndexEntityModel m) {
-      this.transitions = m.transitions().entrySet().stream().collect(toMap(entry -> entry.getKey(), Map.Entry::getValue));
-    } else if (model instanceof IdEntityModel m) {
-      this.transitions = m.transitions().entrySet().stream().collect(toMap(entry -> entry.getKey(), Map.Entry::getValue));
-    } else {
-      this.transitions = transitions.entrySet().stream().collect(toMap(entry -> entry.getKey(), Map.Entry::getValue));
-    }
+    this.transitions = Map.copyOf(model.transitions());
   }
 
   public File formatToFile(String directory) throws IOException {
@@ -387,16 +379,17 @@ public class PlantUMLFormatter {
 
   // Events of transitions with a severity above Info are named in bold, after a symbol for their severity, in the colour
   // of their severity. The symbols have a text presentation by default, so they are drawn in that colour rather than as
-  // emoji.
+  // emoji. Events of types which are not stored are named in italics.
   private static String eventName(EventType<?, ?> eventType, Severity severity) {
+    String name = eventType.stored() ? eventType.name() : "<i>" + eventType.name() + "</i>";
     String symbol = switch (severity) {
       case Info -> null;
       case Warning -> "\u26a0";
       case Error -> "\u2716";
       case Critical -> "\u203c";
     };
-    if (symbol == null) return eventType.name();
-    return "<color:" + DiagramColours.of(severity).light() + "><b>" + symbol + " " + eventType.name() + "</b></color>";
+    if (symbol == null) return name;
+    return "<color:" + DiagramColours.of(severity).light() + "><b>" + symbol + " " + name + "</b></color>";
   }
 
   private String state(State state) {
