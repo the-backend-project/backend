@@ -22,10 +22,23 @@
       "Bash(gh pr checks *)",
       "Bash(gh run view *)",
       "Bash(gh run list *)",
-      "Bash(gh repo view *)"
+      "Bash(gh repo view *)",
+      "Bash(git worktree add *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git rebase *)",
+      "Bash(git merge *)",
+      "Bash(git push *)",
+      "Bash(gh issue edit *)",
+      "Bash(gh project item-add *)",
+      "Bash(gh project item-edit *)",
+      "Bash(gh pr create *)"
     ],
     "deny": [
-      "Bash(mvn *deploy*)"
+      "Bash(mvn *deploy*)",
+      "Bash(git push *--force*)",
+      "Bash(git push *-f)",
+      "Bash(git push *-f *)"
     ]
   }
 }

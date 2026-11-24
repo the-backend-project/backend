@@ -116,15 +116,19 @@ excluded so the worktrees aren't indexed with the main checkout.
 
 The skills are in [.agents/skills](.agents/skills), and both agents read the project's conventions from
 [AGENTS.md](AGENTS.md). The project's settings for each agent allow the common commands without asking: Maven (except
-deploying), the scripts in [bin](bin), and the `git` and `gh` commands that only read.
+deploying), the scripts in [bin](bin), the `git` and `gh` commands that only read, and those the `/fix` workflow
+uses to change things: `git worktree add`, `add`, `commit`, `rebase`, `merge` and `push` (but not a force push),
+`gh issue edit`, `gh project item-add` and `item-edit`, and `gh pr create`.
 
 - **Claude Code** reads AGENTS.md through [CLAUDE.md](CLAUDE.md), finds the skills through the symbolic link
   `.claude/skills`, and takes its settings from [.claude/settings.json](.claude/settings.json). Put your own
   permissions and other settings in `.claude/settings.local.json`, which git ignores.
 - **Mistral Vibe** takes its settings from [.vibe/config.toml](.vibe/config.toml), which also lets commands run for
-  up to an hour, because builds with tests take longer than Vibe's default of five minutes. Vibe loads the project's
+  up to an hour, because builds with tests take longer than Vibe's default of five minutes, and lets Vibe edit and
+  create files in the working directory without asking, as its `accept-edits` profile does. Vibe loads the project's
   settings and skills only once you trust the folder. It matches commands by their beginning, so it refuses
-  `mvn deploy`, but not a deploy after other goals or options, e.g. `mvn clean deploy`. The file lists the migrations
-  Vibe has applied to it, so that Vibe doesn't rewrite it. Put your own settings in `~/.vibe/config.toml`, and your own
+  `mvn deploy` and `git push --force`, but not a deploy after other goals or options, e.g. `mvn clean deploy`, nor a
+  force push with the option after the remote, e.g. `git push origin --force`. The file lists the migrations Vibe has
+  applied to it, so that Vibe doesn't rewrite it. Put your own settings in `~/.vibe/config.toml`, and your own
   instructions, such as how tools get on the PATH, in `~/.vibe/AGENTS.md`. Vibe can't keep the docs server running, so
   `/serve-docs` only does the strict build there; run `bin/serve-docs.sh` yourself for live reload.
