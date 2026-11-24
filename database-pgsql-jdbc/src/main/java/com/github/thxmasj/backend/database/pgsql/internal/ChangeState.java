@@ -12,7 +12,6 @@ import com.github.thxmasj.backend.core.database.DatabaseClient;
 import com.github.thxmasj.backend.core.internal.DelayedEvent;
 import com.github.thxmasj.backend.core.internal.database.ChangeState.Change.FiredTrigger;
 import com.github.thxmasj.backend.core.internal.database.ConditionalTrigger;
-import com.github.thxmasj.backend.core.internal.database.TriggerFiredElsewhere;
 import java.time.Clock;
 import java.util.HexFormat;
 import java.util.List;
@@ -33,6 +32,18 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
   @Override
   protected String sql(List<Change> changes) {
     return IntStream.range(0, changes.size()).mapToObj(i -> insertSql("p" + i + "_", changes.get(i))).collect(joining("\n"));
+  }
+
+  /// The value the deletion of the trigger which fired a transaction fails to cast if it deletes nothing
+  private static final String TRIGGER_FIRED_ELSEWHERE = "TriggerFiredElsewhere";
+
+  /// PostgreSQL's error of the failed cast, whose message has the value it failed to cast. Its quotes are those of the
+  /// server's language, so only the value is looked for, in the database's error, which doesn't have the SQL. Every
+  /// client of PostgreSQL gives its error as the innermost cause.
+  @Override
+  protected boolean isTriggerFiredElsewhere(Throwable failure) {
+    String message = databaseError(failure).getMessage();
+    return message != null && message.contains(TRIGGER_FIRED_ELSEWHERE);
   }
 
   /// The duplicate key of an id event, as reported by PostgreSQL, e.g. "f721bf54-891b-41a0-aa63-5d3cbde52437, \x7b22..."
@@ -113,14 +124,14 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
           )
           INSERT INTO {Table} (EntityId)
           SELECT CAST('{marker}' || (SELECT COUNT(*) FROM deleted) AS UUID) WHERE NOT EXISTS (SELECT 1 FROM deleted);
-          """.replace("{Table}", table(schema, "DelayedTrigger")).replace("{marker}", TriggerFiredElsewhere.MARKER) :
+          """.replace("{Table}", table(schema, "DelayedTrigger")).replace("{marker}", TRIGGER_FIRED_ELSEWHERE) :
           """
           WITH deleted AS (
             DELETE FROM {Table} WHERE Id=:triggerId RETURNING 1
           )
           INSERT INTO {Table} (Id)
           SELECT CAST('{marker}' || (SELECT COUNT(*) FROM deleted) AS UUID) WHERE NOT EXISTS (SELECT 1 FROM deleted);
-          """.replace("{Table}", table(schema, "ConditionalTrigger")).replace("{marker}", TriggerFiredElsewhere.MARKER);
+          """.replace("{Table}", table(schema, "ConditionalTrigger")).replace("{marker}", TRIGGER_FIRED_ELSEWHERE);
     }
 
     if (conditionalTrigger != null) {

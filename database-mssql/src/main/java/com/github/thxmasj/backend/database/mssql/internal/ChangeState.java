@@ -11,7 +11,6 @@ import com.github.thxmasj.backend.core.database.DatabaseClient;
 import com.github.thxmasj.backend.core.internal.DelayedEvent;
 import com.github.thxmasj.backend.core.internal.database.ChangeState.Change.FiredTrigger;
 import com.github.thxmasj.backend.core.internal.database.ConditionalTrigger;
-import com.github.thxmasj.backend.core.internal.database.TriggerFiredElsewhere;
 import java.time.Clock;
 import java.util.HexFormat;
 import java.util.List;
@@ -19,6 +18,16 @@ import java.util.stream.IntStream;
 
 /// Stores the changes in a single batch with an explicit transaction
 class ChangeState extends com.github.thxmasj.backend.core.internal.database.ChangeState {
+
+  /// The error number the deletion of the trigger which fired a transaction throws with if it deletes nothing
+  private static final int TRIGGER_FIRED_ELSEWHERE = 50001;
+
+  /// SQL Server's error of the THROW, by its number
+  @Override
+  protected boolean isTriggerFiredElsewhere(Throwable failure) {
+    return databaseError(failure) instanceof java.sql.SQLException e && e.getErrorCode() == TRIGGER_FIRED_ELSEWHERE;
+  }
+
 
   private final String schema;
 
@@ -129,7 +138,7 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
           DELETE [{schema}].[ConditionalTrigger]
           WHERE Id=:triggerId;
           """.replace("{schema}", schema))
-          + "IF @@ROWCOUNT = 0 THROW " + TriggerFiredElsewhere.SQL_SERVER_ERROR + ", '" + TriggerFiredElsewhere.MARKER + "', 1;\n";
+          + "IF @@ROWCOUNT = 0 THROW " + TRIGGER_FIRED_ELSEWHERE + ", 'The trigger was fired by another transaction', 1;\n";
     }
 
     if (conditionalTrigger != null) {

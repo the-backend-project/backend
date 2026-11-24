@@ -262,7 +262,7 @@ public abstract class ChangeState {
         .all()
         .onErrorMap(PrimaryKeyConstraintViolation.class, primaryKeyConstraintViolationMapper(changes))
         .onErrorMap(UniqueIndexConstraintViolation.class, uniqueIndexConstraintViolationMapper(changes))
-        .onErrorMap(TriggerFiredElsewhere::isCause, TriggerFiredElsewhere::new);
+        .onErrorMap(this::isTriggerFiredElsewhere, TriggerFiredElsewhere::new);
   }
 
   /// The SQL storing the changes in a single transaction, in the dialect of the database. Parameters are prefixed with
@@ -302,6 +302,19 @@ public abstract class ChangeState {
 
   /// The duplicate key of an id event, as reported by the database, i.e. its type and data
   protected abstract String duplicateKey(Event<?> idEvent);
+
+  /// Whether the failure is the one the store's SQL fails with when the deletion of the trigger which fired the
+  /// transaction deletes nothing, as another transaction fired it first (see [TriggerFiredElsewhere])
+  protected abstract boolean isTriggerFiredElsewhere(Throwable failure);
+
+  /// The innermost cause of the failure, the error of the database itself, rather than the messages of the clients
+  /// around it, which have the SQL
+  protected static Throwable databaseError(Throwable failure) {
+    Throwable root = failure;
+    while (root.getCause() != null && root.getCause() != root)
+      root = root.getCause();
+    return root;
+  }
 
   private Function<UniqueIndexConstraintViolation, Throwable> uniqueIndexConstraintViolationMapper(List<Change> changes) {
     return indexViolation -> changes.stream()
