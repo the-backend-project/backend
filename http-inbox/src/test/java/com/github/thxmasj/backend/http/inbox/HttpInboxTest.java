@@ -1309,20 +1309,35 @@ public class HttpInboxTest {
 
   /// A bell, which responds itself, or through the chime it rings, when it is rung. When it is polished it gives no
   /// response, and when it is scheduled it is rung later, in another session.
+  enum BellStates implements State {Rung, Polished, Scheduled}
+
   private static EntityModel bell(boolean throughChime) {
-    return EntityModel.of("Bell", UUID.fromString("4c1e8a2f-7d36-4b95-a0f8-9e2d5b7c3a16"), () -> Map.of(Begin, List.of(
-        throughChime ?
-            onEvent(BellRung).toSelf().trigger(ChimeRung).on(Chime).identifiedBy(newEntityId()).output() :
-            onEvent(BellRung).toSelf().trigger(Rang).with(_ -> "Ding").on(Request).identifiedBy(entityIdFromSession()).output(),
-        onEvent(BellPolished).toSelf().output(),
-        onEvent(BellScheduled).toSelf().assembleInput().trigger(BellRung).after(_ -> Duration.ofMinutes(1)).output()
-    )));
+    return EntityModel.of("Bell", UUID.fromString("4c1e8a2f-7d36-4b95-a0f8-9e2d5b7c3a16"), () -> Map.of(
+        Begin, List.of(
+            ring(throughChime),
+            onEvent(BellPolished).to(BellStates.Polished).output(),
+            onEvent(BellScheduled).to(BellStates.Scheduled).assembleInput().trigger(BellRung).after(_ -> Duration.ofMinutes(1)).output()
+        ),
+        // Rung later, when scheduled
+        BellStates.Scheduled, List.of(ring(throughChime)),
+        BellStates.Rung, List.of(),
+        BellStates.Polished, List.of()
+    ));
+  }
+
+  private static TransitionModel<Void, Void> ring(boolean throughChime) {
+    return throughChime ?
+        onEvent(BellRung).to(BellStates.Rung).trigger(ChimeRung).on(Chime).identifiedBy(newEntityId()).output() :
+        onEvent(BellRung).to(BellStates.Rung).trigger(Rang).with(_ -> "Ding").on(Request).identifiedBy(entityIdFromSession()).output();
   }
 
   private static Map<State, List<TransitionModel<?, ?>>> chimeTransitions() {
-    return Map.of(Begin, List.of(
-        onEvent(ChimeRung).toSelf().trigger(Rang).with(_ -> "Dong").on(Request).identifiedBy(entityIdFromSession()).output()
-    ));
+    return Map.of(
+        Begin, List.of(
+            onEvent(ChimeRung).to(BellStates.Rung).trigger(Rang).with(_ -> "Dong").on(Request).identifiedBy(entityIdFromSession()).output()
+        ),
+        BellStates.Rung, List.of()
+    );
   }
 
   private static HttpInboxRequest.Builder<Void> bellRequest(EntityModel bell) {

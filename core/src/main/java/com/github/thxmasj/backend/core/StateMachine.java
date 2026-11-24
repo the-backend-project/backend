@@ -217,7 +217,7 @@ public class StateMachine implements AutoCloseable {
     var refusals = new ArrayList<String>();
     for (var model : models) {
       try {
-        traversers.put(model, new Traverser(model.transitions(), model.stored(), model.id()));
+        traversers.put(model, new Traverser(model.transitions(), model.stored(), model));
       } catch (IllegalArgumentException e) {
         refusals.add("The transitions of entity model " + model.name() + " are refused: " + e.getMessage());
       }

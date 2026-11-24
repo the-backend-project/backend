@@ -223,6 +223,10 @@ transitions they can choose. That has these consequences:
 * **Data the choosing transition calculates is kept only through the chosen transition.** The output of the choosing
   transition is never stored, so anything it assembles, e.g. from another system, has to be passed on to the chosen
   transition, by `f`, and be in that transition's output to be read from the log later.
+* **The result of the transition is the event of the choosing transition.** A transition triggering the event, and the
+  caller of `StateMachine.onEvent`, get the event of the choosing transition, with its output and the number of the
+  stored event, while the log has the chosen one. Its output is calculated, and must not be null, but it isn't masked
+  or marshalled, as it isn't stored.
 
 ## Collecting the changes
 

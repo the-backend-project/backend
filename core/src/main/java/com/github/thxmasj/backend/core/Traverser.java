@@ -24,7 +24,7 @@ import java.util.function.Predicate;
 class Traverser {
 
   private final Map<State, List<TransitionModel<?, ?>>> transitions;
-  private final UUID modelId;
+  private final EntityModel model;
   /// Why the transitions are refused, all of them, so that a model is fixed in one go rather than one refusal at a time
   private final List<String> refusals = new ArrayList<>();
   /// Whether entities of the session only are of the model: all of them if it is not stored, and those an event not
@@ -41,16 +41,17 @@ class Traverser {
     this(transitions, stored, null);
   }
 
-  /// @param modelId the id of the entity model of the transitions, by which a trigger on the model is told from one on
-  ///                another, or null if not known, when a trigger of an event type of the model is taken to be on it
-  public Traverser(Map<State, List<TransitionModel<?, ?>>> transitions, boolean stored, UUID modelId) {
+  /// @param model the entity model of the transitions, by which a trigger on the model is told from one on another, or
+  ///              null if not known, when a trigger of an event type of the model is taken to be on it
+  public Traverser(Map<State, List<TransitionModel<?, ?>>> transitions, boolean stored, EntityModel model) {
     this.transitions = transitions;
-    this.modelId = modelId;
+    this.model = model;
     this.hasEntitiesOfTheSessionOnly = !stored || transitions.getOrDefault(Begin, List.of()).stream()
         .flatMap(transition -> leaves(transition).stream())
         .anyMatch(leaf -> !leaf.eventType().stored());
     transitions.forEach(this::requireUniquePaths);
     requireReachableFromBegin();
+    requireLeavingBegin();
     var reachedBySessionOnly = stored ? statesOfEntitiesOfTheSessionOnly() : transitions.keySet();
     var reached = stored ? statesOfStoredEntities() : Set.<State>of();
     var delayingNotStored = notStoredEventTypesWithADelayedTrigger();
@@ -198,9 +199,13 @@ class Traverser {
       requireNoIdOrIndex(filter.alternative().model());
   }
 
-  /// Whether the trigger is on the entity model of the transitions, or may be, if the model isn't known
+  /// Whether the trigger is on the entity model of the transitions, or may be: on a group which includes it, or on any
+  /// model if the model isn't known
   private boolean isOnTheModel(EventTrigger<?, ?, ?> trigger) {
-    return modelId == null || trigger.entityModel() == null || trigger.entityModel().id().equals(modelId);
+    if (model == null || trigger.entityModel() == null)
+      return true;
+    return trigger.entityModel().id().equals(model.id())
+        || trigger.entityModel() instanceof EntityModelGroup group && group.includes(model);
   }
 
   /// An entity of the session only is not found after its session, so its transitions, and those they may choose, can't
@@ -216,6 +221,21 @@ class Traverser {
       ));
     for (var filter : transition.filters())
       requireNoLaterTrigger(filter.alternative().model());
+  }
+
+  /// A transition from `Begin` creates the entity, so it must leave `Begin`, as an entity in it couldn't be told from one
+  /// which doesn't exist, and its state would be that of an entity without events. An id or index entity has no states,
+  /// so all its events are taken from `Begin`.
+  private void requireLeavingBegin() {
+    if (model instanceof IdEntityModel || model instanceof IndexEntityModel)
+      return;
+    for (var transition : transitions.getOrDefault(Begin, List.of()))
+      for (var leaf : leaves(transition))
+        if (leaf.toState() == null || leaf.toState() == Begin)
+          refuse(String.format(
+              "The transition on %s from Begin stays in Begin, but it creates the entity, so it must leave Begin",
+              leaf.eventType().name()
+          ));
   }
 
   /// Every entity is created from `Begin`, as its state is found by replaying its events from there, so a state with

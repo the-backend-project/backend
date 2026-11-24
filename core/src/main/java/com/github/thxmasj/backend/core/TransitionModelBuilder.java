@@ -868,18 +868,8 @@ public class TransitionModelBuilder<I, T, O> {
               "type without data, is made by output()",
           modelContext.eventType().name()
       ));
-    return marshalledIfStored(
-        inputStep,
-        Event.marshalledWhenAskedFor(inputStep.log().entityId(), inputStep.log().lastEventNumber() + 1, modelContext.eventType(), inputStep.timestamp(), output)
-    );
-  }
-
-  /// The event, marshalled in the step if it is stored, so that a failure of masking or marshalling it is one of the
-  /// transition, while one which isn't stored is never marshalled for storing
-  static <O> Event<O> marshalledIfStored(InputStep<?> inputStep, Event<O> event) {
-    if (event.type().stored() && !inputStep.log().isSessionOnlyWith(event))
-      event.getMarshalledData();
-    return event;
+    // Marshalled when the transition is calculated, after its mask, see TransitionModel#calculate
+    return Event.marshalledWhenAskedFor(inputStep.log().entityId(), inputStep.log().lastEventNumber() + 1, modelContext.eventType(), inputStep.timestamp(), output);
   }
 
 

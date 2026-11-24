@@ -133,7 +133,14 @@ public class TraverserTest {
     var quietWithoutDelay = onEvent(QuietlyRetried).toSelf().output();
     assertDoesNotThrow(() -> new Traverser(Map.of(Begin, List.of(acceptance), States.Accepted, List.of(delayedThenQuiet, quietWithoutDelay))));
     // On another model, the two delayed triggers are on different entities
-    assertDoesNotThrow(() -> new Traverser(Map.of(Begin, List.of(acceptance), States.Accepted, List.of(delayedThenQuiet, quiet)), true, UUID.randomUUID()));
+    assertDoesNotThrow(() -> new Traverser(Map.of(Begin, List.of(acceptance), States.Accepted, List.of(delayedThenQuiet, quiet)), true, EntityModel.of("This", UUID.randomUUID(), Map::of)));
+    // On a group which includes the model, it may be the same entity
+    var self = EntityModel.of("Other", UUID.randomUUID(), Map::of);
+    var onGroup = onEvent(Retried).toSelf()
+        .trigger(Accepted).after(_ -> Duration.ofMinutes(1))
+        .trigger(QuietlyRetried).on(EntityModelGroup.of("Group", UUID.randomUUID(), m -> m == self)).identifiedBy(_ -> null)
+        .output();
+    assertThrows(IllegalArgumentException.class, () -> new Traverser(Map.of(Begin, List.of(acceptance), States.Accepted, List.of(onGroup, quiet)), true, self));
   }
 
   /// All the refusals of a model are reported together, so it is fixed in one go
@@ -148,6 +155,13 @@ public class TraverserTest {
     assertTrue(e.getMessage().startsWith("2 refusals of the transitions:"), e.getMessage());
     assertTrue(e.getMessage().contains("- The transition on Retried triggers 2 delayed events"), e.getMessage());
     assertTrue(e.getMessage().contains("- State Rejected is not reached from Begin"), e.getMessage());
+  }
+
+  /// A transition from `Begin` creates the entity, so it can't stay in `Begin`
+  @Test
+  public void aTransitionFromBeginStayingInBeginIsRejected() {
+    var e = assertThrows(IllegalArgumentException.class, () -> new Traverser(Map.of(Begin, List.of(onEvent(Accepted).toSelf().output()))));
+    assertTrue(e.getMessage().startsWith("The transition on Accepted from Begin stays in Begin"), e.getMessage());
   }
 
   /// Every entity is created from `Begin`, so a model without transitions from it, or with a state it doesn't lead to,

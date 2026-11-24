@@ -8,6 +8,7 @@ import com.github.thxmasj.backend.core.TransitionModelBuilder.ModelContext;
 import com.github.thxmasj.backend.core.StateMachine.ProcessResult;
 import com.github.thxmasj.backend.core.StateMachine.ProcessResult.Accepted;
 import com.github.thxmasj.backend.core.Tuples.Tuple4;
+import com.github.thxmasj.backend.core.internal.TransitionStep.ChoiceStep;
 import com.github.thxmasj.backend.core.internal.TransitionStep.InputStep;
 import com.github.thxmasj.backend.core.internal.TransitionStep.OutputStep;
 import java.util.Arrays;
@@ -78,6 +79,7 @@ public class TransitionModel<I, O> {
   public Mono<OutputStep<O>> calculate(InputStep<I> inputStep) {
     log(modelContext, "calculate [" + eventType().name() + "] on [" + inputStep.log().entityModel().name() + ":" + inputStep.log().entityId() + "] (input: " + inputStep.input() + ")");
     return chain.apply(Mono.just(inputStep))
+        .map(TransitionModel::marshalledIfStored)
         .doOnError(e -> inputStep.stateMachine().transitionFailed(inputStep, e));
   }
 
@@ -134,6 +136,18 @@ public class TransitionModel<I, O> {
     return modelContext.withoutData();
   }
 
+  /// The output step with its event marshalled, after its mask, if it is stored, so that a failure of masking or
+  /// marshalling it is one of the transition, and the event is marshalled once. An event which isn't stored is never
+  /// marshalled for storing, nor is the event of a transition which chose another one, which isn't stored either.
+  private static <O> OutputStep<O> marshalledIfStored(OutputStep<O> step) {
+    if (!(step.previous() instanceof ChoiceStep<?>)
+        && step.stepOutput() instanceof Accepted<O>(Event<O> event, _, _)
+        && event.type().stored()
+        && !step.inputStep().log().isSessionOnlyWith(event))
+      event.getMarshalledData();
+    return step;
+  }
+
   /// A transition with an output, which may be masked when its event is stored
   public static final class WithOutput<I, O> extends TransitionModel<I, O> {
 
@@ -154,15 +168,14 @@ public class TransitionModel<I, O> {
       return new TransitionModel<>(modelContext().withMask(mask), chain().andThen(output -> output.map(step -> masked(step, mask))));
     }
 
-    /// The output step with its event masked when stored
+    /// The output step with its event masked when stored. The event of a transition which chose another one isn't
+    /// stored, so it isn't masked: the event of the chosen one is stored, with its own mask.
     private static <O> OutputStep<O> masked(OutputStep<O> step, UnaryOperator<O> mask) {
-      if (!(step.stepOutput() instanceof Accepted<O>(Event<O> event, EntityModel entityModel, Severity severity)))
+      if (step.previous() instanceof ChoiceStep<?>
+          || !(step.stepOutput() instanceof Accepted<O>(Event<O> event, EntityModel entityModel, Severity severity)))
         return step;
       var masked = new Event<>(event.entityId(), event.eventNumber(), event.type(), event.timestamp(), event.getUnmarshalledData(), mask);
-      return new OutputStep<>(
-          step.previous(),
-          ProcessResult.accepted(TransitionModelBuilder.marshalledIfStored(step.inputStep(), masked), entityModel, severity)
-      );
+      return new OutputStep<>(step.previous(), ProcessResult.accepted(masked, entityModel, severity));
     }
 
   }
