@@ -1,21 +1,32 @@
 package com.github.thxmasj.backend.identityprovider;
 
+import static com.github.thxmasj.backend.core.EntitySelector.entityIdFromSession;
+import static com.github.thxmasj.backend.core.TransitionModelBuilder.WithEvent.onEvent;
 import static com.github.thxmasj.backend.core.Validated.invalid;
 import static com.github.thxmasj.backend.core.Validated.valid;
 import static com.github.thxmasj.backend.http.inbox.HttpInboxRequest.newEntity;
+import static com.github.thxmasj.backend.http.inbox.HttpInboxRequest.when;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
+import com.github.thxmasj.backend.core.BasicEventType;
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EventType;
+import com.github.thxmasj.backend.core.State;
 import com.github.thxmasj.backend.core.TransitionModelBuilder.TransitionContext;
 import com.github.thxmasj.backend.core.Validated;
-import com.github.thxmasj.backend.http.HttpRequest;
+import com.github.thxmasj.backend.http.HttpDataType;
 import com.github.thxmasj.backend.http.HttpRequest.Method;
+import com.github.thxmasj.backend.http.HttpClient;
+import com.github.thxmasj.backend.http.HttpRequest;
+import com.github.thxmasj.backend.http.JdkHttpClient;
 import com.github.thxmasj.backend.http.HttpResponse;
-import com.github.thxmasj.backend.http.inbox.Authorization;
+import com.github.thxmasj.backend.http.Masking;
 import com.github.thxmasj.backend.http.inbox.Form;
+import com.github.thxmasj.backend.http.inbox.HttpInbox.RoutedRequest;
 import com.github.thxmasj.backend.http.inbox.HttpInbox;
 import com.github.thxmasj.backend.http.inbox.HttpInboxRequest;
+import com.github.thxmasj.backend.http.inbox.OpenIdConnectClient;
 import com.github.thxmasj.backend.http.inbox.ResponseEventType;
 import com.github.thxmasj.backend.identityprovider.Clients.Registration;
 import java.time.Duration;
@@ -28,34 +39,20 @@ import java.util.regex.Pattern;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 
-/// The HTTP requests handled by the state machine. They arrive through the [Edge], which authenticates them and puts
-/// what it found in trusted headers, so no credential ever enters the event log.
+/// The HTTP requests of the identity provider, every one of which is an inbox request, without a filter in front of
+/// the inbox. What they do with credentials, see [Endpoints], keeps the credentials out of the event log: the secrets,
+/// codes and tokens are only in the session of a request, and masked in the requests and responses stored. The
+/// requests answered at once, e.g. the health check, the public keys and the metadata, and the requests refused before
+/// they reach the entities of the identity provider, are not stored.
 public interface Inbox {
 
-  /// The client id of the client requesting a token, which is yet to be authenticated
-  String ClientIdHeader = "X-Idp-Client-Id";
-  /// The hash of the secret of the client requesting a token, or of the secret generated for a client being registered
-  String SecretHashHeader = "X-Idp-Client-Secret-Hash";
-  /// The client id of the authenticated client registering a client
+  /// The header of the registrations of the identity provider itself, e.g. of the bootstrap client, with a key only
+  /// the process knows, which the event log masks
+  String InternalHeader = "X-Idp-Internal";
+  /// The client id of the client registering a client, of a registration of the identity provider itself
   String RegisteredByHeader = "X-Idp-Registered-By";
-  /// The hash of an authorization code: of the code redeemed at the token endpoint, or of the code generated for a
-  /// user who signed in
-  String CodeHashHeader = "X-Idp-Code-Hash";
-  /// The S256 PKCE challenge of the code verifier of a token request
-  String CodeChallengeHeader = "X-Idp-Code-Challenge";
-  /// The entity id of the authorization a user returns to from the upstream provider
-  String AuthorizationIdHeader = "X-Idp-Authorization";
-  /// The `jti` of the verified access token the UserInfo endpoint is called with
-  String TokenIdHeader = "X-Idp-Token-Id";
-  List<String> trustedHeaders = List.of(
-      ClientIdHeader,
-      SecretHashHeader,
-      RegisteredByHeader,
-      CodeHashHeader,
-      CodeChallengeHeader,
-      AuthorizationIdHeader,
-      TokenIdHeader
-  );
+  /// The hash of the secret of the client registered, of a registration of the identity provider itself
+  String SecretHashHeader = "X-Idp-Client-Secret-Hash";
 
   /// The longest `state` and `nonce` accepted, which are stored in the event log
   int maxParameterLength = 1000;
@@ -77,7 +74,7 @@ public interface Inbox {
 
   }
 
-  /// A redirect of the user to a client, to which the edge adds the code if the user signed in
+  /// A redirect of the user to a client, with the code if the user signed in
   record Redirect(String redirectUri, Map<String, String> parameters) {}
 
   ResponseEventType<Reply> ReplyCreated = new ResponseEventType<>(
@@ -86,72 +83,133 @@ public interface Inbox {
       DataType.json(Reply.class)
   );
 
-  /// A request redeeming an authorization code, `POST /token` with a code, processed on the token requests. The edge
-  /// tells the grants apart by the code, which it replaces by its hash.
-  static HttpInboxRequest<Tokens.CodeRequest> codeHttpRequest(EntityModel tokenRequest) {
+  /// A request answered at once with the response
+  EventType<HttpResponse<byte[]>, Void> AnswerRequested = BasicEventType.of(
+      "Answer requested",
+      UUID.fromString("c7e3a9f1-4b2d-4e86-a0c5-8d1f6b3e9a27"),
+      HttpDataType.forResponse(),
+      DataType.none()
+  );
+  ResponseEventType<HttpResponse<byte[]>> Answered = new ResponseEventType<>(
+      "Answered",
+      UUID.fromString("1b8f5d3a-6c9e-4a27-b4d1-e2a7c0f9b356"),
+      HttpDataType.forResponse()
+  );
+
+  enum AnswerStates implements State {Answered}
+
+  /// The answers of the requests answered at once, which are entities of the session only
+  EntityModel Answers = EntityModel.notStored("Answers", UUID.fromString("5d0a8e2c-7f4b-4c19-9e63-b1f8d4a2c705"), () -> Map.of(
+      EntityModel.Begin, List.of(
+          onEvent(AnswerRequested).to(AnswerStates.Answered)
+              .assembleInput()
+              .trigger(Answered).with(d -> d).on(HttpInbox.Request).identifiedBy(entityIdFromSession())
+              .output()
+      ),
+      AnswerStates.Answered, List.of()
+  ));
+
+  /// The requests answered at once, which are not stored: the health check, the public keys and the metadata, the
+  /// requests refused before they reach the entities of the identity provider, e.g. without client authentication,
+  /// and those of unknown paths or methods
+  static HttpInboxRequest<HttpResponse<byte[]>> immediateHttpRequest(Endpoints endpoints) {
     return HttpInboxRequest
-        .matching(m -> m.method() == Method.POST && m.uri().getPath().equals("/token") && m.headerValue(CodeHashHeader) != null)
-        .contentParser(Inbox::codeRequest)
-        .process(Tokens.CodeRedemptionRequested, tokenRequest, r -> r.body(), newEntity())
-        .response(ReplyCreated, Inbox::reply)
-        .build("CodeHttpRequest", UUID.fromString("53b447da-38bc-43d6-a9f2-ea3ed7e1b3fa"));
+        .matching(m -> endpoints.immediate(m) != null)
+        .contentParser(m -> valid(endpoints.immediate(m)))
+        .notStored()
+        .process(AnswerRequested, Answers, RoutedRequest::body, newEntity())
+        .response(Answered, TransitionContext::input)
+        .build("ImmediateHttpRequest", UUID.fromString("8a4c2e6f-1d9b-4f73-a5e0-3c7b9d1f2e84"));
   }
 
-  /// A token request, `POST /token`, processed on the token requests
-  static HttpInboxRequest<Tokens.Request> tokenHttpRequest(EntityModel tokenRequest) {
+  /// The masking of a token request: its credentials in the form, in a body which isn't one and in the query, where a
+  /// client may put them by mistake, and the tokens of its response
+  private static Masking tokenMasking() {
+    String[] credentials = {"code", "code_verifier", "client_secret", "client_assertion"};
+    return Masking.formFields(credentials).andQueryParameters(credentials).andResponseBody();
+  }
+
+  /// A request to the token endpoint, `POST /token`, with client authentication, processed on the token requests: one
+  /// refused at the endpoint, e.g. with a secret in its form as well as in HTTP Basic, a code redemption of the grant
+  /// type `authorization_code`, or a token request of the grant type `client_credentials`. One without client
+  /// authentication is answered at once, by the [#immediateHttpRequest(Endpoints)]. Its form and credentials are parsed
+  /// by its content parser, whose result chooses the process. The code, the code verifier and a client secret wrongly
+  /// in the form are masked in the event log, and the response, with the tokens signed.
+  static HttpInboxRequest<Endpoints.TokenEndpointRequest> tokenHttpRequest(EntityModel tokenRequest, Endpoints endpoints) {
     return HttpInboxRequest
         .matching(m -> m.method() == Method.POST && m.uri().getPath().equals("/token"))
-        .contentParser(Inbox::tokenRequest)
-        .process(Tokens.TokenRequested, tokenRequest, r -> r.body(), newEntity())
-        .response(ReplyCreated, Inbox::reply)
+        .contentParser(endpoints::tokenEndpointRequest)
+        .masking(tokenMasking())
+        .process(when("refused", r -> r.refusal() != null), Tokens.TokenRefused, tokenRequest, r -> r.body().refusal(), newEntity())
+        .process(when("grant_type == authorization_code", r -> r.codeRedemption() != null), Tokens.CodeRedemptionRequested, tokenRequest, r -> r.body().codeRedemption(), newEntity())
+        .process(Tokens.TokenRequested, tokenRequest, r -> r.body().clientCredentials(), newEntity())
+        .response(ReplyCreated, endpoints::tokenEndpointResponse)
         .build("TokenHttpRequest", UUID.fromString("d1c8f5a2-3e97-4b06-a4d1-5f2b8e7c9a63"));
   }
 
-  /// A client registration request, `POST /clients`
-  HttpInboxRequest<Registration> RegistrationHttpRequest = HttpInboxRequest
-      .matching(m -> m.method() == Method.POST && m.uri().getPath().equals("/clients"))
-      .contentParser(Inbox::registration)
-      .authorizer((m, _) -> Authorization.authorizedElse(m.headerValue(RegisteredByHeader), "Unauthenticated"))
+  /// A registration of the identity provider itself, e.g. of the bootstrap client, with the hash of a secret of its
+  /// own, see [Endpoints#internalRegistration(String, String, byte\[\])]
+  HttpInboxRequest<Clients.RegistrationRequest> InternalRegistrationHttpRequest = HttpInboxRequest
+      .matching(m -> m.method() == Method.POST && m.uri().getPath().equals("/clients") && Endpoints.isInternal(m))
+      .contentParser(m -> {
+        Validated<Registration> registration = registration(m, m.headerValue(RegisteredByHeader), m.headerValue(SecretHashHeader));
+        return registration.isInvalid() ? invalid(registration.invalidReason()) : valid(new Clients.RegistrationRequest(registration.validValue(), null));
+      })
+      .masking(Masking.requestHeaders(InternalHeader))
       .process(Clients.RegistrationRequested, Clients.ClientRegistration, r -> r.body(), newEntity())
       .response(ReplyCreated, Inbox::reply)
-      .build("RegistrationHttpRequest", UUID.fromString("f7a2c6e9-4d15-4b83-9e0a-1c5d8b3f6e24"));
+      .build("InternalRegistrationHttpRequest", UUID.fromString("2e6c0a4f-8b3d-4f91-a7e5-d9c1b5f3a068"));
 
-  /// An authorization request of a user, `GET /authorize`
-  HttpInboxRequest<Authorizations.Request> AuthorizationHttpRequest = HttpInboxRequest
-      .matching(m -> m.method() == Method.GET && m.uri().getPath().equals("/authorize"))
-      .contentParser(Inbox::authorizationRequest)
-      .process(Authorizations.AuthorizationRequested, Authorizations.Authorization, r -> r.body(), newEntity())
-      .response(ReplyCreated, Inbox::reply)
-      .build("AuthorizationHttpRequest", UUID.fromString("709a9c55-28ab-4aaf-83b6-b5755fc4c50b"));
+  /// A client registration request, `POST /clients`, of a client with the registration scope. The response, with the
+  /// secret generated for the client, is masked in the event log.
+  static HttpInboxRequest<Clients.RegistrationRequest> registrationHttpRequest(Endpoints endpoints) {
+    return HttpInboxRequest
+        .matching(m -> m.method() == Method.POST && m.uri().getPath().equals("/clients"))
+        .contentParser(endpoints::registration)
+        .authorizer(endpoints::registrationAuthorization)
+        .masking(Masking.responseBody())
+        .process(Clients.RegistrationRequested, Clients.ClientRegistration, r -> r.body().registeredBy(r.authorizedSubject()), newEntity())
+        .response(ReplyCreated, Endpoints::registered)
+        .build("RegistrationHttpRequest", UUID.fromString("f7a2c6e9-4d15-4b83-9e0a-1c5d8b3f6e24"));
+  }
 
-  /// The user returning from the upstream provider, signed in: the edge has signed the user in, and generated the code
-  HttpInboxRequest<Authorizations.SignIn> SignInHttpRequest = HttpInboxRequest
-      .matching(m -> m.method() == Method.POST && m.uri().getPath().equals("/callback") && m.headerValue(CodeHashHeader) != null)
-      .contentParser(Inbox::signIn)
-      .process(Authorizations.UserAuthenticated, Authorizations.Authorization, r -> r.body(), (m, _) -> HttpInboxRequest.entityId(m.headerValue(AuthorizationIdHeader)))
-      .response(ReplyCreated, Inbox::reply)
-      .build("SignInHttpRequest", UUID.fromString("0c0f5f0e-4a5d-4b8e-9d6b-2a7c3e1f8d42"));
+  /// An authorization request of a user, `GET /authorize`, which redirects the user to the upstream provider with the
+  /// secret of the sign-in in a cookie, which the event log masks
+  static HttpInboxRequest<Authorizations.Request> authorizationHttpRequest(Endpoints endpoints) {
+    return HttpInboxRequest
+        .matching(m -> m.method() == Method.GET && m.uri().getPath().equals("/authorize"))
+        .contentParser(Inbox::authorizationRequest)
+        .process(Authorizations.AuthorizationRequested, Authorizations.Authorization, r -> r.body(), newEntity())
+        .response(ReplyCreated, endpoints::authorizationResponse)
+        .build("AuthorizationHttpRequest", UUID.fromString("709a9c55-28ab-4aaf-83b6-b5755fc4c50b"));
+  }
 
-  /// The user returning from the upstream provider without signing in
-  HttpInboxRequest<Authorizations.Failure> SignInFailureHttpRequest = HttpInboxRequest
-      .matching(m -> m.method() == Method.POST && m.uri().getPath().equals("/callback"))
-      .contentParser(r -> json(r, Authorizations.Failure.class))
-      .process(Authorizations.UserAuthenticationFailed, Authorizations.Authorization, r -> r.body(), (m, _) -> HttpInboxRequest.entityId(m.headerValue(AuthorizationIdHeader)))
-      .response(ReplyCreated, Inbox::reply)
-      .build("SignInFailureHttpRequest", UUID.fromString("e4a7b2c9-6d1f-4e3a-8b5c-9f0d2e6a1b73"));
+  /// The user returning from the upstream provider, `GET /callback`, whose code is redeemed by an [UpstreamSignIn]. The
+  /// code of the upstream provider, the cookie and the redirect to the client with the code generated for it are
+  /// masked in the event log.
+  static HttpInboxRequest<Authorizations.Callback> callbackHttpRequest(Endpoints endpoints, EntityModel upstreamSignIn) {
+    return HttpInboxRequest
+        .matching(m -> m.method() == Method.GET && m.uri().getPath().equals("/callback"))
+        .contentParser(Endpoints::callback)
+        .masking(Masking.queryParameters("code").andResponseHeaders("Location"))
+        .process(Authorizations.CallbackReceived, upstreamSignIn, r -> r.body(), newEntity())
+        .response(ReplyCreated, endpoints::callbackResponse)
+        .build("CallbackHttpRequest", UUID.fromString("0c0f5f0e-4a5d-4b8e-9d6b-2a7c3e1f8d42"));
+  }
 
-  /// A UserInfo request, `GET /userinfo`, whose access token the edge has verified, processed on the token request
-  /// which issued the token
-  static HttpInboxRequest<String> userInfoHttpRequest(EntityModel tokenRequest) {
+  /// A UserInfo request, `GET /userinfo`, with a valid access token, processed on the token request which issued the
+  /// token
+  static HttpInboxRequest<String> userInfoHttpRequest(EntityModel tokenRequest, Endpoints endpoints) {
     return HttpInboxRequest
         .matching(m -> m.method() == Method.GET && m.uri().getPath().equals("/userinfo"))
-        .contentParser(r -> r.headerValue(TokenIdHeader) != null ? valid(r.headerValue(TokenIdHeader)) : invalid("Unauthenticated"))
-        .process(Tokens.UserInfoRequested, tokenRequest, (m, _) -> HttpInboxRequest.entityId(m.headerValue(TokenIdHeader)))
-        .response(ReplyCreated, Inbox::reply)
+        .contentParser(Endpoints::tokenId)
+        .authorizer(endpoints::userInfoAuthorization)
+        .process(Tokens.UserInfoRequested, tokenRequest, (_, tokenId) -> HttpInboxRequest.entityId(tokenId))
+        .response(ReplyCreated, endpoints::userInfoResponse)
         .build("UserInfoHttpRequest", UUID.fromString("1d6e8f3a-9b2c-4c7d-a5e0-3f8b6d1c9e24"));
   }
 
-  private static HttpResponse<byte[]> reply(TransitionContext<Reply> c) {
+  static HttpResponse<byte[]> reply(TransitionContext<Reply> c) {
     return new HttpResponse<>(
         c.input().status(),
         reasonPhrase(c.input().status()),
@@ -165,61 +223,48 @@ public interface Inbox {
     );
   }
 
+  /// The inbox of the identity provider for its entity models only, e.g. for a backoffice or a diagram. Its requests
+  /// can't be served, as it has no keys.
+  static HttpInbox inbox(Duration tokenLifetime) {
+    return inbox(tokenLifetime, new Endpoints(null, null, Map.of()), new JdkHttpClient(), true);
+  }
+
   /// The inbox of the identity provider, whose requests trigger events on the clients, the token requests, whose tokens
   /// live as long as the token lifetime, and the authorizations
-  static HttpInbox inbox(Duration tokenLifetime) {
+  ///
+  /// @param keys                 the keys tokens are signed and verified with
+  /// @param upstream             the client of the provider users sign in with, or null if users can't sign in
+  /// @param importedSecretHashes the BCrypt hashes of the secrets of the imported clients, by client id
+  /// @param forwarder            the HTTP client the token requests to the upstream provider are sent with
+  static HttpInbox inbox(Duration tokenLifetime, Keys keys, OpenIdConnectClient upstream, Map<String, String> importedSecretHashes, HttpClient forwarder) {
+    return inbox(tokenLifetime, new Endpoints(keys, upstream, importedSecretHashes), forwarder, upstream != null);
+  }
+
+  private static HttpInbox inbox(Duration tokenLifetime, Endpoints endpoints, HttpClient forwarder, boolean signIn) {
     EntityModel tokenRequest = Tokens.tokenRequest(tokenLifetime);
     // In the order they are matched in, as the first matching one takes a request
-    return HttpInbox.of(List.of(
-        codeHttpRequest(tokenRequest),
-        tokenHttpRequest(tokenRequest),
-        RegistrationHttpRequest,
-        AuthorizationHttpRequest,
-        SignInHttpRequest,
-        SignInFailureHttpRequest,
-        userInfoHttpRequest(tokenRequest)
+    var requests = new ArrayList<HttpInboxRequest<?>>(List.of(
+        immediateHttpRequest(endpoints),
+        tokenHttpRequest(tokenRequest, endpoints),
+        InternalRegistrationHttpRequest,
+        registrationHttpRequest(endpoints)
     ));
-  }
-
-  /// The form is validated by the edge, which also authenticates the client
-  private static Validated<Tokens.Request> tokenRequest(HttpRequest<byte[]> request) {
-    String clientId = request.headerValue(ClientIdHeader);
-    String secretHash = request.headerValue(SecretHashHeader);
-    if (clientId == null || secretHash == null)
-      return invalid("Client credentials missing");
-    try {
-      return valid(new Tokens.Request(clientId, secretHash, Form.parse(request.body()).get("scope")));
-    } catch (IllegalArgumentException e) {
-      return invalid(e.getMessage());
-    }
-  }
-
-  /// The form is validated by the edge, which also authenticates the client and replaces the code and the code
-  /// verifier by their hashes
-  private static Validated<Tokens.CodeRequest> codeRequest(HttpRequest<byte[]> request) {
-    String clientId = request.headerValue(ClientIdHeader);
-    String secretHash = request.headerValue(SecretHashHeader);
-    String codeHash = request.headerValue(CodeHashHeader);
-    if (clientId == null || secretHash == null || codeHash == null)
-      return invalid("Client credentials or code missing");
-    try {
-      String redirectUri = Form.parse(request.body()).get("redirect_uri");
-      if (redirectUri == null)
-        return invalid("redirect_uri is missing");
-      return valid(new Tokens.CodeRequest(clientId, secretHash, codeHash, redirectUri, request.headerValue(CodeChallengeHeader)));
-    } catch (IllegalArgumentException e) {
-      return invalid(e.getMessage());
-    }
+    if (signIn)
+      requests.addAll(List.of(
+          authorizationHttpRequest(endpoints),
+          callbackHttpRequest(endpoints, new UpstreamSignIn(endpoints.upstream(), forwarder).model()),
+          userInfoHttpRequest(tokenRequest, endpoints)
+      ));
+    return HttpInbox.of(requests);
   }
 
   /// An authorization request of RFC 6749 section 4.1.1 and OpenID Connect Core section 3.1.2.1. A request without a
   /// valid client id and redirect URI is invalid, as the client can't be told by a redirect. Other problems are
   /// told the client by a redirect with the error, once the client and the redirect URI are found valid.
-  private static Validated<Authorizations.Request> authorizationRequest(HttpRequest<byte[]> request) {
+  static Validated<Authorizations.Request> authorizationRequest(HttpRequest<byte[]> request) {
     Map<String, String> query;
     try {
-      String raw = request.uri().getRawQuery();
-      query = Form.parse(raw != null ? raw.getBytes(UTF_8) : null);
+      query = Form.parse(request.uri().getRawQuery());
     } catch (IllegalArgumentException e) {
       return invalid(e.getMessage());
     }
@@ -276,30 +321,22 @@ public interface Inbox {
     ));
   }
 
-  /// The user signed in, as told by the edge
-  private static Validated<Authorizations.SignIn> signIn(HttpRequest<byte[]> request) {
-    Validated<Authorizations.User> user = json(request, Authorizations.User.class);
-    if (user.isInvalid())
-      return invalid(user.invalidReason());
-    if (user.validValue().subject() == null)
-      return invalid("The user has no subject");
-    return valid(new Authorizations.SignIn(user.validValue(), request.headerValue(CodeHashHeader)));
-  }
-
-  private static <T> Validated<T> json(HttpRequest<byte[]> request, Class<T> type) {
-    try {
-      return valid(DataType.objectMapper.readValue(request.body(), type));
-    } catch (JacksonException | IllegalArgumentException e) {
-      return invalid("Body is not " + type.getSimpleName());
-    }
-  }
-
   /// A registration request, e.g. `{"client_id": "orders", "scope": "orders:read orders:write"}`, with an optional
   /// `subject` for the `sub` of the client's tokens. A client without `scope` has no scopes.
-  private static Validated<Registration> registration(HttpRequest<byte[]> request) {
-    String registeredBy = request.headerValue(RegisteredByHeader);
-    String secretHash = request.headerValue(SecretHashHeader);
-    if (registeredBy == null || secretHash == null)
+  ///
+  /// @param registeredBy the client id of the client registering the client
+  /// @param secretHash   the hash of the secret of the client
+  static Validated<Registration> registration(HttpRequest<byte[]> request, String registeredBy, String secretHash) {
+    if (registeredBy == null)
+      return invalid("Unauthenticated");
+    Validated<Registration> registration = registration(request, secretHash);
+    return registration.isInvalid() ? registration : valid(registration.validValue().registeredBy(registeredBy));
+  }
+
+  /// A registration of the request's body, with the hash of the secret generated for the client, on behalf of no client
+  /// yet
+  static Validated<Registration> registration(HttpRequest<byte[]> request, String secretHash) {
+    if (secretHash == null)
       return invalid("Unauthenticated");
     JsonNode body;
     try {
@@ -335,7 +372,7 @@ public interface Inbox {
         subject != null ? subject.asString() : null,
         secretHash,
         scope != null ? Scopes.parse(scope.asString()) : List.of(),
-        registeredBy,
+        null,
         grantTypes,
         redirectUris
     ));

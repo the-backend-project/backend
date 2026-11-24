@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.github.thxmasj.backend.core.StateMachine.ProcessResult;
 import com.github.thxmasj.backend.core.StateMachine.ProcessResult.IdExists;
 import com.github.thxmasj.backend.core.StateMachine.RejectedEvent;
-import com.github.thxmasj.backend.core.internal.Calculation;
+import com.github.thxmasj.backend.core.internal.Transaction;
 import com.github.thxmasj.backend.core.internal.TransitionStep;
 import com.github.thxmasj.backend.core.internal.TransitionStep.AssembleStep;
 import com.github.thxmasj.backend.core.internal.TransitionStep.InputStep;
@@ -28,7 +28,7 @@ import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 
-public class CalculationTest {
+public class TransactionTest {
 
   static EventType<String, String> NumberClaimed = BasicEventType.of("Number claimed", UUID.fromString("0d2f4a6c-8e9b-4b1d-a3f5-7c9e1b3d5f17"), DataType.string());
   static IdEntityModel Ids = IdEntityModel.of("Ids", UUID.fromString("f5a7c9e1-3b4d-4d6f-8a0c-2e4f6a8c0e29"), NumberClaimed);
@@ -43,13 +43,13 @@ public class CalculationTest {
   static EventType<String, String> OrderShipped = BasicEventType.of("Order shipped", UUID.fromString("7a9c1e3f-5b6d-4e8a-b0c2-4a6c8e0b2d85"), DataType.string());
   static EventType<UUID, UUID> OrderReferenced = IndexEntityModel.referenceEventType("Order referenced", UUID.fromString("1c3e5a7b-9d0f-4a2c-8e4b-6c8e0a2d4f97"));
 
-  private final Calculation calculation = new Calculation();
+  private final Transaction transaction = new Transaction();
   private final InputStep<String> order = initial(null, Order);
   // The steps executed, in order
   private final List<String> executed = new ArrayList<>();
 
   @Test
-  public void everyStepOfATransitionIsAStepOfTheCalculation() {
+  public void everyStepOfATransitionIsAStepOfTheTransaction() {
     Action<String> notify = new Action<>() {
       @Override public String name() {return "Notify";}
       @Override public Mono<InputEvent<?>> execute(String data) {return Mono.empty();}
@@ -79,7 +79,25 @@ public class CalculationTest {
     // An id triggered after the transition is found to exist
     var id = step("Trigger", output, () -> initial(output, Ids));
     step("Output id", id, () -> output(id, "1"));
-    assertTrue(calculation.recalculateWith(existing("1")));
+    assertTrue(transaction.recomputeWith(existing("1")));
+    executed.clear();
+
+    assertSame(output, transition.calculate(order).block());
+    assertEquals(List.of(), executed);
+  }
+
+  /// A masked transition's output step is the one the transaction records, so it is given again, and the steps before
+  /// the trigger of an existing id after it aren't executed again, when the changes are calculated again
+  @Test
+  public void theOutputStepOfAMaskedTransitionIsTheOneRecorded() {
+    TransitionModel<String, String> transition = onEvent(OrderPlaced).to(States.Placed)
+        .assemble(c -> executed("Assemble", c.input()))
+        .output(d -> executed("Output", d))
+        .masked(_ -> "***");
+    var output = transition.calculate(order).block();
+    var id = step("Trigger", output, () -> initial(output, Ids));
+    step("Output id", id, () -> output(id, "1"));
+    assertTrue(transaction.recomputeWith(existing("1")));
     executed.clear();
 
     assertSame(output, transition.calculate(order).block());
@@ -94,9 +112,9 @@ public class CalculationTest {
     step("Output", idOutput, () -> new AssembleStep<>(idOutput, "1"));
     executed.clear();
 
-    assertTrue(calculation.recalculateWith(existing("1")));
+    assertTrue(transaction.recomputeWith(existing("1")));
 
-    assertEquals(1, calculation.existingIds().size());
+    assertEquals(1, transaction.existingIds().size());
     assertSame(assembled, step("Assemble", order, () -> new AssembleStep<>(order, "1")));
     var idExists = step("Trigger", assembled, () -> new AssembleStep<>(assembled, "Exists"));
     step("Output", idExists, () -> new AssembleStep<>(idExists, "1"));
@@ -111,7 +129,7 @@ public class CalculationTest {
     step("Output id again", second, () -> output(second, "1"));
     executed.clear();
 
-    assertTrue(calculation.recalculateWith(existing("1")));
+    assertTrue(transaction.recomputeWith(existing("1")));
 
     step("Trigger", order, () -> new AssembleStep<>(order, "Exists"));
     assertEquals(List.of("Trigger"), executed);
@@ -128,7 +146,7 @@ public class CalculationTest {
     step("Output id", id, () -> output(id, "1"));
     executed.clear();
 
-    assertTrue(calculation.recalculateWith(existing("1")));
+    assertTrue(transaction.recomputeWith(existing("1")));
 
     assertSame(failure, assertThrows(IllegalStateException.class, () -> step("Fail", order, () -> "Not failed")));
     assertSame(handled, step("Handle", order, () -> new AssembleStep<>(order, "Handled")));
@@ -145,7 +163,7 @@ public class CalculationTest {
     step("Output id", id, () -> output(id, "1"));
     executed.clear();
 
-    assertTrue(calculation.recalculateWith(existing("1")));
+    assertTrue(transaction.recomputeWith(existing("1")));
 
     step("Reject", order, () -> new AssembleStep<>(order, "Rejected again"));
     assertEquals(List.of("Reject"), executed);
@@ -158,22 +176,22 @@ public class CalculationTest {
     var assembled = step("Assemble", id, () -> new AssembleStep<>(id, "1"));
     step("Output id", assembled, () -> output(id, "1"));
 
-    assertFalse(calculation.recalculateWith(existing("1")));
-    assertFalse(calculation.recalculateWith(existing("2")));
+    assertFalse(transaction.recomputeWith(existing("1")));
+    assertFalse(transaction.recomputeWith(existing("2")));
 
-    assertEquals(List.of(), calculation.existingIds());
+    assertEquals(List.of(), transaction.existingIds());
   }
 
   @Test
   public void changesAreNotCalculatedAgainWhenTheIdIsFoundToExistOnceMore() {
     var id = step("Trigger", order, () -> initial(order, Ids));
     step("Output id", id, () -> output(id, "1"));
-    assertTrue(calculation.recalculateWith(existing("1")));
+    assertTrue(transaction.recomputeWith(existing("1")));
     // The trigger does not result in the id existing, as it would if the id was that of the data it is triggered with
     var again = step("Trigger", order, () -> initial(order, Ids));
     step("Output id", again, () -> output(again, "1"));
 
-    assertFalse(calculation.recalculateWith(existing("1")));
+    assertFalse(transaction.recomputeWith(existing("1")));
   }
 
   @Test
@@ -182,7 +200,7 @@ public class CalculationTest {
     var reserved = step("Reserve", assembled, () -> new AssembleStep<>(assembled, "Reserved"));
     var id = step("Trigger", reserved, () -> initial(reserved, Ids));
     step("Output id", id, () -> output(id, "1"));
-    assertTrue(calculation.recalculateWith(existing("1")));
+    assertTrue(transaction.recomputeWith(existing("1")));
     executed.clear();
 
     // Not the context the first step was executed in
@@ -198,9 +216,9 @@ public class CalculationTest {
     return result;
   }
 
-  /// Takes a step of the calculation, which gets the result of the execution if the step is executed
+  /// Takes a step of the transaction, which gets the result of the execution if the step is executed
   private <T> T step(String name, TransitionStep<?> context, Supplier<T> execution) {
-    return calculation.step(context, () -> {
+    return transaction.step(context, () -> {
       executed.add(name);
       return Mono.just(execution.get());
     }).block();
@@ -219,7 +237,7 @@ public class CalculationTest {
         "correlation",
         "input",
         null,
-        calculation
+        transaction
     );
   }
 

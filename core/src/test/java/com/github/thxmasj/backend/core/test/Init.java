@@ -89,8 +89,19 @@ public class Init {
       Clock clock,
       Listener listener
   ) {
+    return stateMachine(schemaName, entityModels, clock, listener, _ -> Mono.empty());
+  }
+
+  /// @param delayer delays the storing of a transaction's changes, see [StateMachine]
+  public static StateMachine stateMachine(
+      String schemaName,
+      List<? extends EntityModel> entityModels,
+      Clock clock,
+      Listener listener,
+      java.util.function.Function<List<String>, Mono<Void>> delayer
+  ) {
     return new StateMachine(
-        _ -> Mono.empty(),
+        delayer,
         entityModels,
         database,
         client,

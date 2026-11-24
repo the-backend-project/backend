@@ -133,7 +133,7 @@ HttpInbox Inbox = HttpInbox.of(List.of(GreetingRequest));
 ```
 
 Its `entityModels()` are the inbox's own: the inbox requests, `RequestRouting`, which routes a request to the inbox
-request matching it, `MessageIds` and `RequestIndex`, which indexes the requests by the entities they were processed
+request matching it and is not stored, `MessageIds` and `RequestIndex`, which indexes the requests by the entities they were processed
 on. The state machine is given them, and also runs the models their transitions trigger events on, here `Greeting`,
 and so on, so the models of the application are found from the inbox. The inbox also checks that the inbox
 request takes the response the greeting gives, `GreetingResponseCreated`, when the state machine asks for the entity

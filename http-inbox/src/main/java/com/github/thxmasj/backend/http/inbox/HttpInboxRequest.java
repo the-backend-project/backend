@@ -13,6 +13,7 @@ import com.github.thxmasj.backend.core.TransitionModelBuilder.TransitionContext;
 import com.github.thxmasj.backend.core.Validated;
 import com.github.thxmasj.backend.http.HttpRequest;
 import com.github.thxmasj.backend.http.HttpResponse;
+import com.github.thxmasj.backend.http.Masking;
 import com.github.thxmasj.backend.http.inbox.HttpInbox.RoutedRequest;
 import java.util.ArrayList;
 import java.util.List;
@@ -66,6 +67,8 @@ public final class HttpInboxRequest<T> implements EntityModel {
   private final Function<HttpRequest<byte[]>, HttpRequest<byte[]>> normalizer;
   private final List<Response<?>> responses;
   private final Rollback<?> rollback;
+  private final Masking masking;
+  private final boolean stored;
   private final Map<State, List<TransitionModel<?, ?>>> transitions;
 
   private HttpInboxRequest(Builder<T> builder, String name, UUID id) {
@@ -91,6 +94,14 @@ public final class HttpInboxRequest<T> implements EntityModel {
           "The rollback of the request " + name + " can't have an authorizer, as the request has none to give its message id a subject");
     if (rollback != null && processes.stream().map(Process::entityModel).distinct().count() > 1)
       throw new IllegalArgumentException("The processes of the request " + name + ", which can be rolled back, must have the same entity model");
+    this.masking = Masking.CREDENTIALS.and(builder.masking);
+    this.stored = builder.stored;
+    if (deduplicateOn != null && masking.wholeResponseBody())
+      throw new IllegalArgumentException("The request " + name + " masks the body of its response, so it can't be deduplicated, as a retry gets the response of the first request as stored");
+    if (deduplicateOn != null && masking.masksMoreOfRequestsThan(Masking.CREDENTIALS))
+      throw new IllegalArgumentException("The request " + name + " masks more of its requests than their credentials, so it can't be deduplicated, as a request differing from the first one in what is masked couldn't be told from a retry");
+    if (!stored && deduplicateOn != null)
+      throw new IllegalArgumentException("The request " + name + " is not stored, so it can't be deduplicated, as a retry is recognised by the request stored");
     this.transitions = TransitionModels.requestTransitions(this);
   }
 
@@ -112,6 +123,20 @@ public final class HttpInboxRequest<T> implements EntityModel {
   @Override
   public String toString() {
     return name;
+  }
+
+  /// Whether the requests are stored. A request which is not stored is an entity of the session only, as every
+  /// `RequestRouting` entity is (see [EntityModel#stored()]), while the events its process triggers on the application
+  /// are stored if they are of stored types.
+  @Override
+  public boolean stored() {
+    return stored;
+  }
+
+  /// What of the requests and responses is masked in the event log, [Masking#CREDENTIALS] and what
+  /// [Builder#masking(Masking)] adds
+  public Masking masking() {
+    return masking;
   }
 
   public Map<State, List<TransitionModel<?, ?>>> transitions() {
@@ -358,6 +383,8 @@ public final class HttpInboxRequest<T> implements EntityModel {
     private Function<HttpRequest<byte[]>, HttpRequest<byte[]>> normalizer = Function.identity();
     private final List<Response<?>> responses = new ArrayList<>();
     private Rollback<?> rollback;
+    private Masking masking = Masking.NONE;
+    private boolean stored = true;
 
     private Builder(Predicate<HttpRequest<byte[]>> matcher, Function<HttpRequest<byte[]>, Validated<T>> contentParser) {
       this.matcher = matcher;
@@ -372,11 +399,17 @@ public final class HttpInboxRequest<T> implements EntityModel {
       this.processes.addAll(other.processes);
       this.normalizer = other.normalizer;
       this.responses.addAll(other.responses);
+      this.masking = other.masking;
+      this.stored = other.stored;
     }
 
     /// The message id of a request, e.g. from its path, by which a retried request is recognised and gets the response
     /// of the first one, and by which a request is rolled back. Without it, requests are not deduplicated: each one is
     /// dispatched to the application, and the request can't be rolled back.
+    ///
+    /// The message id is the authorized subject's, so with an [#authorizer(BiFunction)] two clients never share one. A
+    /// retry is compared with the first request without their credentials, which are masked, so without an authorizer
+    /// another client sending a request with the message id and the body of an earlier one gets its response.
     public DeduplicatedBuilder<T> deduplicateOn(BiFunction<HttpRequest<byte[]>, T, Validated<String>> deduplicateOn) {
       return new DeduplicatedBuilder<>(this, Objects.requireNonNull(deduplicateOn));
     }
@@ -487,6 +520,32 @@ public final class HttpInboxRequest<T> implements EntityModel {
       return this;
     }
 
+    /// Masks what the masking gives of the requests and responses in the event log, besides
+    /// [Masking#CREDENTIALS], which every inbox request masks. The transitions see the whole request and response.
+    ///
+    /// A retried request is compared with the first one as stored, so the two are masked before they are compared: a
+    /// retry may differ from the first request in its credentials, e.g. a refreshed access token. A request which
+    /// masks more of its requests than [Masking#CREDENTIALS] can't be deduplicated, as a request differing from the
+    /// first one in what is masked couldn't be told from a retry. A retry gets the response of the first one as
+    /// stored, so a request which masks the body of its response can't be deduplicated either, and a retry whose
+    /// first response has a masked header, e.g. a `Set-Cookie`, is answered with 409 Conflict, as it can't be
+    /// repeated.
+    public Builder<T> masking(Masking masking) {
+      this.masking = this.masking.and(Objects.requireNonNull(masking));
+      return this;
+    }
+
+    /// The requests are not stored, e.g. requests for static files, health checks or pages rendered from other
+    /// entities, or a request with credentials which its process turns into events of its own. The events the process
+    /// triggers on the application are stored if they are of stored types. A request which is not stored can't be
+    /// deduplicated, so it has no `deduplicateOn`, and the application must respond in the session of the request,
+    /// e.g. by the callback of an outbox request, but not by a delayed or conditional trigger, which fires in a session
+    /// of its own, as only the session finds the request.
+    public Builder<T> notStored() {
+      this.stored = false;
+      return this;
+    }
+
     public HttpInboxRequest<T> build(String name, UUID id) {
       return new HttpInboxRequest<>(this, name, id);
     }
@@ -569,6 +628,12 @@ public final class HttpInboxRequest<T> implements EntityModel {
     @Override
     public DeduplicatedBuilder<T> normalizer(Function<HttpRequest<byte[]>, HttpRequest<byte[]>> normalizer) {
       super.normalizer(normalizer);
+      return this;
+    }
+
+    @Override
+    public DeduplicatedBuilder<T> masking(Masking masking) {
+      super.masking(masking);
       return this;
     }
 

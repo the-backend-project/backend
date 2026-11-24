@@ -26,6 +26,7 @@ import static com.github.thxmasj.backend.templates.cardpayment.PaymentState.Proc
 import static com.github.thxmasj.backend.templates.cardpayment.PaymentState.Reconciled;
 import static com.github.thxmasj.backend.templates.cardpayment.ReconciliationValuesDataCreator.reconciliationValues;
 import static com.github.thxmasj.backend.templates.cardpayment.SettlementEvent.AcquirerBatchNumberAssigned;
+import static com.github.thxmasj.backend.templates.cardpayment.SettlementEvent.AcquirerBatchNumberKnown;
 import static com.github.thxmasj.backend.templates.cardpayment.SettlementEvent.CutOffRequested;
 import static com.github.thxmasj.backend.templates.cardpayment.SettlementEvent.AcquirerBatchNumberLookedUp;
 import static com.github.thxmasj.backend.templates.cardpayment.SettlementEvent.BatchNumberLookedUp;
@@ -60,7 +61,6 @@ import com.github.thxmasj.backend.templates.cardpayment.SettlementEvent.Opened;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
@@ -120,7 +120,8 @@ public class SettlementTransitions {
 
     this.transitions = Map.of(
         Begin, List.of(
-            // TODO: BatchNumberLookedUp cannot be ReadOnly as it triggers a transition
+            // TODO: BatchNumberLookedUp, which is not stored, can't take this transition from Begin to Open: an event not
+            // stored creating an entity makes it one of the session only, so the batch would never be stored
 //            onEvent(BatchNumberLookedUp).to(Open)
 //                .assembleInput()
 //                .newIdentifier(AcquirerBatchNumber, d -> d)
@@ -156,13 +157,13 @@ public class SettlementTransitions {
             onEvent(CurrentBatchNumberLookedUp).toSelf().assemble(c -> batchNumber(c.log())).output(d -> d)
         ), openTransitions(reconciliationToAcquirer)),
         Open, join(List.of(
-            onEvent(AcquirerBatchNumberAssigned).toSelf().assembleInput().output(),
+            acquirerBatchNumberKnown(),
             onEvent(BatchNumberLookedUp).toSelf().assemble(c -> batchNumber(c.log())).output(d -> d),
             onEvent(AcquirerBatchNumberLookedUp).toSelf().assemble(d -> acquirerBatchNumber(d.log()).orElseThrow()).output(d -> d),
             onEvent(CurrentBatchNumberLookedUp).toSelf().assemble(c -> batchNumber(c.log())).output(d -> d)
         ), openTransitions(reconciliationToAcquirer)),
         ProcessingSettlement, List.of(
-            onEvent(AcquirerBatchNumberAssigned).toSelf().assembleInput().output(),
+            acquirerBatchNumberKnown(),
             onEvent(BatchNumberLookedUp).toSelf().assemble(c -> batchNumber(c.log())).output(d -> d),
             onEvent(CurrentBatchNumberLookedUp).toSelf().assemble(c -> batchNumber(c.log())).output(d -> d),
             // For previous batch to stay open for ongoing capture exchanges when cut-off is performed
@@ -206,7 +207,7 @@ public class SettlementTransitions {
         ),
         Reconciled, List.of(),
         Error, List.of(
-            onEvent(AcquirerBatchNumberAssigned).toSelf().assembleInput().output(),
+            acquirerBatchNumberKnown(),
             onEvent(BatchNumberLookedUp).toSelf().assemble(c -> batchNumber(c.log())).output(d -> d),
             onEvent(CurrentBatchNumberLookedUp).toSelf().assemble(c -> batchNumber(c.log())).output(d -> d)
         )
@@ -221,8 +222,14 @@ public class SettlementTransitions {
   /// The acquirer's batch number, assigned when the settlement was opened or when first seen in a response
   private static Optional<AcquirerBatchNumber> acquirerBatchNumber(EventLog log) {
     return log.oneIfExists(SettlementEvent.SettlementOpened).map(Opened::acquirerBatchNumber)
-        // Assigning it when it is already known records nothing
-        .or(() -> log.all(AcquirerBatchNumberAssigned).stream().filter(Objects::nonNull).findFirst());
+        .or(() -> log.oneIfExists(AcquirerBatchNumberAssigned));
+  }
+
+  /// The acquirer's batch number assigned when it is already known, which changes nothing
+  private static TransitionModel<AcquirerBatchNumber, AcquirerBatchNumber> acquirerBatchNumberKnown() {
+    return onEvent(AcquirerBatchNumberAssigned).toSelf()
+        .assembleInput()
+        .otherwise(onEvent(AcquirerBatchNumberKnown).toSelf().output(), _ -> null);
   }
 
   private static List<TransitionModel<?, ?>> join(List<TransitionModel<?, ?>> first, List<TransitionModel<?, ?>> second) {
