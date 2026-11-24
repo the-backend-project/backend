@@ -86,6 +86,24 @@ public class TransactionTest {
     assertEquals(List.of(), executed);
   }
 
+  /// A masked transition's output step is the one the transaction records, so it is given again, and the steps before
+  /// the trigger of an existing id after it aren't executed again, when the changes are calculated again
+  @Test
+  public void theOutputStepOfAMaskedTransitionIsTheOneRecorded() {
+    TransitionModel<String, String> transition = onEvent(OrderPlaced).to(States.Placed)
+        .assemble(c -> executed("Assemble", c.input()))
+        .output(d -> executed("Output", d))
+        .masked(_ -> "***");
+    var output = transition.calculate(order).block();
+    var id = step("Trigger", output, () -> initial(output, Ids));
+    step("Output id", id, () -> output(id, "1"));
+    assertTrue(transaction.recomputeWith(existing("1")));
+    executed.clear();
+
+    assertSame(output, transition.calculate(order).block());
+    assertEquals(List.of(), executed);
+  }
+
   @Test
   public void stepsBeforeTheTriggerOfAnExistingIdAreNotExecutedAgain() {
     var assembled = step("Assemble", order, () -> new AssembleStep<>(order, "1"));

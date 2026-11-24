@@ -416,6 +416,9 @@ public class TransitionModelBuilder<I, T, O> {
         return new WithEntity<>(this, entityModel);
       }
 
+      /// Triggers the event on the entity after the delay, unless another event is stored on it first. The data of the
+      /// event is stored whole with the trigger until it fires, in a session of its own, so it must not have a secret,
+      /// which isn't masked here as an output is (see [TransitionModel.WithOutput#masked]).
       public TransitionModelBuilder<I, T, O> after(Function<T, Duration> delay) {
         if (reactiveDataAdapter != null)
           throw new UnsupportedOperationException("A delayed event can't have its data created reactively");
@@ -490,6 +493,9 @@ public class TransitionModelBuilder<I, T, O> {
       return new WithEventTypeAndData<>(this, createdReactively(eventType), dataAdapter);
     }
 
+    /// Triggers the event when the last event of every entity referenced by the index key is one of the given types.
+    /// The data of the event is stored whole with the trigger until it fires, in a session of its own, so it must not
+    /// have a secret, which isn't masked here as an output is (see [TransitionModel.WithOutput#masked]).
     public WithCondition<I, T, O, I1, O1> when(EventType<?, ?> referenceType, Function<T, UUID> indexKey) {
       return new WithCondition<>(this, referenceType, indexKey);
     }
@@ -847,30 +853,41 @@ public class TransitionModelBuilder<I, T, O> {
 
   /// The transition with the output of the data adapter, which may be [masked][TransitionModel.WithOutput#masked]
   public TransitionModel.WithOutput<I, O> output(Function<T, O> f) {
-    return new TransitionModel.WithOutput<>(
-        modelContext,
-        builderFunction.andThen(a -> a.flatMap(b -> step(b, () -> Mono.just(new OutputStep<>(
-            b,
-            ProcessResult.accepted(
-                event(b.inputStep(), f.apply(b.stepOutput())),
-                b.inputStep().log().entityModel(),
-                modelContext.severity()
-            )
-        )))))
-    );
+    return new TransitionModel.WithOutput<>(modelContext, mask -> outputChain(f, mask));
   }
 
-  /// The event of the transition with the output
-  private Event<O> event(InputStep<?> inputStep, O output) {
+  /// The steps of the transition ending in the output step of the output, masked when stored if the mask isn't null.
+  /// The event is made, and masked, in the output step, which is recorded by the transaction, so that the same step is
+  /// given when the changes are calculated again, and the steps after it are recognised.
+  private Function<Mono<InputStep<I>>, Mono<OutputStep<O>>> outputChain(Function<T, O> f, UnaryOperator<O> mask) {
+    return builderFunction.andThen(a -> a.flatMap(b -> step(b, () -> Mono.just(new OutputStep<>(
+        b,
+        ProcessResult.accepted(
+            event(b, f.apply(b.stepOutput()), mask),
+            b.inputStep().log().entityModel(),
+            modelContext.severity()
+        )
+    )))));
+  }
+
+  /// The event of the transition with the output, masked when stored if the mask isn't null. The event of a transition
+  /// which chose another one isn't stored, so it isn't masked: the event of the chosen one is stored, with its own mask.
+  private Event<O> event(TransitionStep<T> step, O output, UnaryOperator<O> mask) {
     if (output == null)
       throw new IllegalStateException(String.format(
           "The output of the transition on %s is null, which an event can't have. An event without data, of an event " +
               "type without data, is made by output()",
           modelContext.eventType().name()
       ));
+    InputStep<?> inputStep = step.inputStep();
+    UUID entityId = inputStep.log().entityId();
+    int number = inputStep.log().lastEventNumber() + 1;
     // Marshalled when the transition is calculated, after its mask, see TransitionModel#calculate
-    return Event.marshalledWhenAskedFor(inputStep.log().entityId(), inputStep.log().lastEventNumber() + 1, modelContext.eventType(), inputStep.timestamp(), output);
+    return mask == null || step instanceof ChoiceStep<?> ?
+        Event.marshalledWhenAskedFor(entityId, number, modelContext.eventType(), inputStep.timestamp(), output) :
+        new Event<>(entityId, number, modelContext.eventType(), inputStep.timestamp(), output, mask);
   }
+
 
 
   private TransitionModel<I, O> complete() {

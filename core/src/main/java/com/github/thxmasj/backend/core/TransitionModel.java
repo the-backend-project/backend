@@ -152,8 +152,12 @@ public class TransitionModel<I, O> {
   /// A transition with an output, which may be masked when its event is stored
   public static final class WithOutput<I, O> extends TransitionModel<I, O> {
 
-    WithOutput(ModelContext<I, O> modelContext, Function<Mono<InputStep<I>>, Mono<OutputStep<O>>> chain) {
-      super(modelContext, chain);
+    /// The steps of the transition with its output masked by a mask, or not if it is null
+    private final Function<UnaryOperator<O>, Function<Mono<InputStep<I>>, Mono<OutputStep<O>>>> masking;
+
+    WithOutput(ModelContext<I, O> modelContext, Function<UnaryOperator<O>, Function<Mono<InputStep<I>>, Mono<OutputStep<O>>>> masking) {
+      super(modelContext, masking.apply(null));
+      this.masking = masking;
     }
 
     /// The transition with its output masked when its event is stored, e.g. to keep a secret or bulky data out of the
@@ -161,24 +165,16 @@ public class TransitionModel<I, O> {
     /// the event, and the transitions of the same transaction reading the entity's log see it. The event log stores
     /// the masked output, which is what a later transaction reads of a stored entity, also one of the same session, so
     /// the state of the entity must not depend on what is masked. A transition which chooses another one stores the
-    /// event of the chosen transition, with the mask of that one.
+    /// event of the chosen transition, with the mask of that one. The event is masked in the transition's output
+    /// step, the one the transaction records.
     ///
     /// @param mask gives the output as it is stored, which must not be null
     public TransitionModel<I, O> masked(UnaryOperator<O> mask) {
       Objects.requireNonNull(mask, "mask is null");
-      return new TransitionModel<>(modelContext().withMask(mask), chain().andThen(output -> output.map(step -> masked(step, mask))));
-    }
-
-    /// The output step with its event masked when stored. The event of a transition which chose another one isn't
-    /// stored, so it isn't masked: the event of the chosen one is stored, with its own mask.
-    private static <O> OutputStep<O> masked(OutputStep<O> step, UnaryOperator<O> mask) {
-      if (step.previous() instanceof ChoiceStep<?>
-          || !(step.stepOutput() instanceof Accepted<O>(Event<O> event, EntityModel entityModel, Severity severity)))
-        return step;
-      var masked = new Event<>(event.entityId(), event.eventNumber(), event.type(), event.timestamp(), event.getUnmarshalledData(), mask);
-      return new OutputStep<>(step.previous(), ProcessResult.accepted(masked, entityModel, severity));
+      return new TransitionModel<>(modelContext().withMask(mask), masking.apply(mask));
     }
 
   }
+
 
 }

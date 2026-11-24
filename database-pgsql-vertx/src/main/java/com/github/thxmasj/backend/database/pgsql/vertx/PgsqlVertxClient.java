@@ -144,7 +144,7 @@ class PgsqlVertxClient implements DatabaseClient {
       if (error instanceof MappingFailure)
         return error;
       String message = "Query " + queryName + " failed: " + error.getMessage() + "\nParameters:\n" +
-          parameters.entrySet().stream().map(e -> e.getKey() + "\t" + e.getValue()).collect(joining("\n")) +
+          parameters.entrySet().stream().map(e -> e.getKey() + "\t" + e.getValue().described()).collect(joining("\n")) +
           "\nSQL:\n" + sql;
       Throwable violation = error instanceof PgException e ?
           ConstraintViolations.constraintViolation(e.getSqlState(), e.getDetail(), e.getTable(), e.getConstraint(), queryName, message, error) :

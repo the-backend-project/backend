@@ -156,6 +156,9 @@ tested, drawn in the state diagrams and told the [monitoring](monitoring.md), wi
   a data adapter, and a transition which chooses another one, can't be masked. The event in the transaction has the whole output, which its triggers, the one who triggered
   it and the transitions of the same transaction see, while the event log has the masked one. A later transaction, also
   one of the same [session](#sessions), reads a stored entity from the event log, masked. The [inbox](http-inbox.md#masking) masks the credentials of the requests it stores this way.
+  The data of a delayed or conditional trigger is not masked: it is the input of the event the trigger fires later, in
+  a session of its own, so it is stored whole until then. Keep secrets out of it, and pass what the later transition
+  needs by a reference, e.g. an id or a hash, rather than the secret itself, which no later session can have.
 
 ```java
 // A page rendered from other entities, which is not stored
