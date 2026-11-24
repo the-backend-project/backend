@@ -907,9 +907,10 @@ public class StateMachine implements AutoCloseable {
           && model.equals(entityModel)
           && !(previous instanceof ChoiceStep)) {
         EventLog log = c.inputStep().log();
-        // An event which is not stored is not in the log of a stored entity, which the next event stored follows
-        if (event.type().stored() || log.isSessionOnlyWith(event))
-          return new InTransaction(log.withNewEvent(event), null);
+        // An event which is not stored is not in the log of a stored entity, which the next event stored follows. The
+        // log the transition was given is the entity's as the transaction has it, without the event, so it is the log,
+        // rather than one read from the database.
+        return new InTransaction(event.type().stored() || log.isSessionOnlyWith(event) ? log.withNewEvent(event) : log, null);
       }
     }
     return new InTransaction(null, previousTransaction(transitionStep));
