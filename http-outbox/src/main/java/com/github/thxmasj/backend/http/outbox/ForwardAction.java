@@ -22,8 +22,9 @@ class ForwardAction implements Action<HttpRequest<byte[]>> {
 
   @Override
   public Mono<InputEvent<?>> execute(HttpRequest<byte[]> request) {
-    // Without the query, which may have a secret
-    Debug.log(ZonedDateTime.now() + ": Forwarding " + request.method() + " " + request.uri().getScheme() + "://" + request.uri().getAuthority() + request.uri().getRawPath());
+    // Without the query and the user info, which may have secrets
+    var uri = request.uri();
+    Debug.log(ZonedDateTime.now() + ": Forwarding " + request.method() + " " + uri.getHost() + (uri.getPort() >= 0 ? ":" + uri.getPort() : "") + uri.getRawPath());
     return forwarder.exchange(request)
         .<InputEvent<?>>map(response -> new InputEvent<>(ResponseReceived, response))
         .onErrorResume(ConnectException.class, _ -> Mono.just(new InputEvent<>(ConnectionFailed, null)));

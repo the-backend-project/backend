@@ -157,6 +157,29 @@ public class TraverserTest {
     assertTrue(e.getMessage().contains("- State Rejected is not reached from Begin"), e.getMessage());
   }
 
+  /// A transition is judged by the transition it chooses, whose event is stored, or not, and numbers its delayed trigger
+  @Test
+  public void aDelayedTriggerNumberedAlikeIsJudgedByTheTransitionChosen() {
+    var delayedThenRetried = onEvent(Rejected).toSelf()
+        .trigger(Accepted).after(_ -> Duration.ofMinutes(1))
+        .trigger(Retried).on(EntityModel.of("Other", UUID.randomUUID(), Map::of)).identifiedBy(_ -> null)
+        .output();
+    // A stored event which chooses one not stored, with a delayed trigger
+    var retriedChoosingQuiet = onEvent(Retried).toSelf()
+        .assembleInput()
+        .otherwise(onEvent(QuietlyRetried).toSelf().trigger(Accepted).after(_ -> Duration.ofMinutes(2)).output(), d -> d);
+    assertThrows(IllegalArgumentException.class, () -> new Traverser(Map.of(Begin, List.of(acceptance), States.Accepted, List.of(delayedThenRetried, retriedChoosingQuiet))));
+    // An event not stored which chooses a stored one, with a delayed trigger, is numbered after it
+    var quietChoosingStored = onEvent(QuietlyRetried).toSelf()
+        .assembleInput()
+        .otherwise(onEvent(Retried).toSelf().trigger(Accepted).after(_ -> Duration.ofMinutes(2)).output(), d -> d);
+    var delayedThenQuiet = onEvent(Rejected).toSelf()
+        .trigger(Accepted).after(_ -> Duration.ofMinutes(1))
+        .trigger(QuietlyRetried).on(EntityModel.of("Other", UUID.randomUUID(), Map::of)).identifiedBy(_ -> null)
+        .output();
+    assertDoesNotThrow(() -> new Traverser(Map.of(Begin, List.of(acceptance), States.Accepted, List.of(delayedThenQuiet, quietChoosingStored))));
+  }
+
   /// A transition from `Begin` creates the entity, so it can't stay in `Begin`
   @Test
   public void aTransitionFromBeginStayingInBeginIsRejected() {

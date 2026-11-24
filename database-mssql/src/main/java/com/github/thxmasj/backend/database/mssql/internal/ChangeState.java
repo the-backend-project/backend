@@ -129,7 +129,7 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
           DELETE [{schema}].[ConditionalTrigger]
           WHERE Id=:triggerId;
           """.replace("{schema}", schema))
-          + "IF @@ROWCOUNT = 0 THROW 50001, '" + TriggerFiredElsewhere.MARKER + "', 1;\n";
+          + "IF @@ROWCOUNT = 0 THROW " + TriggerFiredElsewhere.SQL_SERVER_ERROR + ", '" + TriggerFiredElsewhere.MARKER + "', 1;\n";
     }
 
     if (conditionalTrigger != null) {

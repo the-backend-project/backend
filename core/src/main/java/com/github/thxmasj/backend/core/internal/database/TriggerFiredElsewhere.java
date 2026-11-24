@@ -13,12 +13,20 @@ public class TriggerFiredElsewhere extends RuntimeException {
     super("The trigger which fired the transaction was fired by another transaction first", cause);
   }
 
-  /// Whether the failure, or one it was caused by, is that of a store whose deletion of the trigger deleted nothing
+  /// The error number SQL Server's store throws with
+  public static final int SQL_SERVER_ERROR = 50001;
+
+  /// Whether the failure is that of a store whose deletion of the trigger deleted nothing. It is told by the error of
+  /// the database itself, the innermost cause, rather than by the messages of the clients around it, which have the
+  /// SQL, and so the marker, whatever failed: SQL Server's error of [#SQL_SERVER_ERROR], or PostgreSQL's failure to cast
+  /// the marker, whose message quotes it.
   static boolean isCause(Throwable failure) {
-    for (var t = failure; t != null; t = t.getCause())
-      if (t.getMessage() != null && t.getMessage().contains(MARKER))
-        return true;
-    return false;
+    Throwable root = failure;
+    while (root.getCause() != null && root.getCause() != root)
+      root = root.getCause();
+    if (root instanceof java.sql.SQLException e && e.getErrorCode() == SQL_SERVER_ERROR)
+      return true;
+    return root.getMessage() != null && root.getMessage().contains("\"" + MARKER);
   }
 
 }
