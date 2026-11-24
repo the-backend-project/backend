@@ -13,4 +13,12 @@ public record DelayedTrigger<T>(
     T data,
     ZonedDateTime nextAttemptAt,
     String correlationId
-) {}
+) {
+
+  /// The trigger without its data, which may be a secret, as it is written e.g. in debug output
+  @Override
+  public String toString() {
+    return "DelayedTrigger[" + entityModel.name() + ":" + entityId + ":" + eventNumber + ":" + eventType.name() + ", next attempt at " + nextAttemptAt + "]";
+  }
+
+}

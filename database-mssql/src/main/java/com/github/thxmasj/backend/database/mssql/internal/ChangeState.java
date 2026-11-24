@@ -118,11 +118,12 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
     if (firedTrigger != null) {
       // The trigger fired an event which isn't stored, which would otherwise have deleted it. If it is gone, another
       // transaction fired it first, e.g. of another instance which picked it too, so this one fails, as the event it
-      // fired would otherwise be taken twice.
+      // fired would otherwise be taken twice. A delayed trigger is the one of its number, type and correlation id, as
+      // one which replaced it may have its number.
       sql += (firedTrigger.type() == TriggerType.DELAYED ?
           """
           DELETE [{schema}].[DelayedTrigger] FROM [{schema}].[DelayedTrigger] WITH (INDEX([ixEntityId]))
-          WHERE EntityId=@entityId{changeIndex} AND EventNumber<=:eventNumber;
+          WHERE EntityId=@entityId{changeIndex} AND EventNumber=:eventNumber AND Type=:firedType AND CorrelationId=:correlationId;
           """.replace("{changeIndex}", String.valueOf(changeIndex)).replace("{schema}", schema) :
           """
           DELETE [{schema}].[ConditionalTrigger]

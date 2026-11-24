@@ -102,13 +102,14 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
     if (firedTrigger != null) {
       // The trigger fired an event which isn't stored, which would otherwise have deleted it. If it is gone, another
       // transaction fired it first, e.g. of another instance which picked it too, so this one fails, as the event it
-      // fired would otherwise be taken twice. The statement fails by inserting a row only if nothing was deleted, with a
+      // fired would otherwise be taken twice. A delayed trigger is the one of its number, type and correlation id, as
+      // one which replaced it may have its number. The statement fails by inserting a row only if nothing was deleted, with a
       // cast which fails with the marker, as a statement of its own, which every client runs without reading a result.
       // The cast depends on the deletion, so it isn't folded, and so failed, when the statement is planned.
       sql += firedTrigger.type() == TriggerType.DELAYED ?
           """
           WITH deleted AS (
-            DELETE FROM {Table} WHERE EntityId=:entityId AND EventNumber<=:eventNumber RETURNING 1
+            DELETE FROM {Table} WHERE EntityId=:entityId AND EventNumber=:eventNumber AND Type=:firedType AND CorrelationId=:correlationId RETURNING 1
           )
           INSERT INTO {Table} (EntityId)
           SELECT CAST('{marker}' || (SELECT COUNT(*) FROM deleted) AS UUID) WHERE NOT EXISTS (SELECT 1 FROM deleted);

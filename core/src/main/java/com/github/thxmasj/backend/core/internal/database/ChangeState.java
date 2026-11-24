@@ -46,7 +46,10 @@ public abstract class ChangeState {
       if (change.firedTrigger().type() == TriggerType.CONDITIONAL)
         spec.bind("triggerId", change.firedTrigger().id());
       else
-        spec.bind("eventNumber", change.firedTrigger().eventNumber());
+        // The transaction a delayed trigger fires has the trigger's correlation id
+        spec.bind("eventNumber", change.firedTrigger().eventNumber())
+            .bind("firedType", change.firedTrigger().eventTypeId())
+            .bind("correlationId", correlationId);
     }
     if (change.conditionalTrigger() != null) {
       spec
@@ -103,8 +106,11 @@ public abstract class ChangeState {
 
     /// A stored trigger which fired an event not stored, which is deleted by this change, as no event stored deletes it
     ///
+    /// @param id          the id of a conditional trigger, or null for a delayed one
     /// @param eventNumber the number of the event it fired, which a delayed trigger has
-    record FiredTrigger(TriggerType type, UUID id, int eventNumber) {}
+    /// @param eventTypeId the type of the event it fired, by which a delayed trigger is told from one which replaced
+    ///                    it with the same number
+    record FiredTrigger(TriggerType type, UUID id, int eventNumber, UUID eventTypeId) {}
 
     /// The stored trigger this change deletes, as it fired an event not stored, or null
     default FiredTrigger firedTrigger() {

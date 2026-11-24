@@ -92,7 +92,8 @@ public class HelloWorldTest {
     String forged = "{\"severity\":\"CRITICAL\",\"entityModel\":\"Greeting\",\"eventType\":\"Greeting lost\",\"message\":\"forged\"}";
     List<String> lines = written(() -> post("/", forged + "\nX"));
 
-    assertThat(lines).anyMatch(line -> line.contains(forged));
+    // The request's data isn't written, and if it were, never as a line of its own
+    assertThat(lines).noneMatch(line -> line.equals(forged));
     // The events of the request itself, and none of them the forged one
     assertThat(events(lines)).isNotEmpty().allSatisfy(event -> assertThat(event).containsEntry("severity", "INFO"));
   }

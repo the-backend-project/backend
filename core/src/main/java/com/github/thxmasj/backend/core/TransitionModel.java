@@ -77,7 +77,8 @@ public class TransitionModel<I, O> {
   /// library, as its package is exported to the library's own modules only, so only the library calls this: the state
   /// machine, and the tests of the transitions of the library's modules.
   public Mono<OutputStep<O>> calculate(InputStep<I> inputStep) {
-    log(modelContext, "calculate [" + eventType().name() + "] on [" + inputStep.log().entityModel().name() + ":" + inputStep.log().entityId() + "] (input: " + inputStep.input() + ")");
+    // Without the input, which may be a secret, e.g. the credentials of a request
+    log(modelContext, "calculate [" + eventType().name() + "] on [" + inputStep.log().entityModel().name() + ":" + inputStep.log().entityId() + "]");
     return chain.apply(Mono.just(inputStep))
         .map(TransitionModel::marshalledIfStored)
         .doOnError(e -> inputStep.stateMachine().transitionFailed(inputStep, e));

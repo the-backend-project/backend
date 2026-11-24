@@ -50,6 +50,7 @@ import com.github.thxmasj.backend.core.internal.database.ConditionalTrigger;
 import com.github.thxmasj.backend.core.internal.database.DelayedTrigger;
 import com.github.thxmasj.backend.core.internal.database.EventAlreadyExists;
 import com.github.thxmasj.backend.core.internal.database.IdEventAlreadyExists;
+import com.github.thxmasj.backend.core.internal.database.TriggerFiredElsewhere;
 import com.github.thxmasj.backend.core.internal.database.Storage;
 import com.github.thxmasj.backend.core.internal.database.StorageProvider;
 import jakarta.annotation.Nullable;
@@ -278,6 +279,11 @@ public class StateMachine implements AutoCloseable {
               ).contextWrite(Correlation.contextOf(delayedTrigger.correlationId()));
         })
         .onErrorReturn(MappingFailure.class, ResolverStatus.Error)
+        // Another instance fired the trigger first, which is expected when several poll, so not a failure
+        .onErrorResume(TriggerFiredElsewhere.class, e -> {
+          Debug.log(e.getMessage());
+          return Mono.just(ResolverStatus.Ok);
+        })
         .doOnError(e -> { if (listener != null) listener.processNextDelayedTriggerFailed(e); })
         .onErrorReturn(ResolverStatus.Error)
         .switchIfEmpty(Mono.just(ResolverStatus.Empty));
@@ -758,7 +764,11 @@ public class StateMachine implements AutoCloseable {
         .concatMap(event -> fireConditionalTrigger(event)
             .hasElements()
             .onErrorResume(e -> {
-              Debug.log("Failed to fire conditional trigger " + event.type().name() + " on " + event.entityId(), e);
+              if (e instanceof TriggerFiredElsewhere)
+                // Another instance fired it first, which is expected when several poll
+                Debug.log("Conditional trigger " + event.type().name() + " on " + event.entityId() + " was fired by another transaction first");
+              else
+                Debug.log("Failed to fire conditional trigger " + event.type().name() + " on " + event.entityId(), e);
               return Mono.empty();
             })
         )
@@ -946,7 +956,7 @@ public class StateMachine implements AutoCloseable {
     withDeletion.add(Change.fromFiredTrigger(
         initial.log().entityModel(),
         initial.log().entityId(),
-        new Change.FiredTrigger(initial.triggerType(), initial.triggerId(), initial.eventNumber())
+        new Change.FiredTrigger(initial.triggerType(), initial.triggerId(), initial.eventNumber(), initial.transitionModel().eventType().id())
     ));
     withDeletion.addAll(changes);
     return withDeletion;
