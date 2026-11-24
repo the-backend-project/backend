@@ -171,7 +171,7 @@ public class TransitionModel<I, O> {
     /// @param mask gives the output as it is stored, which must not be null
     public TransitionModel<I, O> masked(UnaryOperator<O> mask) {
       Objects.requireNonNull(mask, "mask is null");
-      return new TransitionModel<>(modelContext().withMask(mask), masking.apply(mask));
+      return new TransitionModel<>(modelContext(), masking.apply(mask));
     }
 
   }

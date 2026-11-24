@@ -45,7 +45,6 @@ import reactor.core.publisher.Mono;
 public class TransitionModelBuilder<I, T, O> {
 
   /// @param severity the severity of the event the transition accepts
-  /// @param mask     masks the output of the transition when its event is stored, or null to store it as it is
   /// @param delayedEventTypes the types of the delayed events the transition triggers
   /// @param withoutData whether the transition's event has no data, as it ends in `output()` without a data adapter,
   ///                    which only an event type without data may
@@ -58,7 +57,6 @@ public class TransitionModelBuilder<I, T, O> {
       List<Filter<?, ?, ?>> filters,
       TransitionModel<Data, Data> reverseModel,
       Severity severity,
-      UnaryOperator<O> mask,
       List<EventType<?, ?>> delayedEventTypes,
       boolean withoutData
   ) {
@@ -66,39 +64,35 @@ public class TransitionModelBuilder<I, T, O> {
     /// The context of a transition on the event type to the state, or to itself if the state is null, with nothing
     /// declared yet
     static <I, O> ModelContext<I, O> of(boolean reversal, State to, EventType<I, O> eventType) {
-      return new ModelContext<>(reversal, to, eventType, List.of(), List.of(), List.of(), null, Severity.Info, null, List.of(), false);
+      return new ModelContext<>(reversal, to, eventType, List.of(), List.of(), List.of(), null, Severity.Info, List.of(), false);
     }
 
     ModelContext<I, O> withTriggers(List<EventTrigger<?, ?, ?>> triggers) {
-      return new ModelContext<>(reversal, to, eventType, triggers, actions, filters, reverseModel, severity, mask, delayedEventTypes, withoutData);
+      return new ModelContext<>(reversal, to, eventType, triggers, actions, filters, reverseModel, severity, delayedEventTypes, withoutData);
     }
 
     ModelContext<I, O> withActions(List<Action<?>> actions) {
-      return new ModelContext<>(reversal, to, eventType, triggers, actions, filters, reverseModel, severity, mask, delayedEventTypes, withoutData);
+      return new ModelContext<>(reversal, to, eventType, triggers, actions, filters, reverseModel, severity, delayedEventTypes, withoutData);
     }
 
     ModelContext<I, O> withFilters(List<Filter<?, ?, ?>> filters) {
-      return new ModelContext<>(reversal, to, eventType, triggers, actions, filters, reverseModel, severity, mask, delayedEventTypes, withoutData);
+      return new ModelContext<>(reversal, to, eventType, triggers, actions, filters, reverseModel, severity, delayedEventTypes, withoutData);
     }
 
     ModelContext<I, O> withReverseModel(TransitionModel<Data, Data> reverseModel) {
-      return new ModelContext<>(reversal, to, eventType, triggers, actions, filters, reverseModel, severity, mask, delayedEventTypes, withoutData);
+      return new ModelContext<>(reversal, to, eventType, triggers, actions, filters, reverseModel, severity, delayedEventTypes, withoutData);
     }
 
     ModelContext<I, O> withSeverity(Severity severity) {
-      return new ModelContext<>(reversal, to, eventType, triggers, actions, filters, reverseModel, severity, mask, delayedEventTypes, withoutData);
-    }
-
-    ModelContext<I, O> withMask(UnaryOperator<O> mask) {
-      return new ModelContext<>(reversal, to, eventType, triggers, actions, filters, reverseModel, severity, mask, delayedEventTypes, withoutData);
+      return new ModelContext<>(reversal, to, eventType, triggers, actions, filters, reverseModel, severity, delayedEventTypes, withoutData);
     }
 
     ModelContext<I, O> asWithoutData() {
-      return new ModelContext<>(reversal, to, eventType, triggers, actions, filters, reverseModel, severity, mask, delayedEventTypes, true);
+      return new ModelContext<>(reversal, to, eventType, triggers, actions, filters, reverseModel, severity, delayedEventTypes, true);
     }
 
     ModelContext<I, O> withDelayedEventType(EventType<?, ?> delayedEventType) {
-      return new ModelContext<>(reversal, to, eventType, triggers, actions, filters, reverseModel, severity, mask, join(delayedEventTypes, delayedEventType), withoutData);
+      return new ModelContext<>(reversal, to, eventType, triggers, actions, filters, reverseModel, severity, join(delayedEventTypes, delayedEventType), withoutData);
     }
 
     public String description() {

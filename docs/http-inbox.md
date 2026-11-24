@@ -272,6 +272,13 @@ and 403 and the error `insufficient_scope` with a token lacking a scope. An auth
 either `Authorized` with the subject or `Refused` with the status code, challenge and reason of the response;
 `Authorization.refused(reason)` refuses with 400.
 
+`HttpInbox.bearerToken(verify, realm, subject, scopes...)` does the same with a function verifying the token, e.g. with
+the keys of an issuer the application is itself, a realm for the challenge, and the subject the request is authorized
+for, of the token and its claims, which refuses the token as invalid if it is empty. The
+[identity provider](identity-provider.md) authorizes its registrations and UserInfo requests so, for the client id and
+for the `jti` of the token. `HttpInbox.bearerChallenge(realm, error, description, scope)` gives the challenge of a
+refusal made otherwise.
+
 `AccessTokenVerifier.fetchingKeys` fetches the keys from the `jwks_uri` with the HTTP client of the JDK when it is
 created, and fails if it can't. It follows the key rotation of the issuer: a token signed with a key it doesn't know is
 refused, and makes it fetch the keys again in the background, but at most every 30 seconds after the last attempt, so

@@ -242,35 +242,65 @@ public interface HttpInbox {
   /// and the challenge `Bearer` if it has no bearer token, with 401 and the error `invalid_token` if the token is
   /// invalid or expired, and with 403 and the error `insufficient_scope` if the token lacks one of the scopes.
   static <T> BiFunction<HttpRequest<byte[]>, T, Authorization> bearerToken(AccessTokenVerifier verifier, String... requiredScopes) {
+    return bearerToken(verifier::verify, null, (_, token) -> java.util.Optional.of(token.subject()), requiredScopes);
+  }
+
+  /// An authorizer for requests requiring a bearer token, RFC 6750, as [#bearerToken(AccessTokenVerifier, String...)],
+  /// with the token verified by the function, e.g. with the keys of an issuer the application is, the subject chosen
+  /// by the function, and the realm, if not null, in the challenge.
+  ///
+  /// @param verify  the claims of a token, or empty if it is invalid or expired
+  /// @param realm   the realm of the challenge, or null for none
+  /// @param subject the subject the request is authorized for, of the token and its claims, or empty to refuse the
+  ///                token as invalid, e.g. as it is not of a user
+  static <T> BiFunction<HttpRequest<byte[]>, T, Authorization> bearerToken(
+      Function<String, java.util.Optional<AccessTokenVerifier.AccessToken>> verify,
+      String realm,
+      BiFunction<String, AccessTokenVerifier.AccessToken, java.util.Optional<String>> subject,
+      String... requiredScopes
+  ) {
     return (request, _) -> {
       String authorization = request.headerValue("Authorization");
       if (authorization == null)
-        return new Refused(401, "Bearer", "Authorization header missing");
+        return new Refused(401, bearerChallenge(realm, null, null, null), "Authorization header missing");
       if (!authorization.regionMatches(true, 0, "Bearer ", 0, 7))
-        return new Refused(401, "Bearer", "Authorization token is not of type Bearer");
-      var token = verifier.verify(authorization.substring(7).trim());
-      if (token.isEmpty())
-        return bearerError(401, "invalid_token", "Bearer token is invalid or expired", "");
+        return new Refused(401, bearerChallenge(realm, null, null, null), "Authorization token is not of type Bearer");
+      String token = authorization.substring(7).trim();
+      var claims = verify.apply(token);
+      var authorized = claims.flatMap(c -> subject.apply(token, c));
+      if (authorized.isEmpty())
+        return bearerRefusal(401, realm, "invalid_token", "Bearer token is invalid or expired", null);
       for (String requiredScope : requiredScopes) {
-        if (!token.get().scopes().contains(requiredScope))
-          return bearerError(
-              403,
-              "insufficient_scope",
-              "Bearer token lacks the scope " + requiredScope,
-              ", scope=\"" + String.join(" ", requiredScopes) + "\""
-          );
+        if (!claims.get().scopes().contains(requiredScope))
+          return bearerRefusal(403, realm, "insufficient_scope", "Bearer token lacks the scope " + requiredScope, String.join(" ", requiredScopes));
       }
-      return Authorization.authorized(token.get().subject());
+      return Authorization.authorized(authorized.get());
     };
   }
 
-  private static Refused bearerError(int statusCode, String error, String description, String parameters) {
-    return new Refused(
-        statusCode,
-        "Bearer error=\"" + error + "\", error_description=\"" + description + "\"" + parameters,
-        description
-    );
+  private static Refused bearerRefusal(int statusCode, String realm, String error, String description, String scope) {
+    return new Refused(statusCode, bearerChallenge(realm, error, description, scope), description);
   }
+
+  /// The challenge of RFC 6750 section 3, of a `WWW-Authenticate` header
+  ///
+  /// @param realm       the realm, or null for none
+  /// @param error       the error, e.g. `invalid_token`, or null for a request without a token
+  /// @param description the description of the error
+  /// @param scope       the scope required, for `insufficient_scope`, or null
+  static String bearerChallenge(String realm, String error, String description, String scope) {
+    var parameters = new java.util.ArrayList<String>();
+    if (realm != null)
+      parameters.add("realm=\"" + realm + "\"");
+    if (error != null) {
+      parameters.add("error=\"" + error + "\"");
+      parameters.add("error_description=\"" + description + "\"");
+    }
+    if (scope != null)
+      parameters.add("scope=\"" + scope + "\"");
+    return parameters.isEmpty() ? "Bearer" : "Bearer " + String.join(", ", parameters);
+  }
+
 
   enum States implements State {
     Routed,

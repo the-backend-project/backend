@@ -11,7 +11,6 @@ import com.github.thxmasj.backend.http.HttpRequest;
 import com.github.thxmasj.backend.http.HttpRequest.Method;
 import com.github.thxmasj.backend.http.HttpResponse;
 import com.github.thxmasj.backend.http.Masking;
-import com.github.thxmasj.backend.http.inbox.AccessTokenVerifier.AccessToken;
 import com.github.thxmasj.backend.http.inbox.Authorization;
 import com.github.thxmasj.backend.http.inbox.Cookies;
 import com.github.thxmasj.backend.http.inbox.Form;
@@ -30,7 +29,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
-import java.util.function.BiFunction;
 
 /// The endpoints of the identity provider: what the inbox requests do with the credentials of the requests, and the
 /// requests answered at once. Credentials are handled in the session of a request and kept out of the event log:
@@ -259,7 +257,8 @@ final class Endpoints {
 
   /// Authorizes a registration for the client of its access token, which must have the registration scope
   Authorization registrationAuthorization(HttpRequest<byte[]> request, Clients.RegistrationRequest registration) {
-    return bearer(request, Clients.RegistrationScope, (_, principal) -> Optional.of(principal.clientId()));
+    return HttpInbox.<Clients.RegistrationRequest>bearerToken(keys::verify, realm(), (_, principal) -> Optional.of(principal.clientId()), Clients.RegistrationScope)
+        .apply(request, registration);
   }
 
   /// A registration, on behalf of the client the authorizer authorizes it for. The secret of the new client is
@@ -375,22 +374,13 @@ final class Endpoints {
   /// Authorizes a request to the UserInfo endpoint of OpenID Connect Core section 5.3 for the `jti` of its access token,
   /// which must have the scope `openid`
   Authorization userInfoAuthorization(HttpRequest<byte[]> request, String tokenId) {
-    return bearer(request, "openid", (token, _) -> Keys.tokenId(token));
+    return HttpInbox.<String>bearerToken(keys::verify, realm(), (token, _) -> Keys.tokenId(token), "openid")
+        .apply(request, tokenId);
   }
 
-  /// Authorizes a request with a valid access token with the scope, for the subject of the token, or refuses it as
-  /// RFC 6750 section 3 says
-  private Authorization bearer(HttpRequest<byte[]> request, String scope, BiFunction<String, AccessToken, Optional<String>> subject) {
-    String token = bearerToken(request);
-    if (token == null)
-      return bearerRefusal(401, null, null, null);
-    Optional<AccessToken> principal = keys.verify(token);
-    Optional<String> authorized = principal.flatMap(p -> subject.apply(token, p));
-    if (authorized.isEmpty())
-      return bearerRefusal(401, "invalid_token", "The access token is invalid or expired", null);
-    if (!principal.get().scopes().contains(scope))
-      return bearerRefusal(403, "insufficient_scope", "The access token lacks the scope " + scope, scope);
-    return Authorization.authorized(authorized.get());
+  /// The realm of the challenges of RFC 6750 and of HTTP Basic, the issuer
+  private String realm() {
+    return keys.issuer().toString();
   }
 
   /// The refusal of RFC 6750 section 3 of a request without an access token, or null if it has one, which the
@@ -497,20 +487,8 @@ final class Endpoints {
     return new HttpResponse<>(status, status == 401 ? "Unauthorized" : "Forbidden", Map.of("WWW-Authenticate", bearerChallenge(error, description, scope)), null);
   }
 
-  private Authorization bearerRefusal(int status, String error, String description, String scope) {
-    return new Authorization.Refused(status, bearerChallenge(error, description, scope), description != null ? description : "An access token is required");
-  }
-
-  /// The challenge of RFC 6750 section 3
-  ///
-  /// @param scope the scope required, for insufficient_scope
   private String bearerChallenge(String error, String description, String scope) {
-    var challenge = new StringBuilder("Bearer realm=\"" + keys.issuer() + "\"");
-    if (error != null)
-      challenge.append(", error=\"").append(error).append("\", error_description=\"").append(description).append("\"");
-    if (scope != null)
-      challenge.append(", scope=\"").append(scope).append("\"");
-    return challenge.toString();
+    return HttpInbox.bearerChallenge(realm(), error, description, scope);
   }
 
   private static Map<String, String> noStore(Map<String, String> headers) {

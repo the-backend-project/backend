@@ -85,10 +85,11 @@ public interface Listener {
 
   default void processNextDelayedTriggerFailed(Throwable t) {}
 
-  /// The transition of the event on the entity failed, as a function of it, e.g. an assembler, guard or data adapter,
-  /// threw an exception, so nothing of the change is stored. It is told once, for the transition the exception was
-  /// thrown in, also if that one was triggered by another. The exception is passed on to the one who triggered the
-  /// event.
+  /// The transition of the event on the entity failed, so nothing of the change is stored: a function of it, e.g. an
+  /// assembler, guard or data adapter, threw an exception, or its transaction was refused when its changes were
+  /// stored, e.g. as it would leave two delayed triggers on an entity with the same number, and then the transition is
+  /// the first one of the transaction. It is told once, for the transition the exception was thrown in, also if that
+  /// one was triggered by another. The exception is passed on to the one who triggered the event.
   default void transitionFailed(
       String correlationId,
       EntityModel entityModel,
