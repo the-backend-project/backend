@@ -264,8 +264,7 @@ public interface Inbox {
   static Validated<Authorizations.Request> authorizationRequest(HttpRequest<byte[]> request) {
     Map<String, String> query;
     try {
-      String raw = request.uri().getRawQuery();
-      query = Form.parse(raw != null ? raw.getBytes(UTF_8) : null);
+      query = Form.parse(request.uri().getRawQuery());
     } catch (IllegalArgumentException e) {
       return invalid(e.getMessage());
     }

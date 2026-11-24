@@ -138,16 +138,9 @@ final class Sessions {
       return new Start(returnPath, null, secretHash, nonce, htmx, authorizationUrl);
     }
 
-    /// The nonce, also of a sign-in stored with its secret, before only the hash and the nonce were
-    String nonceOfSecret() {
-      return nonce != null ? nonce : secret != null ? OpenIdConnectClient.nonce(secret) : null;
-    }
-
-    /// Whether the secret of the cookie is the one of the sign-in, also of a sign-in stored with its secret
+    /// Whether the secret of the cookie is the one of the sign-in, by its hash
     boolean isSecret(String cookieSecret) {
-      if (cookieSecret == null)
-        return false;
-      return secretHash != null ? Secrets.matches(Secrets.hash(cookieSecret), secretHash) : Secrets.matches(cookieSecret, secret);
+      return cookieSecret != null && Secrets.matches(Secrets.hash(cookieSecret), secretHash);
     }
 
   }
@@ -473,7 +466,7 @@ final class Sessions {
                 .assembleReactive(c -> {
                   Start start = c.log().one(SignInStarted);
                   long now = c.timestamp().toEpochSecond();
-                  return provider.verifyWithNonce(c.input(), start.nonceOfSecret())
+                  return provider.verifyWithNonce(c.input(), start.nonce())
                       .map(Optional::of)
                       .onErrorResume(e -> {
                         System.err.println("Backoffice can't verify the ID token: " + e);

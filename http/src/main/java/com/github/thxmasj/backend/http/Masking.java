@@ -196,7 +196,8 @@ public record Masking(
   /// it may have the fields all the same, e.g. sent with another content type by mistake.
   private byte[] maskForm(HttpRequest<byte[]> request) {
     byte[] body = request.body();
-    if (formFields.isEmpty() || body == null)
+    // An empty body has nothing to mask, and is stored as it was sent
+    if (formFields.isEmpty() || body == null || body.length == 0)
       return body;
     if (!isForm(request))
       return MASK.getBytes(UTF_8);

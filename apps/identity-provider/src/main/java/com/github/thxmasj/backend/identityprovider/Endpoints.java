@@ -20,6 +20,7 @@ import com.github.thxmasj.backend.http.inbox.OpenIdConnectClient;
 import com.github.thxmasj.backend.http.inbox.Secrets;
 import com.github.thxmasj.backend.identityprovider.Inbox.Reply;
 import java.net.URI;
+import tools.jackson.databind.JsonNode;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.HashMap;
@@ -237,17 +238,19 @@ final class Endpoints {
 
   /// The body of the access token response of the tokens issued, of a code redemption if they have an ID token
   private Map<String, Object> signed(byte[] issued) {
-    boolean userTokens = DataType.objectMapper.readTree(issued).has("idToken");
-    Tokens.IssuedToken accessToken = userTokens ?
-        DataType.objectMapper.readValue(issued, Tokens.UserTokens.class).accessToken() :
-        DataType.objectMapper.readValue(issued, Tokens.IssuedToken.class);
+    // Parsed once, and read as user tokens or as an access token
+    JsonNode tree = DataType.objectMapper.readTree(issued);
+    Tokens.UserTokens userTokens = tree.has("idToken") ? DataType.objectMapper.treeToValue(tree, Tokens.UserTokens.class) : null;
+    Tokens.IssuedToken accessToken = userTokens != null ?
+        userTokens.accessToken() :
+        DataType.objectMapper.treeToValue(tree, Tokens.IssuedToken.class);
     var body = new LinkedHashMap<String, Object>();
     body.put("access_token", keys.sign(accessToken));
     body.put("token_type", "Bearer");
     body.put("expires_in", accessToken.expiresAt() - accessToken.issuedAt());
     body.put("scope", accessToken.scope());
-    if (userTokens)
-      body.put("id_token", keys.sign(DataType.objectMapper.readValue(issued, Tokens.UserTokens.class).idToken()));
+    if (userTokens != null)
+      body.put("id_token", keys.sign(userTokens.idToken()));
     return body;
   }
 
@@ -366,8 +369,7 @@ final class Endpoints {
   }
 
   private static Map<String, String> query(HttpRequest<byte[]> request) {
-    String raw = request.uri().getRawQuery();
-    return Form.parse(raw != null ? raw.getBytes(UTF_8) : null);
+    return Form.parse(request.uri().getRawQuery());
   }
 
   /// Authorizes a request to the UserInfo endpoint of OpenID Connect Core section 5.3 for the `jti` of its access token,

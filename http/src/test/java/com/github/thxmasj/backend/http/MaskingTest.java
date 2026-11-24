@@ -69,6 +69,13 @@ public class MaskingTest {
     assertEquals(true, Masking.CREDENTIALS.andRequestHeaders("X-Api-Key").masksMoreOfRequestsThan(Masking.CREDENTIALS));
   }
 
+  /// An empty body has no fields to mask, so it is stored empty, not as a body the client never sent
+  @Test
+  public void anEmptyBodyIsStoredEmpty() {
+    var empty = new HttpRequest<>(Method.POST, URI.create("/token"), Map.of(), new byte[0]);
+    assertEquals(0, Masking.formFields("code").mask(empty).body().length);
+  }
+
   @Test
   public void aParameterWhoseNameCantBeDecodedIsMaskedAsAWhole() {
     var request = new HttpRequest<>(Method.POST, URI.create("/token"), form, "a=1&%zz=2".getBytes(UTF_8));
