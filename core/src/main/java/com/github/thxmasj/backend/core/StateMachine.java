@@ -276,7 +276,18 @@ public class StateMachine implements AutoCloseable {
                     case Completed<?> _ -> Mono.just(ResolverStatus.Ok);
                     case ProcessResult<?> r -> Mono.error(new IllegalStateException("Unexpected result for state resolving: " + r));
                   }
-              ).contextWrite(Correlation.contextOf(delayedTrigger.correlationId()));
+              )
+              // The event of the trigger's number was stored by another transaction first: by another instance which
+              // fired the trigger too, or by an event which replaced it. Either way the trigger is done with, as when its
+              // event isn't stored (TriggerFiredElsewhere), so it is not a failure.
+              .onErrorResume(
+                  e -> e instanceof EventAlreadyExists exists && exists.isOf(delayedTrigger.entityId(), delayedTrigger.eventNumber()),
+                  e -> {
+                    Debug.log("The event of delayed trigger " + delayedTrigger + " was stored by another transaction first");
+                    return Mono.just(ResolverStatus.Ok);
+                  }
+              )
+              .contextWrite(Correlation.contextOf(delayedTrigger.correlationId()));
         })
         .onErrorReturn(MappingFailure.class, ResolverStatus.Error)
         // Another instance fired the trigger first, which is expected when several poll, so not a failure
@@ -1358,6 +1369,12 @@ public class StateMachine implements AutoCloseable {
     List<Change> changes = withoutReplacedDelayedEvents(withFiredTrigger(changes(transitionStep), transitionStep, storing), storing);
     Debug.log("Changes to store:\n" + changes.stream().map(Object::toString).collect(joining("\n")));
     return Mono.fromRunnable(() -> requireStorable(changes, storing))
+        // Refused when stored, after the transition is calculated, so told the listener as a failure of the transition
+        .doOnError(e -> {
+          InputStep<?> initial = initial(transitionStep);
+          if (initial != null)
+            transitionFailed(initial, e);
+        })
         .thenReturn("")
         .delayUntil(_ -> delayer.apply(changes.stream()
             .filter(change -> change.newEvent() != null)

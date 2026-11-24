@@ -590,6 +590,19 @@ public class IdentityProviderTest {
     assertThat(userInfo.propertyNames()).containsExactly("sub");
   }
 
+  /// A token request the upstream provider answers neither with tokens nor with a refusal, e.g. with 202, fails the
+  /// sign-in, which the client is told by a redirect with the error, rather than leaving the user waiting
+  @Test
+  public void whenUpstreamAnswersTheTokenRequestUnexpectedlyThenTheSignInFails() throws Exception {
+    registerWebApp("unexpected");
+    upstream.tokenStatus = 202;
+    try {
+      assertRedirectedWithError(authorizeUri("unexpected", appRedirectUri.toString(), "openid email", "s9", null), "server_error", "s9");
+    } finally {
+      upstream.tokenStatus = null;
+    }
+  }
+
   /// The code of the upstream provider is redeemed once by a sign-in. A callback sent again, with the same code and the
   /// same cookie, redeems it again, which the upstream provider refuses, and gets no second code.
   @Test

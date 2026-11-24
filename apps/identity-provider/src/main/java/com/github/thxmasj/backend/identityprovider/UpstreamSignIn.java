@@ -92,6 +92,9 @@ final class UpstreamSignIn {
         .contentParser(m -> Validated.valid(m.body() != null ? new String(m.body(), UTF_8) : ""))
         .onSuccess(UpstreamTokenReceived, HttpResponse::body)
         .onFailure(UpstreamTokenRequestFailed)
+        // A valid response which is neither accepted nor rejected, e.g. a 204 or a redirect, fails the sign-in too, so
+        // that it is answered
+        .onValidResponseUnknown(UpstreamTokenRequestFailed)
         .isAccepted(r -> r.statusCode() == 200)
         .isRejected(r -> r.statusCode() >= 400)
         .isRejectedByInvalidResponse(d -> d.t1().statusCode() >= 400)
