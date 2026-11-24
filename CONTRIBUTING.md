@@ -128,7 +128,9 @@ uses to change things: `git worktree add`, `add`, `commit`, `rebase`, `merge` an
   create files in the working directory without asking, as its `accept-edits` profile does. Vibe loads the project's
   settings and skills only once you trust the folder. It matches commands by their beginning, so it refuses
   `mvn deploy` and `git push --force`, but not a deploy after other goals or options, e.g. `mvn clean deploy`, nor a
-  force push with the option after the remote, e.g. `git push origin --force`. The file lists the migrations Vibe has
+  force push with the option after the remote, e.g. `git push origin --force`. Vibe checks each command of a chain
+  such as `a && b` against the list, but asks for any command that uses shell variables or command substitution
+  (`$(...)`), which is why the `/fix` skill passes values between commands literally. The file lists the migrations Vibe has
   applied to it, so that Vibe doesn't rewrite it. Put your own settings in `~/.vibe/config.toml`, and your own
   instructions, such as how tools get on the PATH, in `~/.vibe/AGENTS.md`. Vibe can't keep the docs server running, so
   `/serve-docs` only does the strict build there; run `bin/serve-docs.sh` yourself for live reload.
