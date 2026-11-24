@@ -2,12 +2,12 @@ package com.github.thxmasj.backend.helloworld;
 
 import com.github.thxmasj.backend.core.JsonLinesListener;
 import com.github.thxmasj.backend.core.StateMachine;
+import com.github.thxmasj.backend.core.database.DataSourceBuilder;
 import com.github.thxmasj.backend.core.database.Database;
-import com.github.thxmasj.backend.core.database.jdbc.DataSourceBuilder;
+import com.github.thxmasj.backend.http.HttpRequest.Method;
+import com.github.thxmasj.backend.http.HttpResponse;
 import com.github.thxmasj.backend.database.mssql.MssqlDatabase;
 import com.github.thxmasj.backend.http.inbox.HttpInboxListener;
-import com.github.thxmasj.backend.core.message.http.HttpRequestMessage.Method;
-import com.github.thxmasj.backend.core.message.http.HttpResponseMessage;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
@@ -73,7 +73,7 @@ public final class HelloWorld {
   public static StateMachine stateMachine(Config config) {
     return new StateMachine(
         null,
-        Greetings.transitions(),
+        Greetings.Inbox.entityModels(),
         new DataSourceBuilder(database, config.database()).buildPooled(),
         null, // The schema is created by the migrate admin process
         config.schema(),
@@ -86,9 +86,9 @@ public final class HelloWorld {
   }
 
   public static DisposableServer serve(StateMachine stateMachine, int port) {
-    return new HttpInboxListener(stateMachine)
+    return new HttpInboxListener(stateMachine, Greetings.Inbox)
         .filter((request, next) -> isHealthCheck(request.method(), request.uri().getPath())
-            ? Mono.just(new HttpResponseMessage(200, "OK", Map.of("Content-Type", "text/plain"), "OK".getBytes(StandardCharsets.UTF_8)))
+            ? Mono.just(new HttpResponse<>(200, "OK", Map.of("Content-Type", "text/plain"), "OK".getBytes(StandardCharsets.UTF_8)))
             : next.apply(request))
         .listen(port);
   }

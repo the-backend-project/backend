@@ -10,9 +10,8 @@ import static com.github.thxmasj.backend.core.State.Intermediate;
 import static com.github.thxmasj.backend.core.TransitionModelBuilder.WithEvent.onEvent;
 import static com.github.thxmasj.backend.core.Tuples.tuple;
 import static com.github.thxmasj.backend.http.inbox.HttpInbox.RequestCompleted;
-import static com.github.thxmasj.backend.http.inbox.HttpInbox.EntityModels.RequestDispatching;
+import static com.github.thxmasj.backend.http.inbox.HttpInbox.Request;
 import static com.github.thxmasj.backend.http.outbox.HttpOutboxRequest.BatchReferenced;
-import static com.github.thxmasj.backend.templates.cardpayment.Aggregate.Settlement;
 import static com.github.thxmasj.backend.templates.cardpayment.Identifiers.AcquirerBatchNumberClaimed;
 import static com.github.thxmasj.backend.templates.cardpayment.Identifiers.BatchNumberClaimed;
 import static com.github.thxmasj.backend.templates.cardpayment.Identifiers.Index;
@@ -27,6 +26,7 @@ import static com.github.thxmasj.backend.templates.cardpayment.PaymentState.Proc
 import static com.github.thxmasj.backend.templates.cardpayment.PaymentState.Reconciled;
 import static com.github.thxmasj.backend.templates.cardpayment.ReconciliationValuesDataCreator.reconciliationValues;
 import static com.github.thxmasj.backend.templates.cardpayment.SettlementEvent.AcquirerBatchNumberAssigned;
+import static com.github.thxmasj.backend.templates.cardpayment.SettlementEvent.AcquirerBatchNumberKnown;
 import static com.github.thxmasj.backend.templates.cardpayment.SettlementEvent.CutOffRequested;
 import static com.github.thxmasj.backend.templates.cardpayment.SettlementEvent.AcquirerBatchNumberLookedUp;
 import static com.github.thxmasj.backend.templates.cardpayment.SettlementEvent.BatchNumberLookedUp;
@@ -61,7 +61,6 @@ import com.github.thxmasj.backend.templates.cardpayment.SettlementEvent.Opened;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
@@ -77,8 +76,9 @@ public class SettlementTransitions {
     @Override public UUID id() {return id;}
   }
   private final Map<State, List<TransitionModel<?, ?>>> transitions;
+  private final EntityModel merchant;
+  private final EntityModel settlement;
   private final List<EntityModel> outboxRequestModels;
-  private final Map<EntityModel, Map<State, List<TransitionModel<?, ?>>>> outboxTransitions;
   private final Dispatcher<Tuple3<BatchNumber, AcquirerBatchNumber, Merchant>, ?> reconciliation;
   private final Dispatcher<Tuple2<CutOff, ReconciliationValues>, ?> approvedCutOff;
 
@@ -98,28 +98,30 @@ public class SettlementTransitions {
     return outboxRequestModels;
   }
 
-  /// The transitions to register for the outbox requests.
-  public Map<EntityModel, Map<State, List<TransitionModel<?, ?>>>> outboxTransitions() {
-    return outboxTransitions;
-  }
-
   /// The input types of the outbox requests are inferred from the dispatchers.
-  public <I1, I2> SettlementTransitions(
+  ///
+  /// @param merchantModel   the model of the merchants
+  /// @param settlementModel the model of the settlements, whose transitions these are
+  <I1, I2> SettlementTransitions(
+      EntityModel merchantModel,
+      EntityModel settlementModel,
       // validateSettlementResponse()
       Dispatcher<Tuple3<BatchNumber, AcquirerBatchNumber, Merchant>, I1> reconciliationToAcquirer,
       Dispatcher<Tuple2<CutOff, ReconciliationValues>, I2> approvedCutOffToMerchant
   ) {
+    this.merchant = merchantModel;
+    this.settlement = settlementModel;
     this.reconciliation = reconciliationToAcquirer;
     this.approvedCutOff = approvedCutOffToMerchant;
     this.outboxRequestModels = List.of(
         reconciliationToAcquirer.outbox(),
         approvedCutOffToMerchant.outbox()
     );
-    this.outboxTransitions = PaymentTransitions.transitions(List.of(reconciliationToAcquirer, approvedCutOffToMerchant));
 
     this.transitions = Map.of(
         Begin, List.of(
-            // TODO: BatchNumberLookedUp cannot be ReadOnly as it triggers a transition
+            // TODO: BatchNumberLookedUp, which is not stored, can't take this transition from Begin to Open: an event not
+            // stored creating an entity makes it one of the session only, so the batch would never be stored
 //            onEvent(BatchNumberLookedUp).to(Open)
 //                .assembleInput()
 //                .newIdentifier(AcquirerBatchNumber, d -> d)
@@ -155,13 +157,13 @@ public class SettlementTransitions {
             onEvent(CurrentBatchNumberLookedUp).toSelf().assemble(c -> batchNumber(c.log())).output(d -> d)
         ), openTransitions(reconciliationToAcquirer)),
         Open, join(List.of(
-            onEvent(AcquirerBatchNumberAssigned).toSelf().assembleInput().output(),
+            acquirerBatchNumberKnown(),
             onEvent(BatchNumberLookedUp).toSelf().assemble(c -> batchNumber(c.log())).output(d -> d),
             onEvent(AcquirerBatchNumberLookedUp).toSelf().assemble(d -> acquirerBatchNumber(d.log()).orElseThrow()).output(d -> d),
             onEvent(CurrentBatchNumberLookedUp).toSelf().assemble(c -> batchNumber(c.log())).output(d -> d)
         ), openTransitions(reconciliationToAcquirer)),
         ProcessingSettlement, List.of(
-            onEvent(AcquirerBatchNumberAssigned).toSelf().assembleInput().output(),
+            acquirerBatchNumberKnown(),
             onEvent(BatchNumberLookedUp).toSelf().assemble(c -> batchNumber(c.log())).output(d -> d),
             onEvent(CurrentBatchNumberLookedUp).toSelf().assemble(c -> batchNumber(c.log())).output(d -> d),
             // For previous batch to stay open for ongoing capture exchanges when cut-off is performed
@@ -205,7 +207,7 @@ public class SettlementTransitions {
         ),
         Reconciled, List.of(),
         Error, List.of(
-            onEvent(AcquirerBatchNumberAssigned).toSelf().assembleInput().output(),
+            acquirerBatchNumberKnown(),
             onEvent(BatchNumberLookedUp).toSelf().assemble(c -> batchNumber(c.log())).output(d -> d),
             onEvent(CurrentBatchNumberLookedUp).toSelf().assemble(c -> batchNumber(c.log())).output(d -> d)
         )
@@ -220,8 +222,14 @@ public class SettlementTransitions {
   /// The acquirer's batch number, assigned when the settlement was opened or when first seen in a response
   private static Optional<AcquirerBatchNumber> acquirerBatchNumber(EventLog log) {
     return log.oneIfExists(SettlementEvent.SettlementOpened).map(Opened::acquirerBatchNumber)
-        // Assigning it when it is already known records nothing
-        .or(() -> log.all(AcquirerBatchNumberAssigned).stream().filter(Objects::nonNull).findFirst());
+        .or(() -> log.oneIfExists(AcquirerBatchNumberAssigned));
+  }
+
+  /// The acquirer's batch number assigned when it is already known, which changes nothing
+  private static TransitionModel<AcquirerBatchNumber, AcquirerBatchNumber> acquirerBatchNumberKnown() {
+    return onEvent(AcquirerBatchNumberAssigned).toSelf()
+        .assembleInput()
+        .otherwise(onEvent(AcquirerBatchNumberKnown).toSelf().output(), _ -> null);
   }
 
   private static List<TransitionModel<?, ?>> join(List<TransitionModel<?, ?>> first, List<TransitionModel<?, ?>> second) {
@@ -248,15 +256,15 @@ public class SettlementTransitions {
                 c.log().entityId(),
                 DispatchContext.of(c)
             ))
-            .trigger(MerchantLookedUp).on(Aggregate.Merchant).identifiedBy(d -> idEvent(MerchantIdClaimed, d.t1().merchantId()))
+            .trigger(MerchantLookedUp).on(merchant).identifiedBy(d -> idEvent(MerchantIdClaimed, d.t1().merchantId()))
             .trigger(reconciliation.requestDispatched())
             // A rolled back request is settled too, as its reversal is a request referencing the batch on its own
             .when(BatchReferenced, d -> d.t1().t5()).is(HttpOutboxRequest.requestAccepted(), HttpOutboxRequest.rollbackDispatched())
             .withReactive(d -> reconciliation.input(d.t1().t6(), tuple(d.t1().t2(), d.t1().t3(), d.t2().accepted().event().getUnmarshalledData())))
             .on(reconciliation.outbox())
             .identifiedBy(newEntityId())
-            .trigger(SettlementEvent.SettlementOpened).with(d -> new Opened(d.t1().t2().next(), d.t1().t3().next())).on(Settlement).identifiedBy(newEntityId())
-            .trigger(RequestCompleted).with(d -> tuple("", d.t1().t1().t4())).on(RequestDispatching).identifiedBy(entityIdFromSession())
+            .trigger(SettlementEvent.SettlementOpened).with(d -> new Opened(d.t1().t2().next(), d.t1().t3().next())).on(settlement).identifiedBy(newEntityId())
+            .trigger(RequestCompleted).with(d -> tuple("", d.t1().t1().t4())).on(Request).identifiedBy(entityIdFromSession())
             .output(d -> d.t1().t1().t1().t1())
     );
   }

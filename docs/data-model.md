@@ -105,7 +105,9 @@ The event logs of entities. Each event belongs to an entity and is numbered from
 `(EntityId, EventNumber)` also guards against concurrent changes to the same entity: two transitions computed from the
 same state both try to insert the same event number, and only one of them succeeds.
 
-`Type` is the id of the event type, and `Data` is the event's data as marshalled by the event type's data type.
+`Type` is the id of the event type, and `Data` is the event's data as marshalled by the event type's data type, masked
+if its transition masks it. Events which are not stored, and the events of entities of the session only, have no rows
+(see [events and entities not stored](entities.md#events-and-entities-not-stored)).
 
 | Column      | SQL Server         | PostgreSQL  |
 |-------------|--------------------|-------------|
@@ -143,7 +145,8 @@ entity it indexes, but its events need not be unique: `Data` is an index key, su
 belongs to, which may index many entities. The index is used to:
 
 * find all entities indexed by a key and event type (`EntitiesByIndex`), which is what conditional triggers are
-  evaluated against (see [ConditionalTrigger](#conditionaltrigger)).
+  evaluated against (see [ConditionalTrigger](#conditionaltrigger)), and from which the last created entity of a model
+  is selected by `EntitySelector.lastReferencing`, such as the last request a process dispatched to an outbox.
 * find the last entity of a group (`EventsByLastIndexEvent`), such as the current settlement of a merchant. The data
   type of such an index event type is a `GroupedDataType`, which marshals values to the group followed by bytes that
   order the values within it, so that the last entity is the one whose index event has the greatest `Data` starting

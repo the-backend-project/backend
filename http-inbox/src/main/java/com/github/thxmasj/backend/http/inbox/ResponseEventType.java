@@ -3,17 +3,16 @@ package com.github.thxmasj.backend.http.inbox;
 import com.github.thxmasj.backend.core.*;
 import com.github.thxmasj.backend.core.EventReference;
 import com.github.thxmasj.backend.core.Tuples.Tuple2;
-import com.github.thxmasj.backend.core.http.HttpDataType;
-import com.github.thxmasj.backend.core.message.http.*;
-
+import com.github.thxmasj.backend.http.HttpDataType;
+import com.github.thxmasj.backend.http.*;
 import java.util.*;
 
-public class ResponseEventType<I> implements EventType<I, Tuple2<HttpResponseMessage, EventReference>> {
+public class ResponseEventType<I> implements EventType<I, Tuple2<HttpResponse<byte[]>, EventReference>> {
 
   private final String name;
   private final UUID id;
   private final DataType<I> inputDataType;
-  public static final DataType<Tuple2<HttpResponseMessage, EventReference>> outputDataType = DataType.tuple(
+  public static final DataType<Tuple2<HttpResponse<byte[]>, EventReference>> outputDataType = DataType.tuple(
       HttpDataType.forResponse(),
       DataType.eventReference()
   );
@@ -40,7 +39,7 @@ public class ResponseEventType<I> implements EventType<I, Tuple2<HttpResponseMes
   }
 
   @Override
-  public DataType<Tuple2<HttpResponseMessage, EventReference>> outputDataType() {
+  public DataType<Tuple2<HttpResponse<byte[]>, EventReference>> outputDataType() {
     return outputDataType;
   }
 }

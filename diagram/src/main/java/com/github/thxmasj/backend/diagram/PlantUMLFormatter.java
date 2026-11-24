@@ -6,13 +6,10 @@ import static java.util.Comparator.comparingInt;
 import static java.util.Optional.ofNullable;
 import static java.util.function.Predicate.not;
 import static java.util.stream.Collectors.joining;
-import static java.util.stream.Collectors.toMap;
 
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EntityModel;
 import com.github.thxmasj.backend.core.EventType;
-import com.github.thxmasj.backend.core.IdEntityModel;
-import com.github.thxmasj.backend.core.IndexEntityModel;
 import com.github.thxmasj.backend.core.Severity;
 import com.github.thxmasj.backend.core.State;
 import com.github.thxmasj.backend.core.TransitionModel;
@@ -30,7 +27,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.MatchResult;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -44,15 +40,10 @@ public class PlantUMLFormatter {
   private final EntityModel model;
   Map<State, List<TransitionModel<?, ?>>> transitions;
 
-  public PlantUMLFormatter(EntityModel model, Map<State, List<TransitionModel<?, ?>>> transitions) {
+  /// A state diagram of the transitions of the entity model
+  public PlantUMLFormatter(EntityModel model) {
     this.model = model;
-    if (model instanceof IndexEntityModel m) {
-      this.transitions = m.transitions().entrySet().stream().collect(toMap(entry -> entry.getKey(), Map.Entry::getValue));
-    } else if (model instanceof IdEntityModel m) {
-      this.transitions = m.transitions().entrySet().stream().collect(toMap(entry -> entry.getKey(), Map.Entry::getValue));
-    } else {
-      this.transitions = transitions.entrySet().stream().collect(toMap(entry -> entry.getKey(), Map.Entry::getValue));
-    }
+    this.transitions = Map.copyOf(model.transitions());
   }
 
   public File formatToFile(String directory) throws IOException {
@@ -77,7 +68,7 @@ public class PlantUMLFormatter {
     var svg = new ByteArrayOutputStream();
     new SourceStringReader(diagram.source()).outputImage(svg, new FileFormatOption(FileFormat.SVG));
     try (var out = new FileOutputStream(file)) {
-      out.write(addDetailPopups(svg.toString(UTF_8), diagram.labelsBySourceLine()).getBytes(UTF_8));
+      out.write(DiagramColours.addStyle(addDetailPopups(svg.toString(UTF_8), diagram.labelsBySourceLine())).getBytes(UTF_8));
     }
     return file;
   }
@@ -166,7 +157,7 @@ public class PlantUMLFormatter {
 
   private static String detailHtml(String detail) {
     String html = detail
-        .replace("<&share>", "\u21aa ").replace("<&bolt>", "\u26a1 ").replace("<&warning>", "\u26a0 ")
+        .replace("<&share>", "\u21aa ").replace("<&bolt>", "\u26a1 ")
         .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     return html.contains("&lt;color:red&gt;")
         ? "<span style=\"color:#7a0000\">" + html.replace("&lt;color:red&gt;", "") + "</span>"
@@ -188,13 +179,15 @@ public class PlantUMLFormatter {
     return diagram().source();
   }
 
-  private record Label(String eventName, List<String> details) {}
+  record Label(String eventName, List<String> details) {}
 
   private record Arrow(String arrow, List<Label> labels) {}
 
-  private record Diagram(String source, Map<Integer, List<Label>> labelsBySourceLine) {}
+  record Diagram(String source, Map<Integer, List<Label>> labelsBySourceLine) {}
 
-  private Diagram diagram() {
+  /// The source of the diagram, and the labels of its arrows with the details shown when hovering over an event name.
+  /// Package-private for tests, as the SVG only gets the details where Graphviz does the layout.
+  Diagram diagram() {
     List<Arrow> arrows = mergeParallelTransitions(formatTransitionsFrom(
         Begin,
         this.transitions.get(Begin),
@@ -248,25 +241,50 @@ public class PlantUMLFormatter {
   }
 
   // Combines transitions between the same pair of states into one arrow with the event names stacked, as side-by-side
-  // parallel arrows make the diagram very wide.
+  // parallel arrows make the diagram very wide. The self transitions of a state are combined into one loop likewise, as
+  // a state with many loops is drawn with them side by side. Equal transitions, e.g. the same refusal in several
+  // branches of a choice, are shown once.
   private List<Arrow> mergeParallelTransitions(String transitions) {
     Map<String, Arrow> arrows = new LinkedHashMap<>();
     for (String line : transitions.split("\n")) {
       if (line.isBlank()) continue;
       String[] arrowAndLabel = line.split(": ", 2);
-      String[] parts = arrowAndLabel[0].split(" ");
       String[] labelLines = arrowAndLabel[1].split("\\\\n");
-      // Self transitions are drawn as loops, which don't widen the diagram
-      String key = parts[0].equals(parts[2]) ? line : arrowAndLabel[0];
-      arrows.computeIfAbsent(key, _ -> new Arrow(arrowAndLabel[0], new ArrayList<>())).labels().add(
-          new Label(labelLines[0], List.of(labelLines).subList(1, labelLines.length))
-      );
+      List<Label> labels = arrows.computeIfAbsent(arrowAndLabel[0], _ -> new Arrow(arrowAndLabel[0], new ArrayList<>())).labels();
+      Label label = new Label(labelLines[0], List.of(labelLines).subList(1, labelLines.length));
+      if (!labels.contains(label))
+        labels.add(label);
     }
     return List.copyOf(arrows.values());
   }
 
-  AtomicInteger choiceCounter1 = new AtomicInteger();
-  AtomicInteger choiceCounter2 = new AtomicInteger();
+  // The names of the choices by their branches, see choiceName
+  private final Map<String, String> choiceNames = new HashMap<>();
+  private final Set<String> declaredChoices = new HashSet<>();
+  private final Set<String> formattedChoices = new HashSet<>();
+
+  // The name of the choice a transition with filters leads to. Choices with the same branches, i.e. the same transitions
+  // to the same states and the same choices after them, have the same name, so they are one node in the diagram, and the
+  // transitions into it from a state are merged into one arrow. The retry of an outbox request is such a choice, which
+  // a connection failure, a dropped connection and a timeout lead to.
+  private String choiceName(State ownerState, TransitionModel<?, ?> transition) {
+    return choiceNames.computeIfAbsent(choiceBranches(ownerState, transition), _ -> "Choice" + (choiceNames.size() + 1));
+  }
+
+  // The branches of a choice as they are drawn, from a placeholder for the choice
+  private String choiceBranches(State ownerState, TransitionModel<?, ?> transition) {
+    State choice = new Choice("?");
+    return transition.filters().stream()
+        .map(filter -> {
+          TransitionModel<?, ?> alternative = filter.alternative().model();
+          if (!alternative.filters().isEmpty())
+            return formatTransition(choice, choice, alternative.eventType(), alternative)
+                + "[" + choiceBranches(ownerState, alternative) + "]";
+          State target = alternative.toState() != null ? alternative.toState() : ownerState;
+          return formatTransition(choice, target, alternative.eventType(), alternative);
+        })
+        .collect(joining());
+  }
 
   private String choices(State state, Set<State> visited) {
     if (visited.contains(state)) return "";
@@ -275,21 +293,24 @@ public class PlantUMLFormatter {
     List<TransitionModel<?, ?>> transitionsForState = this.transitions.get(state);
     if (transitionsForState == null) throw new IllegalStateException(state.toString());
     for (TransitionModel<?, ?> transition : transitionsForState) {
-      s.append(traverseForChoices(transition, visited));
+      s.append(traverseForChoices(state, transition, visited));
     }
     return s.toString();
   }
 
-  private String traverseForChoices(TransitionModel<?, ?> transition, Set<State> visited) {
+  private String traverseForChoices(State ownerState, TransitionModel<?, ?> transition, Set<State> visited) {
     StringBuilder s = new StringBuilder();
     if (transition.toState() == null)
       // Self transitions can't have choices
       return "";
     State targetState = transition.toState();
     if (!transition.filters().isEmpty()) {
-      s.append(String.format("state Choice%d <<choice>>\n", choiceCounter1.incrementAndGet()));
+      String choiceName = choiceName(ownerState, transition);
+      if (!declaredChoices.add(choiceName))
+        return "";
+      s.append(String.format("state %s <<choice>>\n", choiceName));
       for (var filter : transition.filters()) {
-        s.append(traverseForChoices(filter.alternative().model(), visited));
+        s.append(traverseForChoices(ownerState, filter.alternative().model(), visited));
       }
     } else {
       s.append(choices(targetState, visited));
@@ -321,13 +342,14 @@ public class PlantUMLFormatter {
     State targetState = transition.toState() != null ? transition.toState() : ownerState;
     if (!transition.filters().isEmpty()) {
       System.out.println("Formatting transition with choice from " + sourceState);
-      String choiceName = "Choice" + choiceCounter2.incrementAndGet();
-      State choiceState = new Choice(choiceName); //choiceName(state, transition);
-//        s.append(String.format("%s -down-> %s: %s\n", state.name(), choiceName, transition.eventType().name()));
+      String choiceName = choiceName(ownerState, transition);
+      State choiceState = new Choice(choiceName);
       s.append(formatTransition(sourceState, choiceState, transition.eventType(), transition));
-      for (var filter : transition.filters()) {
-        s.append(formatTransitionTree(ownerState, choiceState, visited, filter.alternative().model()));
-        //s.append(formatTransitionsFrom(choiceName, this.transitions.get(targetState), visited));
+      // The branches of a choice shared by several transitions are drawn once
+      if (formattedChoices.add(choiceName)) {
+        for (var filter : transition.filters()) {
+          s.append(formatTransitionTree(ownerState, choiceState, visited, filter.alternative().model()));
+        }
       }
     } else {
       s.append(formatTransition(sourceState, targetState, transition.eventType(), transition));
@@ -346,14 +368,28 @@ public class PlantUMLFormatter {
         sourceState.equals(Begin) && !targetState.equals(Begin) ? "-right->" : "-->",
         stateId(targetState),
         Stream.of(
-            String.format("%s", eventType.name()),
-            transition.severity() != Severity.Info ? "<&warning>" + transition.severity() : "",
+            eventName(eventType, transition.severity()),
             eventType.inputDataType().equals(DataType.none()) && eventType.outputDataType().equals(DataType.none()) ? "" : "f: " + eventType.inputDataType().name() + " → " + eventType.outputDataType().name(),
             transition.triggers().stream().map(t -> "<&share>" + t.eventSpec().eventType().name() + "@" + ofNullable(t.entityModel()).map(m -> m.name()).orElse("???")).collect(joining("\\n")),
             transition.actions().stream().map(a -> "<&bolt>" + a.name()).collect(joining("\\n")),
             transition.reverseModel() != null ? transition.reverseModel().triggers().stream().map(t -> "<&share><color:red>" + t.eventSpec().eventType().name() + "@" + ofNullable(t.entityModel()).map(m -> m.name()).orElse("???")).collect(joining("\\n")) : ""
         ).filter(not(String::isEmpty)).collect(joining("\\n"))
     );
+  }
+
+  // Events of transitions with a severity above Info are named in bold, after a symbol for their severity, in the colour
+  // of their severity. The symbols have a text presentation by default, so they are drawn in that colour rather than as
+  // emoji. Events of types which are not stored are named in italics.
+  private static String eventName(EventType<?, ?> eventType, Severity severity) {
+    String name = eventType.stored() ? eventType.name() : "<i>" + eventType.name() + "</i>";
+    String symbol = switch (severity) {
+      case Info -> null;
+      case Warning -> "\u26a0";
+      case Error -> "\u2716";
+      case Critical -> "\u203c";
+    };
+    if (symbol == null) return name;
+    return "<color:" + DiagramColours.of(severity).light() + "><b>" + symbol + " " + name + "</b></color>";
   }
 
   private String state(State state) {

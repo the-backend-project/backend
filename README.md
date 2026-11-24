@@ -1,12 +1,66 @@
 # The Integratable Transaction Server
 
 An event-sourcing library for Java. You model your domain as state machines in plain Java, following domain-driven
-design. The library appends every event to an immutable event log, takes the transitions in ACID transactions with
-optimistic concurrency, deduplicates incoming HTTP requests, and sends outgoing ones through a transactional outbox.
+design. The library appends the events to an immutable event log, which secrets are masked in or kept out of, takes
+the transitions in ACID transactions with optimistic concurrency, deduplicates incoming HTTP requests, and sends
+outgoing ones through a transactional outbox.
 It is reactive and stateless, runs on the JVM or as a GraalVM native image, and keeps everything in a database,
 with no framework or message broker.
 
-Documentation is available at https://the-backend-project.github.io/tits/:
+## The model is the code, and the diagram is drawn from it
+
+A transition says which event takes an entity from which state to which, and which events it triggers on other
+entities. Below on the left are the transitions of a client registration in the [identity provider](docs/identity-provider.md),
+abridged from [Clients.java](apps/identity-provider/src/main/java/com/github/thxmasj/backend/identityprovider/Clients.java).
+On the right is the state diagram the [diagram module](docs/diagrams.md) draws from the same transitions, with no
+separate description to keep in sync. Where it is [published](https://the-backend-project.github.io/backend/identity-provider/),
+it shows the data and triggers of an event when the mouse hovers over its name.
+
+<table>
+<tr>
+<td>
+
+```java
+var transitions = Map.of(
+  Begin, List.of(
+    onEvent(RegistrationRequested)
+      .to(Accepted)
+      .trigger(ClientIdClaimed)
+        .on(ClientIds)
+      .when(clientIdTaken).then(
+        onEvent(RegistrationRejected)
+          .to(Rejected)
+          .trigger(ReplyCreated)
+            .with(d -> error(409, ...))
+            .on(Request)
+      )
+      .otherwise(
+        onEvent(RegistrationAccepted)
+          .to(Accepted)
+          .trigger(ClientRegistered)
+            .on(Client)
+          .trigger(ReplyCreated)
+            .with(d -> json(201, ...))
+            .on(Request)
+      )
+  ),
+  Accepted, List.of(),
+  Rejected, List.of()
+);
+```
+
+</td>
+<td>
+
+<img width="444" alt="State diagram of a client registration: a registration request is accepted, or rejected if the client id is taken" src="https://the-backend-project.github.io/backend/images/com.github.thxmasj.backend.identityprovider.ClientRegistration.svg">
+
+</td>
+</tr>
+</table>
+
+## Documentation and apps
+
+Documentation is available at https://the-backend-project.github.io/backend/:
 
 * [Getting started](docs/getting-started.md): add the libraries, declare a model, run it and test it.
 * [Design principles](docs/principles.md): what the project optimises for, and why.
@@ -15,9 +69,14 @@ Documentation is available at https://the-backend-project.github.io/tits/:
 The [apps](apps) are applications built with the HTTP inbox and the state machine, compiled to native executables:
 
 * The [identity provider](apps/identity-provider) is an OAuth 2.0 authorization server for the client credentials
-  grant. See [Identity provider](docs/identity-provider.md).
+  grant, and an OpenID Connect provider for web apps to sign users in with. See
+  [Identity provider](docs/identity-provider.md).
 * The [hello world demo](apps/hello-world) is a web application following the principles of the twelve-factor app. See
   [Hello world demo](docs/hello-world.md).
+
+Each has a [backoffice](backoffice), an application of its own built with htmx, in which users signed in with OpenID
+Connect look up the entities of the application and follow the graph of an entity, with its inbox and outbox requests.
+See [Backoffice](docs/backoffice.md).
 
 The [deploy](deploy) module deploys either of them, or any application built the same way, to Azure Functions with a
 serverless Azure SQL database. See [Deploying to Azure Functions](docs/azure-functions.md).

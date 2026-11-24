@@ -6,6 +6,7 @@ import static com.github.thxmasj.backend.core.EntitySelector.newEntityId;
 import static com.github.thxmasj.backend.core.EventTrigger.trigger;
 import static com.github.thxmasj.backend.core.TransitionModelBuilder.WithEvent.onEvent;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.github.thxmasj.backend.core.Action;
 import com.github.thxmasj.backend.core.BasicEventType;
@@ -34,11 +35,12 @@ import reactor.core.publisher.Mono;
 @Tag("database")
 public class MonitoringTest {
 
-  enum States implements State { Sent, Lost, Delivered, Returned, Filed, Called, Arrived }
+  enum States implements State { Sent, Lost, Delivered, Returned, Filed, Called, Arrived, Inspecting }
 
-  static EntityModel Parcel = EntityModel.of("Parcel", UUID.fromString("b4d6f8a0-1c3e-4a5b-9d7f-e1a3c5b7d9f1"));
-  static EntityModel Complaint = EntityModel.of("Complaint", UUID.fromString("5a7c9e1b-3d5f-4b6c-8e0a-f2b4d6c8e0a2"));
-  static EntityModel Courier = EntityModel.of("Courier", UUID.fromString("0b2d4f6a-8c1e-4d3f-a5b7-c9e1a3b5d7f8"));
+  static EntityModel Parcel = EntityModel.of("Parcel", UUID.fromString("b4d6f8a0-1c3e-4a5b-9d7f-e1a3c5b7d9f1"), MonitoringTest::parcelTransitions);
+  static EntityModel Complaint = EntityModel.of("Complaint", UUID.fromString("5a7c9e1b-3d5f-4b6c-8e0a-f2b4d6c8e0a2"), MonitoringTest::complaintTransitions);
+  static EntityModel Inspection = EntityModel.of("Inspection", UUID.fromString("6c8e0a2b-4d6f-4e8a-b0c2-d4e6f8a0b2c5"), MonitoringTest::inspectionTransitions);
+  static EntityModel Courier = EntityModel.of("Courier", UUID.fromString("0b2d4f6a-8c1e-4d3f-a5b7-c9e1a3b5d7f8"), MonitoringTest::courierTransitions);
 
   static EventType<Void, Void> ParcelSent = BasicEventType.of("Parcel sent", UUID.fromString("c6e8a0b2-4d6f-4c7d-9f1b-a3c5e7d9f1b3"));
   static EventType<Void, Void> DeliveryTimedOut = BasicEventType.of("Delivery timed out", UUID.fromString("7b9d1f3a-5e7a-4d8e-a0c2-b4d6f8e0a2c4"));
@@ -48,6 +50,8 @@ public class MonitoringTest {
   static EventType<String, String> ParcelReceived = BasicEventType.of("Parcel received", UUID.fromString("e0a2c4d6-8b0d-4a1b-93f5-e7a9c1b3d5f7"), DataType.string());
   static EventType<String, String> ParcelReturned = BasicEventType.of("Parcel returned", UUID.fromString("9d1f3b5c-9c1e-4b2c-a4a6-f8b0d2c4e6a8"), DataType.string());
   static EventType<String, String> ParcelDelivered = BasicEventType.of("Parcel delivered", UUID.fromString("f2b4d6e8-0d2f-4c3d-b5b7-a9c1e3d5f7b9"), DataType.string());
+  static EventType<Void, Void> ParcelInspected = BasicEventType.of("Parcel inspected", UUID.fromString("2a4c6e8f-0b2d-4f4b-a6c8-e0a2c4e6a8b1"));
+  static EventType<UUID, UUID> InspectionStarted = BasicEventType.of("Inspection started", UUID.fromString("b5d7f9a1-3c5e-4a7c-9e1b-d3f5a7c9e1b2"), DataType.uuid());
   static EventType<Void, Void> CourierCalled = BasicEventType.of("Courier called", UUID.fromString("4f6b8d0e-1c3e-4a5c-b7d9-f1a3c5e7b9d0"));
   static EventType<Void, Void> CourierArrived = BasicEventType.of("Courier arrived", UUID.fromString("a1c3e5f7-2d4f-4b6d-88ea-0b2d4f6a8c1e"));
 
@@ -62,59 +66,83 @@ public class MonitoringTest {
   private static final List<String> lines = new CopyOnWriteArrayList<>();
   private static final StateMachine machine = Init.stateMachine(
       UUID.randomUUID().toString(),
-      transitions(),
+      entityModels(),
       Clock.systemUTC(),
       new JsonLinesListener(lines::add, Clock.systemUTC())
   );
 
-  private static Map<EntityModel, Map<State, List<TransitionModel<?, ?>>>> transitions() {
-    return Map.of(
-        Parcel, Map.<State, List<TransitionModel<?, ?>>>of(
-            Begin, List.of(
-                onEvent(ParcelSent).to(States.Sent)
-                    .trigger(DeliveryTimedOut).after(_ -> Duration.ofDays(1))
-                    .output()
-            ),
-            States.Sent, List.of(
-                onEvent(DeliveryTimedOut).toSelf().output(),
-                onEvent(ParcelLost).to(States.Lost).severity(Severity.Error)
-                    .assemble(c -> c.log().entityId())
-                    .trigger(ComplaintFiled).with(parcel -> parcel).on(Complaint).identifiedBy(newEntityId())
-                    .output(),
-                // Always chooses another transition, so no event is accepted with its severity
-                onEvent(ParcelReceived).to(States.Delivered).severity(Severity.Critical)
-                    .assembleInput()
-                    .when(d -> d.equals("damaged")).then(
-                        onEvent(ParcelReturned).to(States.Returned).severity(Severity.Warning).assembleInput().output(d -> d)
-                    )
-                    .otherwise(onEvent(ParcelDelivered).to(States.Delivered).assembleInput().output(d -> d))
-            ),
-            States.Lost, List.of(onEvent(LossConfirmed).toSelf().output()),
-            States.Delivered, List.of(),
-            States.Returned, List.of()
+  private static List<EntityModel> entityModels() {
+    return List.of(Parcel, Complaint, Inspection, Courier);
+  }
+
+  private static Map<State, List<TransitionModel<?, ?>>> parcelTransitions() {
+    return Map.<State, List<TransitionModel<?, ?>>>of(
+        Begin, List.of(
+            onEvent(ParcelSent).to(States.Sent)
+                .trigger(DeliveryTimedOut).after(_ -> Duration.ofDays(1))
+                .output()
         ),
-        Complaint, Map.<State, List<TransitionModel<?, ?>>>of(
-            Begin, List.of(
-                // The parcel is in the middle of its transition, so the loss is confirmed on it after that one
-                onEvent(ComplaintFiled).to(States.Filed).severity(Severity.Warning)
-                    .assembleInput()
-                    .trigger(LossConfirmed).on(Parcel).identifiedBy(parcel -> entityId(parcel))
-                    .output(d -> d.t1())
-            ),
-            States.Filed, List.of()
+        States.Sent, List.of(
+            onEvent(DeliveryTimedOut).toSelf().output(),
+            onEvent(ParcelInspected).toSelf()
+                .assemble(c -> c.log().entityId())
+                .trigger(InspectionStarted).with(parcel -> parcel).on(Inspection).identifiedBy(newEntityId())
+                .output(),
+            onEvent(ParcelLost).to(States.Lost).severity(Severity.Error)
+                .assemble(c -> c.log().entityId())
+                .trigger(ComplaintFiled).with(parcel -> parcel).on(Complaint).identifiedBy(newEntityId())
+                .output(),
+            // Always chooses another transition, so no event is accepted with its severity
+            onEvent(ParcelReceived).to(States.Delivered).severity(Severity.Critical)
+                .assembleInput()
+                .when(d -> d.equals("damaged")).then(
+                    onEvent(ParcelReturned).to(States.Returned).severity(Severity.Warning).assembleInput().output(d -> d)
+                )
+                .otherwise(onEvent(ParcelDelivered).to(States.Delivered).assembleInput().output(d -> d))
         ),
-        Courier, Map.<State, List<TransitionModel<?, ?>>>of(
-            Begin, List.of(
-                onEvent(CourierCalled).to(States.Called)
-                    .assemble(_ -> "")
-                    .trigger(arrival).with(d -> d)
-                    .output()
-            ),
-            States.Called, List.of(onEvent(CourierArrived).to(States.Arrived).severity(Severity.Warning).output()),
-            States.Arrived, List.of()
-        )
+        States.Lost, List.of(onEvent(LossConfirmed).toSelf().output()),
+        States.Delivered, List.of(),
+        States.Returned, List.of()
     );
   }
+
+  private static Map<State, List<TransitionModel<?, ?>>> complaintTransitions() {
+    return Map.<State, List<TransitionModel<?, ?>>>of(
+        Begin, List.of(
+            // The parcel is in the middle of its transition, so the loss is confirmed on it after that one
+            onEvent(ComplaintFiled).to(States.Filed).severity(Severity.Warning)
+                .assembleInput()
+                .trigger(LossConfirmed).on(Parcel).identifiedBy(parcel -> entityId(parcel))
+                .output(d -> d.t1())
+        ),
+        States.Filed, List.of()
+    );
+  }
+
+  private static Map<State, List<TransitionModel<?, ?>>> inspectionTransitions() {
+    return Map.<State, List<TransitionModel<?, ?>>>of(
+        Begin, List.of(
+            onEvent(InspectionStarted).to(States.Inspecting)
+                .<UUID>assemble(_ -> {throw new IllegalStateException("Scanner broken");})
+                .output(d -> d)
+        ),
+        States.Inspecting, List.of()
+    );
+  }
+
+  private static Map<State, List<TransitionModel<?, ?>>> courierTransitions() {
+    return Map.<State, List<TransitionModel<?, ?>>>of(
+        Begin, List.of(
+            onEvent(CourierCalled).to(States.Called)
+                .assemble(_ -> "")
+                .trigger(arrival).with(d -> d)
+                .output()
+        ),
+        States.Called, List.of(onEvent(CourierArrived).to(States.Arrived).severity(Severity.Warning).output()),
+        States.Arrived, List.of()
+    );
+  }
+
 
   @Test
   public void anEventIsWrittenWithItsEntityAndTime() {
@@ -167,6 +195,30 @@ public class MonitoringTest {
     assertEquals(
         List.of("INFO Courier called on Courier, event 1", "WARNING Courier arrived on Courier, event 2"),
         summariesOf(correlationId)
+    );
+  }
+
+  /// The inspection, which the parcel triggers, fails, and the failure is written once, for the inspection, while the
+  /// one who triggered the inspection of the parcel gets the exception
+  @Test
+  public void aFailedTransitionIsWrittenAsAnErrorOfTheTransitionItFailedIn() {
+    UUID parcel = machine.onEvent(trigger(ParcelSent, Parcel)).blockFirst().entityId();
+    String correlationId = UUID.randomUUID().toString();
+    var failure = assertThrows(
+        IllegalStateException.class,
+        () -> machine.onEvent(correlationId, trigger(ParcelInspected, Parcel, parcel)).blockFirst()
+    );
+    assertEquals("Scanner broken", failure.getMessage());
+
+    assertEquals(1, linesOf(correlationId).size());
+    Map<String, Object> line = linesOf(correlationId).getFirst();
+    assertEquals("ERROR", line.get("severity"));
+    assertEquals("Inspection", line.get("entityModel"));
+    assertEquals("Inspection started", line.get("eventType"));
+    assertEquals(null, line.get("eventNumber"));
+    assertEquals(
+        "Inspection started on Inspection " + line.get("entityId") + " failed: java.lang.IllegalStateException: Scanner broken",
+        line.get("message")
     );
   }
 

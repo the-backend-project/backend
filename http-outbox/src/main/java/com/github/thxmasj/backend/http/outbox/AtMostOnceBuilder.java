@@ -9,11 +9,12 @@ import com.github.thxmasj.backend.core.EntityModel;
 import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.Tuples.Tuple2;
 import com.github.thxmasj.backend.core.Validated;
-import com.github.thxmasj.backend.core.http.HttpClient;
-import com.github.thxmasj.backend.core.message.http.HttpResponseMessage;
-import com.github.thxmasj.backend.core.message.http.TypedHttpRequest;
-import com.github.thxmasj.backend.core.message.http.TypedHttpResponse;
+import com.github.thxmasj.backend.http.HttpClient;
+import com.github.thxmasj.backend.http.HttpRequest;
+import com.github.thxmasj.backend.http.HttpResponse;
+import com.github.thxmasj.backend.http.Masking;
 import java.time.Duration;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -87,7 +88,7 @@ public final class AtMostOnceBuilder {
 
     <S> OnInvalidResponseUnknownStep<RQ, RS> onInvalidResponseRejection(
         EventType<S, ?> eventType,
-        Function<Tuple2<HttpResponseMessage, String>, S> dataAdapter
+        Function<Tuple2<HttpResponse<byte[]>, String>, S> dataAdapter
     );
 
     OnInvalidResponseUnknownStep<RQ, RS> onInvalidResponseRejection(EventType<Void, ?> eventType);
@@ -98,7 +99,7 @@ public final class AtMostOnceBuilder {
 
     <S> ContentParserStep<RQ, RS> onInvalidResponseUnknown(
         EventType<S, ?> eventType,
-        Function<Tuple2<HttpResponseMessage, String>, S> dataAdapter
+        Function<Tuple2<HttpResponse<byte[]>, String>, S> dataAdapter
     );
 
     ContentParserStep<RQ, RS> onInvalidResponseUnknown(EventType<Void, ?> eventType);
@@ -106,10 +107,10 @@ public final class AtMostOnceBuilder {
 
   public interface ContentParserStep<RQ, RS> {
 
-    OnSuccessStep<RQ, RS> contentParser(Function<HttpResponseMessage, Validated<RS>> contentParser);
+    OnSuccessStep<RQ, RS> contentParser(Function<HttpResponse<byte[]>, Validated<RS>> contentParser);
 
     OnSuccessStep<RQ, RS> contentParser(
-        BiFunction<TypedHttpRequest<RQ>, HttpResponseMessage, Validated<RS>> contentParser
+        BiFunction<HttpRequest<RQ>, HttpResponse<byte[]>, Validated<RS>> contentParser
     );
   }
 
@@ -118,7 +119,7 @@ public final class AtMostOnceBuilder {
 
     <S> OnFailureStep<RQ, RS> onSuccess(
         EventType<S, ?> eventType,
-        Function<TypedHttpResponse<RS>, S> dataAdapter
+        Function<HttpResponse<RS>, S> dataAdapter
     );
 
     OnFailureStep<RQ, RS> onSuccess(EventType<Void, ?> eventType);
@@ -129,7 +130,7 @@ public final class AtMostOnceBuilder {
 
     <S> OnValidResponseUnknownStep<RQ, RS> onFailure(
         EventType<S, ?> eventType,
-        Function<TypedHttpResponse<RS>, S> dataAdapter
+        Function<HttpResponse<RS>, S> dataAdapter
     );
 
     OnValidResponseUnknownStep<RQ, RS> onFailure(EventType<Void, ?> eventType);
@@ -140,7 +141,7 @@ public final class AtMostOnceBuilder {
 
     <S> IsAcceptedStep<RQ, RS> onValidResponseUnknown(
         EventType<S, ?> eventType,
-        Function<TypedHttpResponse<RS>, S> dataAdapter
+        Function<HttpResponse<RS>, S> dataAdapter
     );
 
     IsAcceptedStep<RQ, RS> onValidResponseUnknown(EventType<Void, ?> eventType);
@@ -148,23 +149,31 @@ public final class AtMostOnceBuilder {
 
   public interface IsAcceptedStep<RQ, RS> {
 
-    IsRejectedStep<RQ, RS> isAccepted(Predicate<TypedHttpResponse<RS>> isAccepted);
+    IsRejectedStep<RQ, RS> isAccepted(Predicate<HttpResponse<RS>> isAccepted);
   }
 
   public interface IsRejectedStep<RQ, RS> {
 
-    IsRejectedByInvalidResponseStep<RQ, RS> isRejected(Predicate<TypedHttpResponse<RS>> isRejected);
+    IsRejectedByInvalidResponseStep<RQ, RS> isRejected(Predicate<HttpResponse<RS>> isRejected);
   }
 
   public interface IsRejectedByInvalidResponseStep<RQ, RS> {
 
     RollbackOnAcceptedModelStep<RQ> isRejectedByInvalidResponse(
-        Predicate<Tuple2<HttpResponseMessage, String>> isRejectedByInvalidResponse
+        Predicate<Tuple2<HttpResponse<byte[]>, String>> isRejectedByInvalidResponse
     );
   }
 
-  /// Optional: the rollback on accepted model defaults to none.
+  /// Optional: the masking defaults to [Masking#CREDENTIALS], and the rollback on accepted model to none.
   public interface RollbackOnAcceptedModelStep<RQ> extends BuildStep<RQ, Void> {
+
+    /// Masks what the masking gives of the request and the response in the event log, besides [Masking#CREDENTIALS],
+    /// which every at-most-once request masks, e.g. the form fields of a token request and the body of its response.
+    /// The request is sent and the response handled as they are: only the events stored are masked. An at-most-once
+    /// request is never sent again, but what reads it from the event log later gets it masked: a request aware content
+    /// parser, which parses the response in a later transaction, and the rollback message creator, which must then
+    /// create what is masked itself, e.g. take a new access token rather than copy the request's `Authorization`.
+    RollbackOnAcceptedModelStep<RQ> masking(Masking masking);
 
     <RRQ> RollbackOnUnknownModelStep<RQ, RRQ> rollbackOnAcceptedModel(AtLeastOnce<RRQ> rollbackOnAcceptedModel);
 
@@ -216,8 +225,8 @@ public final class AtMostOnceBuilder {
     private EntityModel processModel;
     private Callback<EntityModel, ?> onPeerUnavailable = new Callback<>(ServiceFoundUnavailable, _ -> null);
     private Callback<EntityModel, ?> onMissingResponse = new Callback<>(TimeoutExpired, _ -> null);
-    private Callback<Tuple2<HttpResponseMessage, String>, ?> onInvalidResponseRejection = new Callback<>(InvalidResponseReceived, Tuple2::t2);
-    private Callback<Tuple2<HttpResponseMessage, String>, ?> onInvalidResponseUnknown = new Callback<>(InvalidResponseReceived, Tuple2::t2);
+    private Callback<Tuple2<HttpResponse<byte[]>, String>, ?> onInvalidResponseRejection = new Callback<>(InvalidResponseReceived, Tuple2::t2);
+    private Callback<Tuple2<HttpResponse<byte[]>, String>, ?> onInvalidResponseUnknown = new Callback<>(InvalidResponseReceived, Tuple2::t2);
 
     private WithPayloadTypes(
         DataType<RQ> requestPayloadType,
@@ -278,7 +287,7 @@ public final class AtMostOnceBuilder {
     @Override
     public <S> OnInvalidResponseUnknownStep<RQ, RS> onInvalidResponseRejection(
         EventType<S, ?> eventType,
-        Function<Tuple2<HttpResponseMessage, String>, S> dataAdapter
+        Function<Tuple2<HttpResponse<byte[]>, String>, S> dataAdapter
     ) {
       this.onInvalidResponseRejection = new Callback<>(eventType, dataAdapter);
       return this;
@@ -292,7 +301,7 @@ public final class AtMostOnceBuilder {
     @Override
     public <S> ContentParserStep<RQ, RS> onInvalidResponseUnknown(
         EventType<S, ?> eventType,
-        Function<Tuple2<HttpResponseMessage, String>, S> dataAdapter
+        Function<Tuple2<HttpResponse<byte[]>, String>, S> dataAdapter
     ) {
       this.onInvalidResponseUnknown = new Callback<>(eventType, dataAdapter);
       return this;
@@ -304,7 +313,7 @@ public final class AtMostOnceBuilder {
     }
 
     @Override
-    public OnSuccessStep<RQ, RS> contentParser(Function<HttpResponseMessage, Validated<RS>> contentParser) {
+    public OnSuccessStep<RQ, RS> contentParser(Function<HttpResponse<byte[]>, Validated<RS>> contentParser) {
       return new WithContentParser<>(
           requestPayloadType,
           responsePayloadType,
@@ -322,7 +331,7 @@ public final class AtMostOnceBuilder {
 
     @Override
     public OnSuccessStep<RQ, RS> contentParser(
-        BiFunction<TypedHttpRequest<RQ>, HttpResponseMessage, Validated<RS>> contentParser
+        BiFunction<HttpRequest<RQ>, HttpResponse<byte[]>, Validated<RS>> contentParser
     ) {
       return new WithContentParser<>(
           requestPayloadType,
@@ -351,16 +360,17 @@ public final class AtMostOnceBuilder {
     private final EntityModel processModel;
     private final Callback<EntityModel, ?> onPeerUnavailable;
     private final Callback<EntityModel, ?> onMissingResponse;
-    private final Callback<Tuple2<HttpResponseMessage, String>, ?> onInvalidResponseRejection;
-    private final Callback<Tuple2<HttpResponseMessage, String>, ?> onInvalidResponseUnknown;
-    private final Function<HttpResponseMessage, Validated<RS>> contentParser;
-    private final BiFunction<TypedHttpRequest<RQ>, HttpResponseMessage, Validated<RS>> requestAwareContentParser;
-    private Callback<TypedHttpResponse<RS>, ?> onSuccess;
-    private Callback<TypedHttpResponse<RS>, ?> onFailure;
-    private Callback<TypedHttpResponse<RS>, ?> onValidResponseUnknown;
-    private Predicate<TypedHttpResponse<RS>> isAccepted;
-    private Predicate<TypedHttpResponse<RS>> isRejected;
-    private Predicate<Tuple2<HttpResponseMessage, String>> isRejectedByInvalidResponse;
+    private final Callback<Tuple2<HttpResponse<byte[]>, String>, ?> onInvalidResponseRejection;
+    private final Callback<Tuple2<HttpResponse<byte[]>, String>, ?> onInvalidResponseUnknown;
+    private final Function<HttpResponse<byte[]>, Validated<RS>> contentParser;
+    private final BiFunction<HttpRequest<RQ>, HttpResponse<byte[]>, Validated<RS>> requestAwareContentParser;
+    private Callback<HttpResponse<RS>, ?> onSuccess;
+    private Callback<HttpResponse<RS>, ?> onFailure;
+    private Callback<HttpResponse<RS>, ?> onValidResponseUnknown;
+    private Predicate<HttpResponse<RS>> isAccepted;
+    private Predicate<HttpResponse<RS>> isRejected;
+    private Predicate<Tuple2<HttpResponse<byte[]>, String>> isRejectedByInvalidResponse;
+    private Masking masking = Masking.NONE;
 
     private WithContentParser(
         DataType<RQ> requestPayloadType,
@@ -370,10 +380,10 @@ public final class AtMostOnceBuilder {
         EntityModel processModel,
         Callback<EntityModel, ?> onPeerUnavailable,
         Callback<EntityModel, ?> onMissingResponse,
-        Callback<Tuple2<HttpResponseMessage, String>, ?> onInvalidResponseRejection,
-        Callback<Tuple2<HttpResponseMessage, String>, ?> onInvalidResponseUnknown,
-        Function<HttpResponseMessage, Validated<RS>> contentParser,
-        BiFunction<TypedHttpRequest<RQ>, HttpResponseMessage, Validated<RS>> requestAwareContentParser
+        Callback<Tuple2<HttpResponse<byte[]>, String>, ?> onInvalidResponseRejection,
+        Callback<Tuple2<HttpResponse<byte[]>, String>, ?> onInvalidResponseUnknown,
+        Function<HttpResponse<byte[]>, Validated<RS>> contentParser,
+        BiFunction<HttpRequest<RQ>, HttpResponse<byte[]>, Validated<RS>> requestAwareContentParser
     ) {
       this.requestPayloadType = requestPayloadType;
       this.responsePayloadType = responsePayloadType;
@@ -391,7 +401,7 @@ public final class AtMostOnceBuilder {
     @Override
     public <S> OnFailureStep<RQ, RS> onSuccess(
         EventType<S, ?> eventType,
-        Function<TypedHttpResponse<RS>, S> dataAdapter
+        Function<HttpResponse<RS>, S> dataAdapter
     ) {
       this.onSuccess = new Callback<>(eventType, dataAdapter);
       return this;
@@ -405,7 +415,7 @@ public final class AtMostOnceBuilder {
     @Override
     public <S> OnValidResponseUnknownStep<RQ, RS> onFailure(
         EventType<S, ?> eventType,
-        Function<TypedHttpResponse<RS>, S> dataAdapter
+        Function<HttpResponse<RS>, S> dataAdapter
     ) {
       this.onFailure = new Callback<>(eventType, dataAdapter);
       return this;
@@ -419,7 +429,7 @@ public final class AtMostOnceBuilder {
     @Override
     public <S> IsAcceptedStep<RQ, RS> onValidResponseUnknown(
         EventType<S, ?> eventType,
-        Function<TypedHttpResponse<RS>, S> dataAdapter
+        Function<HttpResponse<RS>, S> dataAdapter
     ) {
       this.onValidResponseUnknown = new Callback<>(eventType, dataAdapter);
       return this;
@@ -431,20 +441,20 @@ public final class AtMostOnceBuilder {
     }
 
     @Override
-    public IsRejectedStep<RQ, RS> isAccepted(Predicate<TypedHttpResponse<RS>> isAccepted) {
+    public IsRejectedStep<RQ, RS> isAccepted(Predicate<HttpResponse<RS>> isAccepted) {
       this.isAccepted = isAccepted;
       return this;
     }
 
     @Override
-    public IsRejectedByInvalidResponseStep<RQ, RS> isRejected(Predicate<TypedHttpResponse<RS>> isRejected) {
+    public IsRejectedByInvalidResponseStep<RQ, RS> isRejected(Predicate<HttpResponse<RS>> isRejected) {
       this.isRejected = isRejected;
       return this;
     }
 
     @Override
     public RollbackOnAcceptedModelStep<RQ> isRejectedByInvalidResponse(
-        Predicate<Tuple2<HttpResponseMessage, String>> isRejectedByInvalidResponse
+        Predicate<Tuple2<HttpResponse<byte[]>, String>> isRejectedByInvalidResponse
     ) {
       this.isRejectedByInvalidResponse = isRejectedByInvalidResponse;
       return this;
@@ -454,29 +464,33 @@ public final class AtMostOnceBuilder {
         AtLeastOnce<RRQ> rollbackOnAcceptedModel,
         AtLeastOnce<RRQ> rollbackOnUnknownModel
     ) {
-      return (name, id) -> new AtMostOnce<>(
-          name,
-          id,
-          requestPayloadType,
-          responsePayloadType,
-          forwarder,
-          inflightTimeout,
-          processModel,
+      var callbacks = new AtMostOnce.Callbacks<>(
           onPeerUnavailable,
           onMissingResponse,
           onSuccess,
           onFailure,
           onValidResponseUnknown,
           onInvalidResponseRejection,
-          onInvalidResponseUnknown,
-          contentParser,
-          requestAwareContentParser,
-          isAccepted,
-          isRejected,
-          isRejectedByInvalidResponse,
-          rollbackOnAcceptedModel,
-          rollbackOnUnknownModel
+          onInvalidResponseUnknown
       );
+      var rules = new AtMostOnce.ResponseRules<>(contentParser, requestAwareContentParser, isAccepted, isRejected, isRejectedByInvalidResponse);
+      var shape = new AtMostOnce.Shape<>(
+          requestPayloadType,
+          responsePayloadType,
+          new ForwardAction(forwarder),
+          inflightTimeout,
+          processModel,
+          callbacks,
+          rules,
+          Masking.CREDENTIALS.and(masking)
+      );
+      return (name, id) -> new AtMostOnce<>(name, id, shape, _ -> rollbackOnAcceptedModel, _ -> rollbackOnUnknownModel);
+    }
+
+    @Override
+    public RollbackOnAcceptedModelStep<RQ> masking(Masking masking) {
+      this.masking = this.masking.and(Objects.requireNonNull(masking));
+      return this;
     }
 
     @Override

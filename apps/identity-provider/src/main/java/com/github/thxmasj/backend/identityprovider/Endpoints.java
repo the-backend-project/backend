@@ -1,0 +1,550 @@
+package com.github.thxmasj.backend.identityprovider;
+
+import static com.github.thxmasj.backend.core.Validated.invalid;
+import static com.github.thxmasj.backend.core.Validated.valid;
+import static java.nio.charset.StandardCharsets.UTF_8;
+
+import com.github.thxmasj.backend.core.DataType;
+import com.github.thxmasj.backend.core.TransitionModelBuilder.TransitionContext;
+import com.github.thxmasj.backend.core.Validated;
+import com.github.thxmasj.backend.http.HttpRequest;
+import com.github.thxmasj.backend.http.HttpRequest.Method;
+import com.github.thxmasj.backend.http.HttpResponse;
+import com.github.thxmasj.backend.http.Masking;
+import com.github.thxmasj.backend.http.inbox.Authorization;
+import com.github.thxmasj.backend.http.inbox.Cookies;
+import com.github.thxmasj.backend.http.inbox.Form;
+import com.github.thxmasj.backend.http.inbox.HttpInbox;
+import com.github.thxmasj.backend.http.inbox.OpenIdConnectClient;
+import com.github.thxmasj.backend.http.inbox.Secrets;
+import com.github.thxmasj.backend.identityprovider.Inbox.Reply;
+import java.net.URI;
+import tools.jackson.databind.JsonNode;
+import java.time.Duration;
+import java.util.Base64;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.function.Supplier;
+
+/// The endpoints of the identity provider: what the inbox requests do with the credentials of the requests, and the
+/// requests answered at once. Credentials are handled in the session of a request and kept out of the event log:
+/// client secrets are hashed by the content parsers, generated secrets and codes only reach the responses, which the
+/// event log masks, tokens are signed by the response creators and verified by the content parsers, and the secrets of
+/// imported clients are verified against their BCrypt hashes. The event log only records hashes, the claims of the
+/// tokens and the claims of the users signed in.
+///
+/// The requests answered at once, such as the health check, the public keys, the metadata, and the requests refused
+/// before they reach the entities of the identity provider, e.g. without client authentication, are not stored.
+final class Endpoints {
+
+  /// The cookie holding the secret of a sign-in with the upstream provider, by the authorization it is for
+  static final String cookiePrefix = "idp_authorization_";
+  /// How long a user has to sign in with the upstream provider
+  private static final Duration signInLifetime = Duration.ofMinutes(10);
+  /// The value of [Inbox#InternalHeader] of the registrations of the identity provider itself, which no other request
+  /// knows, as it is generated for the process and masked in the event log
+  private static final String internalKey = Secrets.generate();
+
+  private final Keys keys;
+  private final OpenIdConnectClient upstream;
+  private final String metadata;
+  /// The BCrypt hashes of the secrets of the imported clients, by client id
+  private final Map<String, String> importedSecretHashes;
+
+  /// @param keys     the signing keys, or null for an inbox only giving its entity models
+  /// @param upstream the client of the provider users sign in with, or null if users can't sign in. It is discovered
+  ///                 here, if it isn't already, as the response to an authorization request is created at once with
+  ///                 the URL of the provider, so it blocks until the provider has answered, or fails if it can't be used.
+  Endpoints(Keys keys, OpenIdConnectClient upstream, Map<String, String> importedSecretHashes) {
+    this.keys = keys;
+    this.upstream = upstream;
+    if (upstream != null && keys != null)
+      upstream.discover()
+          .onErrorMap(e -> new IllegalStateException("The upstream provider of UPSTREAM_ISSUER can't be used: " + e.getMessage(), e))
+          .block();
+    this.metadata = keys != null ? metadata(keys, upstream != null) : null;
+    this.importedSecretHashes = Map.copyOf(importedSecretHashes);
+  }
+
+  OpenIdConnectClient upstream() {
+    return upstream;
+  }
+
+  /// The response of a request answered at once, or null for a request for the entities of the identity provider. It
+  /// is asked for both when the inbox request of the requests answered at once matches a request and when it parses it,
+  /// which takes little, as a request with an access token or to the token endpoint is answered by the other inbox
+  /// requests: their authorizers verify the tokens, and the token requests refuse invalid requests to the token
+  /// endpoint.
+  HttpResponse<byte[]> immediate(HttpRequest<byte[]> request) {
+    String path = request.uri().getPath();
+    if (upstream != null) {
+      switch (path) {
+        case "/.well-known/openid-configuration" -> {
+          return get(request, () -> response(200, "OK", "application/json", metadata));
+        }
+        case "/authorize" -> {
+          if (request.method() != Method.GET)
+            return methodNotAllowed("GET");
+          // A request without a valid client id and redirect URI can't be redirected to the client
+          return Inbox.authorizationRequest(request).isInvalid() ? errorPage("The sign-in request is invalid or has already been used") : null;
+        }
+        case "/callback" -> {
+          return request.method() == Method.GET ? callbackRefusal(request) : methodNotAllowed("GET");
+        }
+        case "/userinfo" -> {
+          return request.method() == Method.GET ? withoutToken(request) : methodNotAllowed("GET");
+        }
+        default -> {}
+      }
+    }
+    return switch (path) {
+      case "/health" -> get(request, () -> response(200, "OK", "text/plain", "OK"));
+      case "/.well-known/jwks.json" -> get(request, () -> response(200, "OK", "application/jwk-set+json", keys.publicKeys()));
+      case "/.well-known/oauth-authorization-server" -> get(request, () -> response(200, "OK", "application/json", metadata));
+      case "/token" -> request.method() != Method.POST ? methodNotAllowed("POST") : unauthenticatedRefusal(request);
+      case "/clients" -> request.method() != Method.POST ? methodNotAllowed("POST") : isInternal(request) ? null : withoutToken(request);
+      default -> response(404, "Not Found", null, null);
+    };
+  }
+
+  // The token endpoint
+
+  /// A request to the token endpoint of RFC 6749 section 3.2, parsed once: refused at the endpoint, a token request of
+  /// the client credentials grant, or a code redemption of the authorization code grant, of which one is not null
+  ///
+  /// @param refusal           why the request is refused, if it is invalid or isn't authenticated by HTTP Basic,
+  ///                          which RFC 6749 section 2.3.1 requires every server to support
+  /// @param clientCredentials a token request, with the hash of the secret of the client
+  /// @param codeRedemption    a code redemption, with the hashes of the secret of the client, the code and the code
+  ///                          verifier, which is the S256 challenge of the verifier
+  record TokenEndpointRequest(Tokens.Refusal refusal, Tokens.Request clientCredentials, Tokens.CodeRequest codeRedemption) {
+
+    static TokenEndpointRequest refused(String clientId, String error, String description) {
+      return new TokenEndpointRequest(new Tokens.Refusal(clientId, error, description), null, null);
+    }
+
+  }
+
+  /// The refusal of a request to the token endpoint which isn't authenticated, as it isn't a form or has no Basic
+  /// credentials, or null if it is. Such a request is answered at once and not stored, as anyone can send it. Its form
+  /// is only parsed here if it has no credentials, as RFC 6749 refuses a secret in the form as an invalid request
+  /// rather than as a failed client authentication.
+  private Tokens.Refusal unauthenticated(HttpRequest<byte[]> request) {
+    if (!Masking.isForm(request))
+      return new Tokens.Refusal(null, "invalid_request", "Content-Type must be application/x-www-form-urlencoded");
+    if (basicCredentials(request.headerValue("Authorization")).isPresent())
+      return null;
+    Map<String, String> form;
+    try {
+      form = Form.parse(request.body());
+    } catch (IllegalArgumentException e) {
+      return new Tokens.Refusal(null, "invalid_request", e.getMessage());
+    }
+    if (form.containsKey("client_secret") || form.containsKey("client_assertion"))
+      return new Tokens.Refusal(null, "invalid_request", "Clients must authenticate with HTTP Basic");
+    return new Tokens.Refusal(null, "invalid_client", "Clients must authenticate with HTTP Basic");
+  }
+
+  /// The error response of RFC 6749 section 5.2 to a request to the token endpoint which isn't authenticated, or null if
+  /// it is
+  private HttpResponse<byte[]> unauthenticatedRefusal(HttpRequest<byte[]> request) {
+    Tokens.Refusal refusal = unauthenticated(request);
+    if (refusal == null)
+      return null;
+    int status = Tokens.status(refusal);
+    var headers = noStore(Map.of());
+    if (status == 401)
+      headers.put("WWW-Authenticate", basicChallenge());
+    byte[] body = Reply.error(status, refusal.error(), refusal.description()).body().getBytes(UTF_8);
+    return new HttpResponse<>(status, status == 401 ? "Unauthorized" : "Bad Request", headers, body);
+  }
+
+  /// The request to the token endpoint, which is always valid, as a refusal is answered by the token requests. One
+  /// which isn't authenticated is answered at once, and doesn't get here.
+  Validated<TokenEndpointRequest> tokenEndpointRequest(HttpRequest<byte[]> request) {
+    Optional<String[]> basic = basicCredentials(request.headerValue("Authorization"));
+    if (!Masking.isForm(request) || basic.isEmpty())
+      return valid(new TokenEndpointRequest(unauthenticated(request), null, null));
+    String[] credentials = basic.get();
+    String clientId = credentials[0];
+    Map<String, String> form;
+    try {
+      form = Form.parse(request.body());
+    } catch (IllegalArgumentException e) {
+      return valid(TokenEndpointRequest.refused(clientId, "invalid_request", e.getMessage()));
+    }
+    if (form.containsKey("client_secret") || form.containsKey("client_assertion"))
+      return valid(TokenEndpointRequest.refused(clientId, "invalid_request", "Clients must authenticate with HTTP Basic"));
+    return valid(tokenEndpointRequest(form, clientId, credentials[1]));
+  }
+
+  private TokenEndpointRequest tokenEndpointRequest(Map<String, String> form, String clientId, String secret) {
+    if (form.containsKey("client_id") && !form.get("client_id").equals(clientId))
+      return TokenEndpointRequest.refused(clientId, "invalid_request", "client_id does not match the authenticated client");
+    String grantType = form.get("grant_type");
+    if (grantType == null)
+      return TokenEndpointRequest.refused(clientId, "invalid_request", "grant_type is missing");
+    if (!grantType.equals(Clients.ClientCredentials) && !grantType.equals(Clients.AuthorizationCode))
+      return TokenEndpointRequest.refused(clientId, "unsupported_grant_type", "Only the client_credentials and authorization_code grants are supported");
+    if (!Clients.isValidClientId(clientId))
+      return TokenEndpointRequest.refused(null, "invalid_client", "Client authentication failed");
+    if (grantType.equals(Clients.ClientCredentials)) {
+      if (form.containsKey("scope") && !Scopes.isValid(form.get("scope")))
+        return TokenEndpointRequest.refused(clientId, "invalid_scope", "scope must be a space separated list of scopes");
+      return new TokenEndpointRequest(null, new Tokens.Request(clientId, secretHash(clientId, secret), form.get("scope")), null);
+    }
+    String code = form.get("code");
+    String verifier = form.get("code_verifier");
+    if (code == null || code.isEmpty())
+      return TokenEndpointRequest.refused(clientId, "invalid_request", "code is missing");
+    if (form.get("redirect_uri") == null)
+      return TokenEndpointRequest.refused(clientId, "invalid_request", "redirect_uri is missing");
+    if (verifier != null && !Inbox.codeChallengePattern.matcher(verifier).matches())
+      return TokenEndpointRequest.refused(clientId, "invalid_request", "code_verifier is invalid");
+    return new TokenEndpointRequest(null, null, new Tokens.CodeRequest(
+        clientId,
+        secretHash(clientId, secret),
+        Secrets.hash(code),
+        form.get("redirect_uri"),
+        verifier != null ? Secrets.hash(verifier) : null
+    ));
+  }
+
+  /// The hash the state machine compares with that of the client. The secret of an imported client is verified here
+  /// against its BCrypt hash, see [ImportedClients].
+  private String secretHash(String clientId, String secret) {
+    String bcryptHash = importedSecretHashes.get(clientId);
+    return bcryptHash != null ? ImportedClients.secretHash(secret, bcryptHash) : Secrets.hash(secret);
+  }
+
+  /// The response of the token endpoint: the access token response of RFC 6749 section 5.1, with the tokens signed from
+  /// the claims the state machine issued, and with the ID token of OpenID Connect Core section 3.1.3.3 for a code
+  /// redemption, or the error response of section 5.2, with the challenge of HTTP Basic for a failed client
+  /// authentication
+  HttpResponse<byte[]> tokenEndpointResponse(TransitionContext<Reply> c) {
+    HttpResponse<byte[]> issued = Inbox.reply(c);
+    return switch (issued.statusCode()) {
+      case 200 -> new HttpResponse<>(200, "OK", noStore(issued.headers()), DataType.objectMapper.writeValueAsBytes(signed(issued.body())));
+      case 401 -> withHeader(issued, "WWW-Authenticate", basicChallenge());
+      default -> issued;
+    };
+  }
+
+  /// The body of the access token response of the tokens issued, of a code redemption if they have an ID token
+  private Map<String, Object> signed(byte[] issued) {
+    // Parsed once, and read as user tokens or as an access token
+    JsonNode tree = DataType.objectMapper.readTree(issued);
+    Tokens.UserTokens userTokens = tree.has("idToken") ? DataType.objectMapper.treeToValue(tree, Tokens.UserTokens.class) : null;
+    Tokens.IssuedToken accessToken = userTokens != null ?
+        userTokens.accessToken() :
+        DataType.objectMapper.treeToValue(tree, Tokens.IssuedToken.class);
+    var body = new LinkedHashMap<String, Object>();
+    body.put("access_token", keys.sign(accessToken));
+    body.put("token_type", "Bearer");
+    body.put("expires_in", accessToken.expiresAt() - accessToken.issuedAt());
+    body.put("scope", accessToken.scope());
+    if (userTokens != null)
+      body.put("id_token", keys.sign(userTokens.idToken()));
+    return body;
+  }
+
+
+  // The registration endpoint
+
+  /// Authorizes a registration for the client of its access token, which must have the registration scope
+  Authorization registrationAuthorization(HttpRequest<byte[]> request, Clients.RegistrationRequest registration) {
+    return HttpInbox.<Clients.RegistrationRequest>bearerToken(keys::verify, realm(), (_, principal) -> Optional.of(principal.clientId()), Clients.RegistrationScope)
+        .apply(request, registration);
+  }
+
+  /// A registration, on behalf of the client the authorizer authorizes it for. The secret of the new client is
+  /// generated here, so only its hash enters the event log, and the secret the response, which the event log masks.
+  Validated<Clients.RegistrationRequest> registration(HttpRequest<byte[]> request) {
+    String secret = Secrets.generate();
+    Validated<Clients.Registration> registration = Inbox.registration(request, Secrets.hash(secret));
+    return registration.isInvalid() ?
+        invalid(registration.invalidReason()) :
+        valid(new Clients.RegistrationRequest(registration.validValue(), secret));
+  }
+
+  /// The client information response of RFC 7591 section 3.2.1, with the secret, which is not to be cached
+  static HttpResponse<byte[]> registered(TransitionContext<Reply> c) {
+    HttpResponse<byte[]> registered = Inbox.reply(c);
+    if (registered.statusCode() != 201)
+      return registered;
+    return new HttpResponse<>(201, "Created", noStore(registered.headers()), registered.body());
+  }
+
+  /// A registration by the identity provider itself, e.g. of the bootstrap client, with the hash of the secret of the
+  /// client, as the registrar
+  static HttpRequest<byte[]> internalRegistration(String registeredBy, String secretHash, byte[] body) {
+    var headers = Map.of(
+        "Content-Type", "application/json",
+        Inbox.InternalHeader, internalKey,
+        Inbox.RegisteredByHeader, registeredBy,
+        Inbox.SecretHashHeader, secretHash
+    );
+    return new HttpRequest<>(Method.POST, URI.create("/clients"), headers, body);
+  }
+
+  /// Whether the request is a registration of the identity provider itself
+  static boolean isInternal(HttpRequest<byte[]> request) {
+    // In constant time, so the time taken doesn't tell how much of the key is right
+    return Secrets.matches(request.headerValue(Inbox.InternalHeader), internalKey);
+  }
+
+  // Signing users in
+
+  /// The authorization endpoint of RFC 6749 section 3.1. The state machine checks the request, and the user is
+  /// redirected to the upstream provider to sign in, or back to the client with an error. The secret of the sign-in
+  /// with the upstream provider is generated here and kept in a cookie, which binds it to the browser the user started
+  /// it in, and which the event log masks.
+  HttpResponse<byte[]> authorizationResponse(TransitionContext<Reply> c) {
+    HttpResponse<byte[]> response = Inbox.reply(c);
+    return switch (response.statusCode()) {
+      case 200 -> {
+        String authorization = DataType.objectMapper.readTree(response.body()).get("authorization").asString();
+        String secret = Secrets.generate();
+        // The upstream provider is discovered by the constructor, before any request, and its discovery is kept, so the
+        // URL is there at once, on this thread, whatever the timing
+        URI url = upstream.authorizationUrl(authorization, secret).toFuture().getNow(null);
+        if (url == null)
+          throw new IllegalStateException("The upstream provider is not discovered");
+        var headers = noStore(Map.of());
+        headers.remove("Content-Type");
+        headers.put("Location", url.toString());
+        headers.put("Set-Cookie", cookie(authorization, secret, signInLifetime));
+        yield new HttpResponse<>(302, "Found", headers, null);
+      }
+      case 302 -> redirect(response);
+      default -> errorPage(response);
+    };
+  }
+
+  /// The refusal of a return from the upstream provider which isn't to an authorization, or is in another browser than
+  /// the sign-in was started in, or null
+  private static HttpResponse<byte[]> callbackRefusal(HttpRequest<byte[]> request) {
+    Map<String, String> query;
+    try {
+      query = query(request);
+    } catch (IllegalArgumentException e) {
+      return errorPage("The response of the identity provider is invalid");
+    }
+    String authorization = query.get("state");
+    try {
+      UUID.fromString(authorization != null ? authorization : "");
+    } catch (IllegalArgumentException e) {
+      return errorPage("The response of the identity provider is invalid");
+    }
+    if (Cookies.value(request.headerValue("Cookie"), cookiePrefix + authorization) == null)
+      return errorPage("The sign-in has expired, or was started in another browser. Please sign in again.");
+    return null;
+  }
+
+  /// The return of the user from the upstream provider
+  static Validated<Authorizations.Callback> callback(HttpRequest<byte[]> request) {
+    Map<String, String> query = query(request);
+    String authorization = query.get("state");
+    return valid(new Authorizations.Callback(
+        UUID.fromString(authorization),
+        query.get("code"),
+        query.get("error"),
+        Cookies.value(request.headerValue("Cookie"), cookiePrefix + authorization)
+    ));
+  }
+
+  /// The redirect of the user to the client with the code, or the error page, and the cookie of the sign-in cleared
+  HttpResponse<byte[]> callbackResponse(TransitionContext<Reply> c) {
+    HttpResponse<byte[]> response = Inbox.reply(c);
+    HttpResponse<byte[]> answer = response.statusCode() == 302 ? redirect(response) : errorPage(response);
+    String authorization = c.log().oneIfExists(HttpInbox.RequestAccepted)
+        .map(accepted -> query(accepted.t1()).get("state"))
+        .orElseThrow(() -> new IllegalStateException("The callback of the response is not in the session"));
+    return withHeader(answer, "Set-Cookie", cookie(authorization, "", Duration.ZERO));
+  }
+
+  private static Map<String, String> query(HttpRequest<byte[]> request) {
+    return Form.parse(request.uri().getRawQuery());
+  }
+
+  /// Authorizes a request to the UserInfo endpoint of OpenID Connect Core section 5.3 for the `jti` of its access token,
+  /// which must have the scope `openid`
+  Authorization userInfoAuthorization(HttpRequest<byte[]> request, String tokenId) {
+    return HttpInbox.<String>bearerToken(keys::verify, realm(), (token, _) -> Keys.tokenId(token), "openid")
+        .apply(request, tokenId);
+  }
+
+  /// The realm of the challenges of RFC 6750 and of HTTP Basic, the issuer
+  private String realm() {
+    return keys.issuer().toString();
+  }
+
+  /// The refusal of RFC 6750 section 3 of a request without an access token, or null if it has one, which the
+  /// authorizer of its inbox request verifies
+  private HttpResponse<byte[]> withoutToken(HttpRequest<byte[]> request) {
+    return bearerToken(request) == null ? bearerError(401, null, null, null) : null;
+  }
+
+  /// The bearer token of the request, or null if it has none
+  private static String bearerToken(HttpRequest<byte[]> request) {
+    String authorization = request.headerValue("Authorization");
+    if (authorization == null || !authorization.regionMatches(true, 0, "Bearer ", 0, 7))
+      return null;
+    return authorization.substring(7).trim();
+  }
+
+  /// The `jti` of the access token of a UserInfo request, the entity id of the token request which issued it, or null
+  /// if it has none. The authorizer verifies the token.
+  static Validated<String> tokenId(HttpRequest<byte[]> request) {
+    String token = bearerToken(request);
+    return valid(token != null ? Keys.tokenId(token).orElse(null) : null);
+  }
+
+  /// The UserInfo response, or the refusal of a token which is not one of a user, e.g. of the client credentials grant
+  HttpResponse<byte[]> userInfoResponse(TransitionContext<Reply> c) {
+    HttpResponse<byte[]> response = Inbox.reply(c);
+    return response.statusCode() == 200 ?
+        new HttpResponse<>(200, "OK", noStore(response.headers()), response.body()) :
+        bearerError(401, "invalid_token", "The access token is not one of a user", null);
+  }
+
+  /// The client id and secret of a Basic Authorization header, which are form-urlencoded, RFC 6749 section 2.3.1
+  private static Optional<String[]> basicCredentials(String authorization) {
+    if (authorization == null || !authorization.regionMatches(true, 0, "Basic ", 0, 6))
+      return Optional.empty();
+    try {
+      String decoded = new String(Base64.getDecoder().decode(authorization.substring(6).trim()), UTF_8);
+      int colon = decoded.indexOf(':');
+      if (colon < 0)
+        return Optional.empty();
+      String clientId = Form.decode(decoded.substring(0, colon));
+      String secret = Form.decode(decoded.substring(colon + 1));
+      if (clientId.isEmpty() || secret.isEmpty())
+        return Optional.empty();
+      return Optional.of(new String[] {clientId, secret});
+    } catch (IllegalArgumentException e) {
+      return Optional.empty();
+    }
+  }
+
+  private static HttpResponse<byte[]> get(HttpRequest<byte[]> request, Supplier<HttpResponse<byte[]>> response) {
+    return request.method() == Method.GET ? response.get() : methodNotAllowed("GET");
+  }
+
+  /// The redirect of the user to the client, which the state machine has made, with the code if the user signed in
+  private static HttpResponse<byte[]> redirect(HttpResponse<byte[]> response) {
+    var redirect = DataType.objectMapper.readValue(response.body(), Inbox.Redirect.class);
+    String uri = redirect.redirectUri();
+    var headers = noStore(Map.of());
+    headers.remove("Content-Type");
+    headers.put("Location", uri + (uri.contains("?") ? "&" : "?") + Form.encode(redirect.parameters()));
+    return new HttpResponse<>(302, "Found", headers, null);
+  }
+
+  /// A page for the user, when the client can't be redirected to, from the error response of the state machine
+  private static HttpResponse<byte[]> errorPage(HttpResponse<byte[]> response) {
+    String description = null;
+    try {
+      var body = DataType.objectMapper.readTree(response.body());
+      if (body != null && body.get("error_description") != null && body.get("error_description").isString())
+        description = body.get("error_description").asString();
+    } catch (RuntimeException e) {
+      // Not an error response of the identity provider, e.g. of an unknown or used authorization
+    }
+    return errorPage(description != null ? description : "The sign-in request is invalid or has already been used");
+  }
+
+  private static HttpResponse<byte[]> errorPage(String description) {
+    var headers = noStore(Map.of());
+    headers.put("Content-Type", "text/plain;charset=UTF-8");
+    return new HttpResponse<>(400, "Bad Request", headers, ("Sign-in failed: " + description + "\n").getBytes(UTF_8));
+  }
+
+  /// The cookie with the secret of a sign-in, only sent to the callback. It is sent with the redirect from the
+  /// upstream provider, which is a top-level navigation, with SameSite=Lax.
+  private String cookie(String authorization, String secret, Duration maxAge) {
+    return cookiePrefix + authorization + "=" + secret
+        + "; Path=/callback; Max-Age=" + maxAge.toSeconds() + "; HttpOnly; SameSite=Lax"
+        + ("https".equals(keys.issuer().getScheme()) ? "; Secure" : "");
+  }
+
+  private static HttpResponse<byte[]> methodNotAllowed(String allowed) {
+    return new HttpResponse<>(405, "Method Not Allowed", Map.of("Allow", allowed), null);
+  }
+
+  private String basicChallenge() {
+    return "Basic realm=\"" + keys.issuer() + "\", charset=\"UTF-8\"";
+  }
+
+  /// The error response of RFC 6750 section 3
+  ///
+  /// @param scope the scope required, for insufficient_scope
+  private HttpResponse<byte[]> bearerError(int status, String error, String description, String scope) {
+    return new HttpResponse<>(status, status == 401 ? "Unauthorized" : "Forbidden", Map.of("WWW-Authenticate", bearerChallenge(error, description, scope)), null);
+  }
+
+  private String bearerChallenge(String error, String description, String scope) {
+    return HttpInbox.bearerChallenge(realm(), error, description, scope);
+  }
+
+  private static Map<String, String> noStore(Map<String, String> headers) {
+    var result = new HashMap<>(headers);
+    result.put("Content-Type", "application/json;charset=UTF-8");
+    result.put("Cache-Control", "no-store");
+    result.put("Pragma", "no-cache");
+    return result;
+  }
+
+  private static HttpResponse<byte[]> withHeader(HttpResponse<byte[]> response, String name, String value) {
+    var headers = new HashMap<>(response.headers());
+    headers.put(name, value);
+    return new HttpResponse<>(response.statusCode(), response.reasonPhrase(), headers, response.body());
+  }
+
+  private static HttpResponse<byte[]> response(int status, String reason, String contentType, String body) {
+    return new HttpResponse<>(
+        status,
+        reason,
+        contentType != null ? Map.of("Content-Type", contentType) : Map.of(),
+        body != null ? body.getBytes(UTF_8) : null
+    );
+  }
+
+  /// The authorization server metadata of RFC 8414, which is also the provider metadata of OpenID Connect Discovery
+  /// section 3 if users can sign in
+  private static String metadata(Keys keys, boolean signIn) {
+    String issuer = keys.issuer().toString();
+    var metadata = new LinkedHashMap<String, Object>();
+    metadata.put("issuer", issuer);
+    if (signIn)
+      metadata.put("authorization_endpoint", issuer + "/authorize");
+    metadata.put("token_endpoint", issuer + "/token");
+    if (signIn)
+      metadata.put("userinfo_endpoint", issuer + "/userinfo");
+    metadata.put("jwks_uri", issuer + "/.well-known/jwks.json");
+    metadata.put("registration_endpoint", issuer + "/clients");
+    if (signIn) {
+      metadata.put("scopes_supported", Authorizations.SupportedScopes);
+      metadata.put("response_types_supported", List.of("code"));
+      metadata.put("response_modes_supported", List.of("query"));
+      metadata.put("grant_types_supported", List.of(Clients.AuthorizationCode, Clients.ClientCredentials));
+      metadata.put("subject_types_supported", List.of("public"));
+      metadata.put("id_token_signing_alg_values_supported", List.of("RS256"));
+      metadata.put("token_endpoint_auth_methods_supported", List.of("client_secret_basic"));
+      metadata.put("code_challenge_methods_supported", List.of("S256"));
+      metadata.put("claims_supported", List.of("iss", "sub", "aud", "exp", "iat", "auth_time", "nonce", "email", "email_verified", "name"));
+      metadata.put("request_parameter_supported", false);
+      metadata.put("request_uri_parameter_supported", false);
+    } else {
+      metadata.put("grant_types_supported", List.of(Clients.ClientCredentials));
+      metadata.put("token_endpoint_auth_methods_supported", List.of("client_secret_basic"));
+      metadata.put("response_types_supported", List.of());
+    }
+    return DataType.objectMapper.writeValueAsString(metadata);
+  }
+
+}

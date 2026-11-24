@@ -82,6 +82,11 @@
       <version>${project.version}</version>
     </dependency>
     <dependency>
+      <groupId>com.github.thxmasj.backend</groupId>
+      <artifactId>http-outbox</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
       <groupId>com.nimbusds</groupId>
       <artifactId>nimbus-jose-jwt</artifactId>
     </dependency>
@@ -123,6 +128,12 @@
       <!-- For the BCryptPasswordEncoder the hashes of the imported clients are made with -->
       <groupId>commons-logging</groupId>
       <artifactId>commons-logging</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <!-- A standard OpenID Connect client, which users sign in to in the tests -->
+      <groupId>com.nimbusds</groupId>
+      <artifactId>oauth2-oidc-sdk</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>

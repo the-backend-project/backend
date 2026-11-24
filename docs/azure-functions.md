@@ -149,8 +149,9 @@ curl -u "admin:$(pulumi config get --path secretEnvironment.BOOTSTRAP_CLIENT_SEC
   -d grant_type=client_credentials "$(pulumi stack output url)token"
 ```
 
-Other settings of the identity provider, such as `TOKEN_AUDIENCE`, are set in `environment`, and clients to import in
-`CLIENTS`, as the function app has no file for `CLIENTS_FILE`. The bootstrap client id is not secret, but is in
+Other settings of the identity provider, such as `TOKEN_AUDIENCE` and `UPSTREAM_ISSUER`, are set in `environment`,
+secrets such as `UPSTREAM_CLIENT_SECRET` in `secretEnvironment`, and clients to import in `CLIENTS`, as the function app
+has no file for `CLIENTS_FILE`. The bootstrap client id is not secret, but is in
 `secretEnvironment` along with its secret, as the identity provider requires both or none, also when it migrates. To rotate the signing keys, set `SIGNING_KEYS` again and
 run `pulumi up`, which restarts the identity provider with the new keys.
 
@@ -238,7 +239,7 @@ Managed identities are Azure's. AWS and GCP have identities of their own, and ma
 identities log in to: Amazon RDS and Aurora, and Google Cloud SQL. Their tokens, too, are short-lived and sent as the
 password, so they fit the same approach: a small token source for each cloud, fetching tokens from the cloud's own
 credentials endpoint without its SDK, supplying the password for each new connection. That is
-[#186](https://github.com/the-backend-project/tits/issues/186). Azure Database for PostgreSQL takes Entra tokens, and
+[#186](https://github.com/the-backend-project/backend/issues/186). Azure Database for PostgreSQL takes Entra tokens, and
 could use `ManagedIdentityTokens` for another resource. The `deploy` module only deploys to Azure Functions.
 
 ## Configuration

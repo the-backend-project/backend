@@ -10,8 +10,8 @@ executable which boots in a few tens of milliseconds, and is packaged in a conta
 |---|---|
 | `Greeting` | A greeting, created for every `GET /`. Its transition to `Greeted` responds with a page saying hello, showing the greeting's entity id. |
 
-The request itself is an entity of the [HTTP inbox](http-inbox.md): the transition of the greeting triggers the
-response on the `RequestDispatching` entity of the request, which the listener sends to the client.
+The request itself is an entity of the [HTTP inbox](http-inbox.md), of the inbox request `GreetingRequest`: the
+transition of the greeting triggers the response on the request, which the listener sends to the client.
 
 The [state diagram](diagrams.md) is generated from the model. Hover over the name of an event for its details.
 
@@ -49,6 +49,20 @@ The image can also be built alone, from the repository root:
 
 ```shell
 docker build -f apps/hello-world/Dockerfile -t tits-hello-world .
+```
+
+### Backoffice
+
+The [backoffice](backoffice.md) of the demo, `apps/hello-world-backoffice`, is an application of its own, in which the
+greetings and the requests creating them are looked up. It is the smallest example of the backoffice of an
+application: a main method of one line. Compose runs it with the profile `backoffice`, at
+http://localhost:8081/backoffice/, with a login and role of its own, signing users in with an OpenID Connect provider
+of your own, e.g. Microsoft Entra ID, with the redirect URI `http://localhost:8081/backoffice/callback`:
+
+```shell
+export BACKOFFICE_ISSUER=... BACKOFFICE_CLIENT_ID=... BACKOFFICE_CLIENT_SECRET=...
+export BACKOFFICE_CLAIM=roles BACKOFFICE_CLAIM_VALUES=backoffice
+docker compose --profile backoffice up --build
 ```
 
 Native compilation takes a few minutes. For a quicker build of a less optimized image, as in CI, pass options to
@@ -144,7 +158,7 @@ work around.
   `CleartextHttp2ServerUpgradeHandler`, used by the reactor-netty HTTP server, holds a direct buffer, which fails the
   build with GraalVM 25. The HTTP inbox therefore initializes that class at run time. The setting could go away with a
   later Netty version.
-- **Runtime dependencies the server does not use.** The state machine depends on Hibernate Validator, and reactor-netty
+- **Runtime dependencies the server does not use.** The HTTP modules depend on Hibernate Validator, and reactor-netty
   brings QUIC and macOS DNS support. They end up on the runtime classpath of every application, lengthening native
   compilation. They could be optional, the way diagram generation with PlantUML is kept in the separate `diagram`
   module.
@@ -180,7 +194,7 @@ work around.
 ### HTTP
 
 - **Unroutable requests are bad requests.** The HTTP inbox responds with `400 Bad Request` to requests not matching
-  any route, where `404 Not Found` or `405 Method Not Allowed` would be expected for a web page.
+  any inbox request, where `404 Not Found` or `405 Method Not Allowed` would be expected for a web page.
 - **No readiness check.** Whether the state machine can reach its database is not exposed, so the demo's health check
   only tells whether the process serves HTTP. The demo implements it with an HTTP inbox listener filter, so it does not
   write to the database.

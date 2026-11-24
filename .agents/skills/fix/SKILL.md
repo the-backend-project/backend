@@ -7,21 +7,21 @@ argument-hint: <issue-number>
 Start work on the issue whose number the user gave, as in `/fix N` or "Fix #N". Below, N
 stands for that number.
 
-The repo is `the-backend-project/tits`; the board is
+The repo is `the-backend-project/backend`; the board is
 org project 1 ("The Backend"). The skill works for anyone who runs it with their own
 `gh` login. Find out once what the user can do:
 
 ```sh
-gh repo view the-backend-project/tits --json viewerPermission --jq .viewerPermission
+gh repo view the-backend-project/backend --json viewerPermission --jq .viewerPermission
 git remote -v
 ```
 
 - With `WRITE`, `MAINTAIN` or `ADMIN` the user can assign the issue, move it on the
   board and push branches to the repo. `<base>` below is the remote that points to
-  `the-backend-project/tits` (usually `origin`), and branches are pushed there too.
+  `the-backend-project/backend` (usually `origin`), and branches are pushed there too.
 - With less, the user works from a fork: skip steps 3 and 4 and say so. `<base>` is
-  the remote that points to `the-backend-project/tits` (usually `upstream`; add it
-  with `git remote add upstream https://github.com/the-backend-project/tits.git` if
+  the remote that points to `the-backend-project/backend` (usually `upstream`; add it
+  with `git remote add upstream https://github.com/the-backend-project/backend.git` if
   it is missing), and branches are pushed to the fork (usually `origin`).
 
 1. **Check for earlier work on the issue.** The work happens in a worktree of its
@@ -55,7 +55,7 @@ git remote -v
 
    ```sh
    ITEM=$(gh project item-add 1 --owner the-backend-project \
-     --url https://github.com/the-backend-project/tits/issues/N --format json --jq .id)
+     --url https://github.com/the-backend-project/backend/issues/N --format json --jq .id)
    gh project item-edit --id "$ITEM" \
      --project-id PVT_kwDOCtCyDc4An_-_ \
      --field-id PVTSSF_lADOCtCyDc4An_-_zgfpLXU \
@@ -90,8 +90,10 @@ git remote -v
    exclude `.worktrees` so other issues' worktrees don't show up.
 
 6. **Plan, and confirm the plan if it needs it.** Tell the user the branch name
-   and your plan: what you will change, where, and how you will test it. Then
-   decide whether the plan needs confirmation before you spend effort on it:
+   and the absolute path of the worktree, on a line of their own before any
+   question, so they can open it in their editor. Then give your plan: what
+   you will change, where, and how you will test it. Then decide whether the
+   plan needs confirmation before you spend effort on it:
 
    - **Ask first** when the task is large or the plan is not obvious: it touches
      several modules or public API, changes the database schema or behaviour users
@@ -141,15 +143,17 @@ git remote -v
 
    ```sh
    git push -u origin issue-N-<slug>
-   gh pr create --repo the-backend-project/tits --title "<what the change does>" --body "Closes #N. ..."
+   gh pr create --repo the-backend-project/backend --title "<what the change does>" --body "Closes #N. ..."
    ```
 
    When working from a fork, push to the fork's remote and add
    `--head <fork-owner>:issue-N-<slug>` to `gh pr create`.
 
    Include `Closes #N` in the body so that merging closes the issue. Tell the user
-   the PR's URL. If the fix is not complete, for example because a question is still
-   open or tests fail, don't open a PR. Tell the user what is left instead.
+   the PR's URL and the absolute path of the worktree again, since this is the
+   message they read at the end. If the fix is not complete, for example
+   because a question is still open or tests fail, don't open a PR. Tell the
+   user what is left instead.
 
    Leave the worktree in place after opening the PR, since review changes are
    made there. Once the PR is merged, remove it and the local branch from the

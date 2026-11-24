@@ -11,7 +11,7 @@ The project aims for stable, robust and long-lived systems, and it judges change
 
 ### Where to start
 
-* Issues labelled [good first issue](https://github.com/the-backend-project/tits/labels/good%20first%20issue) are
+* Issues labelled [good first issue](https://github.com/the-backend-project/backend/labels/good%20first%20issue) are
   small and self-contained. The Todo column of the [project board](https://github.com/orgs/the-backend-project/projects/1)
   lists what is planned next.
 * To learn the code, read [Getting started](docs/getting-started.md) and the [architecture](docs/architecture.md), and
@@ -25,12 +25,14 @@ The project aims for stable, robust and long-lived systems, and it judges change
 |-----------------------------------------------------|----------------------------------------------------------------------------------|
 | [core](core)                                        | The state machine, `TransitionModelBuilder` and the interface of the databases   |
 | [database-mssql](database-mssql), `database-pgsql-*` | The SQL and driver of each database, and the tests of core that need a database  |
+| [http](http)                                        | HTTP messages and clients, shared by the inbox and the outbox                    |
 | [http-inbox](http-inbox), [http-outbox](http-outbox) | Receiving and sending HTTP requests as entities                                  |
+| [backoffice](backoffice)                            | The web application for looking into the entities of an application              |
 | [test-api](test-api)                                | The API for tests to look into and manipulate the database of a state machine    |
 | [diagram](diagram)                                  | State diagrams and ER diagrams generated from a model                            |
 | [doc-diagrams](doc-diagrams)                        | Generates the diagrams of the documentation, from the templates and the apps     |
 | [templates](templates)                              | Ready-made models of a domain, such as card payments                             |
-| [apps](apps)                                        | The identity provider and the hello world demo, compiled to native executables   |
+| [apps](apps)                                        | The identity provider, the hello world demo and their backoffices, compiled to native executables |
 | [deploy](deploy)                                    | Deployment of the apps to Azure Functions with Pulumi                            |
 | [docs](docs)                                        | The documentation site, see [Documentation](#documentation)                      |
 | [bin](bin), [test](test)                            | Scripts to start the test databases and serve the docs, and the databases' setup |
@@ -52,9 +54,9 @@ Requires Java 25 and Maven 3.9 or later. The libraries target the latest LTS rel
 
 The tests need a database. They run on SQL Server by default, which can be started with `bin/start-mssql.sh`. To run
 them on PostgreSQL, start it with `bin/start-postgres.sh` and run the build with
-`-Ddatabase=pgsql-jdbc -pl '!apps/hello-world,!doc-diagrams'`, or with `-Ddatabase=pgsql-r2dbc` or
-`-Ddatabase=pgsql-vertx` for its reactive drivers. The hello world demo runs on SQL Server only, and the doc-diagrams
-module depends on it, so both are left out. The tests of the core module that
+`-Ddatabase=pgsql-jdbc -pl '!apps/hello-world,!apps/hello-world-backoffice,!doc-diagrams'`, or with
+`-Ddatabase=pgsql-r2dbc` or `-Ddatabase=pgsql-vertx` for its reactive drivers. The hello world demo runs on SQL Server
+only, and its backoffice and the doc-diagrams module depend on it, so all three are left out. The tests of the core module that
 need a database are run by the database modules, each on its own database.
 
 ### Dependency checksums
@@ -107,9 +109,10 @@ where N is the number of the issue. The agent then:
 4. Makes the change and runs the tests of the affected modules, and updates `docs`, the README and this guide to match.
 5. Merges or rebases what has landed on main, pushes the branch and opens a pull request that closes the issue.
 
-The worktree stays in place for review changes. Once the pull request is merged, the agent can remove the worktree and
-the local branch. In IntelliJ IDEA, mark `.worktrees` as excluded so the worktrees aren't indexed with the main
-checkout.
+The agent tells you the worktree's path when it presents its plan and again with the pull request, so you can open
+it in your editor; `git worktree list` lists them all. The worktree stays in place for review changes. Once the pull
+request is merged, the agent can remove the worktree and the local branch. In IntelliJ IDEA, mark `.worktrees` as
+excluded so the worktrees aren't indexed with the main checkout.
 
 The skills are in [.agents/skills](.agents/skills), and both agents read the project's conventions from
 [AGENTS.md](AGENTS.md). The project's settings for each agent allow the common commands without asking: Maven (except
@@ -120,6 +123,8 @@ deploying), the scripts in [bin](bin), and the `git` and `gh` commands that only
   permissions and other settings in `.claude/settings.local.json`, which git ignores.
 - **Mistral Vibe** takes its settings from [.vibe/config.toml](.vibe/config.toml), which also lets commands run for
   up to an hour, because builds with tests take longer than Vibe's default of five minutes. Vibe loads the project's
-  settings and skills only once you trust the folder. Put your own settings in `~/.vibe/config.toml`, and your own
+  settings and skills only once you trust the folder. It matches commands by their beginning, so it refuses
+  `mvn deploy`, but not a deploy after other goals or options, e.g. `mvn clean deploy`. The file lists the migrations
+  Vibe has applied to it, so that Vibe doesn't rewrite it. Put your own settings in `~/.vibe/config.toml`, and your own
   instructions, such as how tools get on the PATH, in `~/.vibe/AGENTS.md`. Vibe can't keep the docs server running, so
   `/serve-docs` only does the strict build there; run `bin/serve-docs.sh` yourself for live reload.

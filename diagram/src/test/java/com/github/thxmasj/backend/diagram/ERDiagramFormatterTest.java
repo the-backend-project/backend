@@ -9,6 +9,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.github.thxmasj.backend.core.BasicEventType;
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityModelGroup;
 import com.github.thxmasj.backend.core.EntitySelector;
 import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.IdEntityModel;
@@ -34,38 +35,42 @@ class ERDiagramFormatterTest {
   static final EventType<Void, Void> SpeedDecreased = BasicEventType.of("Speed decreased", UUID.randomUUID());
   static final EventType<String, String> NameClaimed = BasicEventType.of("Name claimed", UUID.randomUUID(), DataType.string());
 
-  static final EntityModel Car = EntityModel.of("Car", UUID.randomUUID());
-  static final EntityModel Speed = EntityModel.of("Speed", UUID.randomUUID());
-  static final EntityModel Engine = EntityModel.of("Engine", UUID.randomUUID());
+  static final EntityModel Car = EntityModel.of("Car", UUID.randomUUID(), ERDiagramFormatterTest::carTransitions);
+  static final EntityModel Speed = EntityModel.of("Speed", UUID.randomUUID(), ERDiagramFormatterTest::speedTransitions);
+  static final EntityModel Engine = EntityModel.of("Engine", UUID.randomUUID(), Map::of);
   static final IdEntityModel Ids = IdEntityModel.of("Ids", UUID.randomUUID(), NameClaimed);
 
-  static Map<EntityModel, Map<State, List<TransitionModel<?, ?>>>> model() {
+  static List<EntityModel> model() {
+    return List.of(Car, Speed, Ids);
+  }
+
+  private static Map<State, List<TransitionModel<?, ?>>> carTransitions() {
     return Map.of(
-        Car, Map.of(
-            Begin, List.of(
-                onEvent(CarStarted).to(States.Moving)
-                    .trigger(SpeedIncreased).on(Speed).identifiedBy(newEntityId())
-                    .reversible(
-                        assemble((_, _) -> UUID.randomUUID())
-                            .trigger(SpeedDecreased).on(Speed).identifiedBy(EntitySelector::entityId)
-                    )
-                    .output()
-            ),
-            States.Moving, List.of(
-                onEvent(CarStopped).to(States.Stopped)
-                    .trigger(SpeedDecreased).on(Speed).identifiedBy(newEntityId())
-                    .trigger(CarStopped).on(Engine).identifiedBy(newEntityId())
-                    .output()
-            ),
-            States.Stopped, List.of()
+        Begin, List.of(
+            onEvent(CarStarted).to(States.Moving)
+                .trigger(SpeedIncreased).on(Speed).identifiedBy(newEntityId())
+                .reversible(
+                    assemble((_, _) -> UUID.randomUUID())
+                        .trigger(SpeedDecreased).on(Speed).identifiedBy(EntitySelector::entityId)
+                )
+                .output()
         ),
-        Speed, Map.of(
-            Begin, List.of(
-                onEvent(SpeedIncreased).toSelf().output(),
-                onEvent(SpeedDecreased).toSelf().output()
-            )
+        States.Moving, List.of(
+            onEvent(CarStopped).to(States.Stopped)
+                .trigger(SpeedDecreased).on(Speed).identifiedBy(newEntityId())
+                .trigger(CarStopped).on(Engine).identifiedBy(newEntityId())
+                .output()
         ),
-        Ids, Ids.transitions()
+        States.Stopped, List.of()
+    );
+  }
+
+  private static Map<State, List<TransitionModel<?, ?>>> speedTransitions() {
+    return Map.of(
+        Begin, List.of(
+            onEvent(SpeedIncreased).toSelf().output(),
+            onEvent(SpeedDecreased).toSelf().output()
+        )
     );
   }
 
@@ -80,12 +85,7 @@ class ERDiagramFormatterTest {
         }
         """,
         """
-        entity "Ids" as E3 <<id>> {
-          {field} Name claimed : string → string
-        }
-        """,
-        """
-        entity "Speed" as E4 {
+        entity "Speed" as E3 {
           {field} Speed increased
           {field} Speed decreased
         }
@@ -108,10 +108,15 @@ class ERDiagramFormatterTest {
   void triggersRelateEntities() {
     String diagram = new ERDiagramFormatter("Test", model()).format();
     assertThat(diagram).contains(
-        "E1 --> E4 : Car started ↪ Speed increased\\n<color:#7a0000>Car started ↪ Speed decreased</color>\\nCar stopped ↪ Speed decreased\n",
+        "E1 --> E3 : Car started ↪ Speed increased\\n<color:#7A0000>Car started ↪ Speed decreased</color>\\nCar stopped ↪ Speed decreased\n",
         "E1 --> E2 : Car stopped ↪ Car stopped\n"
     );
-    assertThat(diagram).doesNotContain("E3 -->", "E4 -->");
+    assertThat(diagram).doesNotContain("E2 -->", "E3 -->");
+  }
+
+  @Test
+  void idAndIndexEntitiesAreLeftOut() {
+    assertThat(new ERDiagramFormatter("Test", model()).format()).doesNotContain("Ids", "Name claimed", "E4");
   }
 
   @Test
@@ -120,8 +125,7 @@ class ERDiagramFormatterTest {
     assertThat(diagram).contains(
         "entity \"Car\" as E1 {\n}\n",
         "entity \"Engine\" as E2 {\n}\n",
-        "entity \"Ids\" as E3 <<id>> {\n}\n",
-        "entity \"Speed\" as E4 {\n}\n",
+        "entity \"Speed\" as E3 {\n}\n",
         "E1 --> E2 : Car stopped ↪ Car stopped\n"
     );
     assertThat(diagram).doesNotContain("{field}");
@@ -138,7 +142,57 @@ class ERDiagramFormatterTest {
   void rendersToSvg(@TempDir Path directory) throws IOException {
     File file = new ERDiagramFormatter("Test", model()).formatToImage(directory.toString());
     assertThat(file.getName()).isEqualTo("Test.er.svg");
-    assertThat(Files.readString(file.toPath())).startsWith("<svg").contains("Car", "Speed", "Engine", "Ids");
+    assertThat(Files.readString(file.toPath())).startsWith("<svg").contains("Car", "Speed", "Engine")
+        // Drawn in the colour scheme of the page, so dark mode doesn't put it on an opaque background
+        .contains("svg{color-scheme:light dark}");
+  }
+
+  static final EntityModel Garage = EntityModel.of("Garage", UUID.randomUUID(), ERDiagramFormatterTest::garageTransitions);
+  static final EntityModel Workshop = EntityModel.of("Workshop", UUID.randomUUID(), ERDiagramFormatterTest::workshopTransitions);
+  static final EntityModelGroup Places = EntityModelGroup.of("Places", UUID.randomUUID(), m -> m == Garage || m == Workshop);
+  static final EventType<Void, Void> CarParked = BasicEventType.of("Car parked", UUID.randomUUID());
+  /// A car which parks in a place
+  static final EntityModel ParkedCar = EntityModel.of("Car", UUID.randomUUID(), ERDiagramFormatterTest::parkedCarTransitions);
+
+  /// A model where the car triggers an event on whichever place of the session it is in
+  static List<EntityModel> modelWithGroup() {
+    return List.of(ParkedCar, Garage, Workshop);
+  }
+
+  private static Map<State, List<TransitionModel<?, ?>>> parkedCarTransitions() {
+    return Map.of(
+        Begin, List.of(
+            onEvent(CarStopped).to(States.Stopped)
+                .trigger(CarParked).on(Places).identifiedBy(EntitySelector.entityIdFromSession())
+                .output()
+        ),
+        States.Stopped, List.of()
+    );
+  }
+
+  private static Map<State, List<TransitionModel<?, ?>>> garageTransitions() {
+    return Map.of(Begin, List.of(onEvent(CarParked).toSelf().output()));
+  }
+
+  private static Map<State, List<TransitionModel<?, ?>>> workshopTransitions() {
+    return Map.of(Begin, List.of(onEvent(CarParked).toSelf().output()));
+  }
+
+  @Test
+  void triggerOnGroupRelatesToEachEntityOfTheGroup() {
+    String diagram = new ERDiagramFormatter("Test", modelWithGroup()).format();
+    assertThat(diagram)
+        .contains("E1 --> E2 : Car stopped ↪ Car parked\n", "E1 --> E3 : Car stopped ↪ Car parked\n")
+        .contains("entity \"Garage\" as E2", "entity \"Workshop\" as E3")
+        .doesNotContain("Places");
+  }
+
+  @Test
+  void triggerOnGroupIsDrawnInStateDiagram() {
+    // The details of the arrow rather than the SVG, which only shows them where Graphviz does the layout
+    var labels = new PlantUMLFormatter(ParkedCar).diagram().labelsBySourceLine().values();
+    assertThat(labels.stream().flatMap(List::stream).flatMap(label -> label.details().stream()))
+        .contains("<&share>Car parked@Places");
   }
 
 }

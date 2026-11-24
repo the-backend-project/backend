@@ -3,11 +3,11 @@ package com.github.thxmasj.backend.http.outbox;
 import static com.github.thxmasj.backend.core.Validated.invalid;
 
 import com.github.thxmasj.backend.core.Validated;
-import com.github.thxmasj.backend.core.http.JsonContentValidator;
-import com.github.thxmasj.backend.core.message.http.HttpResponseMessage;
+import com.github.thxmasj.backend.http.internal.JsonContentValidator;
+import com.github.thxmasj.backend.http.HttpResponse;
 import java.util.function.Function;
 
-public class JsonResponseValidator<T> implements Function<HttpResponseMessage, Validated<T>> {
+public class JsonResponseValidator<T> implements Function<HttpResponse<byte[]>, Validated<T>> {
 
   private final int[] acceptedStatusCodes;
   private final JsonContentValidator<T> jsonContentParser;
@@ -23,7 +23,7 @@ public class JsonResponseValidator<T> implements Function<HttpResponseMessage, V
   }
 
   @Override
-  public Validated<T> apply(HttpResponseMessage response) {
+  public Validated<T> apply(HttpResponse<byte[]> response) {
     for (int v : acceptedStatusCodes) {
       if (v == response.statusCode())
         return jsonContentParser.apply(response.body());

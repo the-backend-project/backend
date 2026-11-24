@@ -1,7 +1,5 @@
 package com.github.thxmasj.backend.core;
 
-import com.github.thxmasj.backend.core.message.http.HttpResponseMessage;
-import java.time.Duration;
 import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -29,19 +27,31 @@ public interface Listener {
         private final String type;
         private final Severity severity;
         private final ZonedDateTime timestamp;
+        private final boolean stored;
 
         public Event(int number, String type) {
           this(number, type, Severity.Info, null);
         }
 
         public Event(int number, String type, Severity severity, ZonedDateTime timestamp) {
+          this(number, type, severity, timestamp, true);
+        }
+
+        public Event(int number, String type, Severity severity, ZonedDateTime timestamp, boolean stored) {
           this.number = number;
           this.type = type;
           this.severity = severity;
           this.timestamp = timestamp;
+          this.stored = stored;
         }
 
+        /// The number of the event in the event log of the entity. An event which is not stored has the number it
+        /// would have had, which the next event stored on the entity gets.
         public int number() {return number;}
+
+        /// Whether the event is stored. An event of a type which is not stored, or of an entity of the session only,
+        /// is not (see [EventType#stored()] and [EntityModel#stored()]), so the event log does not have it.
+        public boolean stored() {return stored;}
 
         public String type() {return type;}
 
@@ -67,7 +77,7 @@ public interface Listener {
 
     /// The changes of an event are stored. A change is an accepted event, a delayed event, which is a
     /// [Change.DelayedEvent], or a conditional trigger, which has no event. The changes are given in the order they
-    /// were calculated.
+    /// were calculated, with the accepted events which are not stored too (see [Change.Event#stored()]).
     default void changeAccepted(
         String correlationId,
         List<Change> changes
@@ -75,71 +85,16 @@ public interface Listener {
 
   default void processNextDelayedTriggerFailed(Throwable t) {}
 
-  default void forwardingAttempt(
-      UUID requestId,
-      EntityModel entityModel,
-      String queue,
-      UUID entityId,
-      int eventNumber,
-      ZonedDateTime enqueuedAt,
-      int attempt,
-      String correlationId
-  ) {}
-
-  default void forwardingCompleted(
-      UUID requestId,
-      EntityModel entityModel,
-      String queue,
-      UUID entityId,
-      int eventNumber,
-      ZonedDateTime enqueuedAt,
-      int attempt,
+  /// The transition of the event on the entity failed, so nothing of the change is stored: a function of it, e.g. an
+  /// assembler, guard or data adapter, threw an exception, or its transaction was refused when its changes were
+  /// stored, e.g. as it would leave two delayed triggers on an entity with the same number, and then the transition is
+  /// the first one of the transaction. It is told once, for the transition the exception was thrown in, also if that
+  /// one was triggered by another. The exception is passed on to the one who triggered the event.
+  default void transitionFailed(
       String correlationId,
-      HttpResponseMessage receipt,
-      String reason
-  ) {}
-
-  default void forwardingBackedOff(
-      UUID requestId,
       EntityModel entityModel,
-      String queue,
       UUID entityId,
-      int eventNumber,
-      ZonedDateTime enqueuedAt,
-      int attempt,
-      String correlationId,
-      String reason,
-      ZonedDateTime nextAttemptAt,
-      Duration backoff
+      EventType<?, ?> eventType,
+      Throwable failure
   ) {}
-
-  default void forwardingDead(
-      UUID requestId,
-      EntityModel entityModel,
-      String queue,
-      UUID entityId,
-      int eventNumber,
-      ZonedDateTime enqueuedAt,
-      int attempt,
-      String correlationId,
-      String reason
-  ) {}
-
-  default void forwardingDeadByExhaustion(
-      UUID requestId,
-      EntityModel entityModel,
-      String queue,
-      UUID entityId,
-      int eventNumber,
-      ZonedDateTime enqueuedAt,
-      int attempt,
-      String correlationId,
-      String reason
-  ) {}
-
-  default void forwardingDeadlock(String queue) {}
-
-  default void forwardingError(String queue, Throwable error) {}
-
-  default void forwardingEmptyQueue(String queue) {}
 }

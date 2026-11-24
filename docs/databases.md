@@ -98,9 +98,10 @@ Cons:
 
 Pros:
 
-* Non-blocking, on the event loops of Reactor Netty, which the state machine uses already.
+* Non-blocking, on the event loops of Reactor Netty, which the HTTP inbox and outbox use already.
 * R2DBC is a standard API built on Reactive Streams, which fits the state machine's Reactor pipeline.
-* Few dependencies of its own: the R2DBC SPI, the driver, its pool and the SCRAM authentication.
+* Few dependencies of its own: the R2DBC SPI, the driver, its pool, the SCRAM authentication, and Reactor Netty if
+  the application has no HTTP inbox or outbox.
 
 Cons:
 
@@ -141,7 +142,7 @@ finds the database behind it among the modules on the module path or class path:
 ```java
 DataSource dataSource = new DataSourceBuilder(new PgsqlDatabase(), config).buildPooled();
 DataSource schemaDataSource = new DataSourceBuilder(new PgsqlDatabase(), adminConfig).build();
-new StateMachine(delayer, transitions, dataSource, schemaDataSource, schemaName, role, clock, listener);
+new StateMachine(delayer, entityModels, dataSource, schemaDataSource, schemaName, role, clock, listener);
 ```
 
 With a reactive module, the state machine is given the module's `Database` and a client of it, which has a connection
@@ -151,7 +152,7 @@ pool of its own. The schema data source is a JDBC one, from the same `Database`:
 Database database = new PgsqlVertxDatabase();
 new StateMachine(
     delayer,
-    transitions,
+    entityModels,
     database,
     database.client(config),
     database.dataSource(adminConfig),
@@ -168,7 +169,7 @@ The state machine closes the data source or client, and with it the connection p
 ## Testing
 
 The tests run on SQL Server by default. To run them on PostgreSQL, run the build with
-`-pl '!apps/hello-world,!doc-diagrams'` and `-Ddatabase=pgsql-jdbc`, `-Ddatabase=pgsql-r2dbc` or
-`-Ddatabase=pgsql-vertx`. The tests of the core module that need a
-database are run by the module of the database, and the other modules' tests use it too. See the
-[contributing guide](https://github.com/the-backend-project/tits/blob/main/CONTRIBUTING.md#building).
+`-pl '!apps/hello-world,!apps/hello-world-backoffice,!doc-diagrams'` and `-Ddatabase=pgsql-jdbc`,
+`-Ddatabase=pgsql-r2dbc` or `-Ddatabase=pgsql-vertx`. The tests of the core module that need a database are run by the
+module of the database, and the other modules' tests use it too. See the
+[contributing guide](https://github.com/the-backend-project/backend/blob/main/CONTRIBUTING.md#building).

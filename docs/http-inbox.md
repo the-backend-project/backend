@@ -1,24 +1,254 @@
 # HTTP inboxes
 
-An inbox is a set of entity models whose entities are the requests the application receives, drawn in the same kind
-of state diagram as those of the application (see the [state diagrams](#state-diagrams)).
+An inbox is the set of requests an application receives. Each type of request is an `HttpInboxRequest`: an entity
+model whose entities are the requests of that type, with a body of one type, which trigger one event type on one entity
+model of the application. Like an [outbox](http-outbox.md) request, every request has a state and an event log of its
+own, drawn in the same kind of state diagram as the entities of the application (see the
+[state diagrams](#state-diagrams)).
 
-The `HttpInboxListener` receives HTTP requests with reactor-netty and passes them to the entity models of the inbox.
-A `RequestRouting` entity is created for every request, and matches it against the routes of the application. A route
-validates the request, and gives the event type and entity it triggers. A `RequestDispatching` entity is created for
-every routed request, which triggers the event on the application's entity and waits for it to respond. The response
-is an event on the `RequestDispatching` entity, of a `ResponseEventType`, which the listener sends to the client.
+```java
+HttpInboxRequest<Order> PlaceOrder = HttpInboxRequest
+    .matching(m -> m.method() == Method.PUT && m.uri().getPath().startsWith("/orders/"))
+    .contentParser(HttpInbox.jsonParser(Order.class))
+    .deduplicateOn(parseMessageId("PUT /orders/(.*)", 1))
+    .authorizer(HttpInbox.bearerToken(verifier, "orders"))
+    .process(OrderPlaced, Orders, RoutedRequest::body, newEntity())
+    .build("PlaceOrder", UUID.fromString("..."));
+```
+
+<object data="../images/com.github.thxmasj.backend.http.inbox.PlaceOrder.svg" type="image/svg+xml"></object>
+
+[Open the PlaceOrder diagram in full size](images/com.github.thxmasj.backend.http.inbox.PlaceOrder.svg)
+
+| Setting           | Required | What it does                                                                                     |
+|-------------------|----------|--------------------------------------------------------------------------------------------------|
+| `matching`        | Yes      | Tells which requests are of this type, e.g. by method and path                                    |
+| `contentParser`   | Yes      | Parses the body, or `noContent()` to ignore it. An invalid body is answered with 400              |
+| `process`         | Yes      | The event type the request triggers, the entity model and the entity, e.g. `newEntity()` or `parseEntityId(...)`, and the event's data, which an event without data leaves out. Repeated with a content predicate for [content routing](#content-routing) |
+| `deduplicateOn`   | No       | The id of the request, by which a retried request is recognised. Without it, nothing is deduplicated, and the request can't be rolled back |
+| `authorizer`      | No       | Authorizes the request, e.g. with a bearer token (see [access tokens](#access-tokens))           |
+| `response`        | No       | A response of the application of its own, made from a `ResponseEventType` the application triggers |
+| `normalizer`      | No       | Normalizes a request before it is compared with an earlier request with the same message id       |
+| `rollback`        | No       | Requests rolling back a request by its message id, with an authorizer of their own if the request has one. Needs `deduplicateOn`, see [rollback](#rollback) |
+| `masking`         | No       | What of the requests and responses is masked in the event log, besides the credentials every request masks, see [masking](#masking) |
+| `notStored`       | No       | Neither the requests nor their routing are stored, see [requests not stored](#requests-not-stored). Not with `deduplicateOn` |
+
+`HttpInbox.of(requests)` creates the inbox of the requests. Its `entityModels()` are the inbox's own, the inbox
+requests, `RequestRouting`, `MessageIds` and `Index`, to create the state machine with. The state machine also runs the
+entity models their transitions trigger events on, i.e. the models of the application the requests are processed on,
+and in turn the models those trigger events on, e.g. outbox requests. The listener is given the inbox too:
+
+```java
+HttpInbox inbox = HttpInbox.of(List.of(PlaceOrder));
+StateMachine stateMachine = new StateMachine(inbox.entityModels(), dataSource, schemaName, true);
+DisposableServer server = new HttpInboxListener(stateMachine, inbox).listen(port);
+```
+
+An inbox request declares the custom responses its own processes give, and no others. The inbox checks this per
+request, when its `entityModels()` are first asked for, e.g. by the state machine, rather than when it is created, so
+that the inbox may be a constant declared before the models of the application. It starts from the event of each process on its entity model, and follows, through the models triggered on:
+
+- the transitions taken on that event, in any state, with every transition they may choose, as which one is taken is
+  decided at runtime;
+- the events those transitions trigger at once on other entities, which are calculated in the same session, followed
+  in the same way.
+
+The event types triggered on `HttpInbox.Request` along the way are the responses the request may get. Each must be
+`RequestCompleted`, `InvalidRequestCompleted`, `FailedRequestCompleted` or one the request has a `response` for.
+Otherwise the check fails, naming the request, the response and the event giving it, rather than leaving the response
+to be rejected when it is given. A request on an entity model shared with other requests only declares the responses
+its own events lead to.
+
+Delayed triggers (`after(..)`), conditional triggers, reversals and actions such as sending an outbox request are not
+followed, as what they lead to is calculated later. A response given that way, e.g. by the callback of an outbox
+request, is not checked in advance. It is rejected when it is given, if the request doesn't take it.
+
+The `HttpInboxListener` receives HTTP requests with reactor-netty and passes them to the inbox. A `RequestRouting` entity
+is created for every request, of the inbox's `requestRouting()`, and routes it to a new entity of the first inbox
+request matching it. Its transitions depend on the inbox requests, so each inbox has a routing model of its own, and
+starting a request on it takes the inbox's `trigger()`. The inbox requests give their responses to the routing model of
+the session, whichever inbox it is of. The routing models of all inboxes have the same id. A `RequestRouting` entity is
+an [entity of the session only](entities.md#events-and-entities-not-stored): it is not stored, as the inbox request
+stores the request and the response, but it is found by every transaction of the session of the request, e.g. the one
+of the callback of an outbox request which the application answers in. A request no inbox request matches is answered
+with 400 Bad Request, and not stored either. The inbox request validates the request: its body, message id,
+authorization and the entity it selects. If it is valid, the inbox request triggers the event on the application's
+entity and waits for the application to respond.
+
+The application responds by triggering an event of a `ResponseEventType` on the inbox request, e.g. `RequestCompleted`,
+which responds 201 Created, `InvalidRequestCompleted` (400) or `FailedRequestCompleted` (500), or one the inbox request
+has a `response` for. It doesn't know which inbox request triggered it, since several can trigger the same event, so
+it triggers the response on `HttpInbox.Request`, the group of all inbox requests, identified by the session. The state
+machine takes it to the inbox request of the session:
+
+```java
+.trigger(RequestCompleted).with(d -> tuple("Order placed", d)).on(HttpInbox.Request).identifiedBy(entityIdFromSession())
+```
+
+The response goes back to the `RequestRouting` entity, which the listener sends to the client, as the application gave
+it rather than as it is stored, which may be [masked](#masking).
 
 Requests carrying a message id are deduplicated through the `MessageIds` id entity model: a retried request gets the
-response of the first one, without triggering anything again. Filters on the listener can authenticate, log or rewrite
-requests before they reach the inbox.
+response of the first one, also if the application rejected it, without triggering anything again. A message id is
+the client's: the authorized subject and the id, or the id alone without an authorizer. All inbox requests share
+`MessageIds`, so a client can use a message id once, for one request of one type. A request with the message id of an
+earlier request it differs from, of the same or another inbox request, is answered with 400 Bad Request and the detail
+`Conflict`, and so is a request with the message id of a request still being dispatched. The requests of an inbox
+request without `deduplicateOn` are not deduplicated: each one is dispatched to the application, also when it
+repeats an earlier one. Filters on the listener can authenticate, log or rewrite requests before they reach the inbox.
 
 A response of 500 Internal Server Error, which the application triggers with `FailedRequestCompleted`, is an event of
 [severity](monitoring.md#severity) `Error`.
 
+If a function the inbox request is given throws an exception, e.g. its content parser, or its normalizer when a
+retried request is compared with the first one, the transition fails and nothing of it is stored. The listener answers
+the request with 500 Internal Server Error, and the state machine tells its `Listener` of the
+[failed transition](monitoring.md#the-lines), which `JsonLinesListener` writes as an error. The same goes for a
+transition of the application the request triggers. A request the client got wrong is better answered with an invalid
+`Validated` or a refused `Authorization`, which give 4xx and the reason.
+
+## Content routing
+
+The requests to one endpoint can trigger different events, by their content. An inbox request then has several
+processes, each chosen by a predicate on the parsed body, given with `when(description, predicate)`. The body is parsed
+once, the processes are tried in the order they are given, and the first one whose predicate matches is taken. A
+request matching none is answered with 400 Bad Request and the detail `No process for the content`. A process without
+a predicate takes any content, so it can only be the last one, as a default.
+
+Each process has its own event type, entity model, input and entity selector, while `deduplicateOn`, the
+authorizer and the normalizer are those of the endpoint. Here the result of an enrolment activates the payment token
+it is about, or rejects it, by its status:
+
+```java
+HttpInboxRequest<EnrolmentResult> EnrolmentResultReceived = HttpInboxRequest
+    .matching(m -> m.requestLine().matches("POST /enrolments"))
+    .contentParser(HttpInbox.jsonParser(EnrolmentResult.class))
+    .deduplicateOn((_, result) -> valid(result.messageId()))
+    .process(
+        when("status == Accepted", result -> result.status() == EnrolmentStatus.ACCEPTED),
+        Activate, PaymentToken, RoutedRequest::body, (_, result) -> entityId(result.tokenReference())
+    )
+    .process(
+        when("status == Rejected", result -> result.status() == EnrolmentStatus.REJECTED),
+        Reject, PaymentToken, (_, result) -> entityId(result.tokenReference())
+    )
+    .build("EnrolmentResultReceived", UUID.fromString("..."));
+```
+
+<object data="../images/com.github.thxmasj.backend.http.inbox.EnrolmentResultReceived.svg" type="image/svg+xml"></object>
+
+[Open the EnrolmentResultReceived diagram in full size](images/com.github.thxmasj.backend.http.inbox.EnrolmentResultReceived.svg)
+
+The diagram shows the choice: a `Request dispatched [status == Accepted]` and a
+`Request dispatched [status == Rejected]`, each triggering its event. A single process can have a predicate too, e.g.
+to answer an authentication response with an error with 400 Bad Request.
+
+## Rollback
+
+An inbox request with a `rollback` takes the requests the rollback's matcher matches as rollbacks of the request with
+the message id the rollback's `deduplicateOn` gives, e.g. a `DELETE` with the id of an earlier `PUT`. Only an inbox
+request with `deduplicateOn` can have a rollback, as a request is found by its message id: `rollback` is a method of the
+builder `deduplicateOn` returns. Here `PlaceOrder` is rolled back by a `DELETE` with the id of the order:
+
+```java
+HttpInboxRequest<Order> PlaceOrder = HttpInboxRequest
+    .matching(m -> m.method() == Method.PUT && m.uri().getPath().startsWith("/orders/"))
+    .contentParser(HttpInbox.jsonParser(Order.class))
+    .deduplicateOn(parseMessageId("PUT /orders/(.*)", 1))
+    .authorizer(HttpInbox.bearerToken(verifier, "orders"))
+    .process(OrderPlaced, Orders, RoutedRequest::body, newEntity())
+    .rollback(Rollback
+        .matching(m -> m.method() == Method.DELETE && m.uri().getPath().startsWith("/orders/"))
+        .noContent()
+        .deduplicateOn(parseMessageId("DELETE /orders/(.*)", 1))
+        .authorizer(HttpInbox.bearerToken(verifier, "orders")))
+    .build("PlaceOrder", UUID.fromString("..."));
+```
+
+<object data="../images/com.github.thxmasj.backend.http.inbox.PlaceOrderWithRollback.svg" type="image/svg+xml"></object>
+
+[Open the PlaceOrder diagram in full size](images/com.github.thxmasj.backend.http.inbox.PlaceOrderWithRollback.svg)
+
+The rollback is built like the inbox request, starting with `Rollback.matching(...)`:
+
+| Setting         | Required               | What it does                                                                                       |
+|-----------------|------------------------|----------------------------------------------------------------------------------------------------|
+| `matching`      | Yes                    | Tells which requests are rollbacks of a request of this type, e.g. by method and path               |
+| `contentParser` | Yes                    | Parses the content of a rollback, or `noContent()` to ignore it. Invalid content is answered with 400 |
+| `deduplicateOn` | Yes                    | The message id of the request rolled back, from e.g. the path or the content, the same one the request's `deduplicateOn` gives. An invalid one is answered with 400 |
+| `authorizer`    | If the request has one | Authorizes the rollback                                                                            |
+| `normalizer`    | No                     | Normalizes a rollback before it is compared with the first rollback of the request                 |
+
+A rollback goes to the entity of that request, which rolls back the events the request caused on the application and
+responds 201 Created with `Rolled back`. A rollback of a request not received yet is answered with `Nothing to roll
+back`, and takes the message id, so that the request is rejected with 422 Unprocessable Entity if it arrives later.
+
+A rollback finds the request, and the request finds the events to roll back, through the event logs of the entities
+involved. Here a `DELETE /orders/42` rolls back the `PUT /orders/42` of the `PlaceOrder` inbox request, whose process
+placed an order. Each entity is a box, like a class in a class diagram, with the name of its entity model, and the kind
+of entity as a stereotype unless it is a plain entity model, over its events, the oldest on top. The `MessageIds`
+entity has the same entity id as the `PlaceOrder` entity. An event in italics, with a dashed border, is not stored: it
+leads to a choice, of which only the event of the chosen transition is stored, or is of an entity of the session only,
+a box with a dashed border, as the `RequestRouting` entities are. Solid arrows are triggers, and dashed arrows the
+event references:
+
+<object data="../images/com.github.thxmasj.backend.http.inbox.Rollback.svg" type="image/svg+xml"></object>
+
+[Open the rollback diagram in full size](images/com.github.thxmasj.backend.http.inbox.Rollback.svg)
+
+1. Each HTTP request is received by a `RequestRouting` entity of its own, of the session only, which routes it to its
+   inbox request.
+2. A valid request claims its message id, the subject and the id its `deduplicateOn` gives, on the `MessageIds` entity
+   with the same entity id as the request's own entity, unless an earlier request or rollback has claimed it.
+3. The process of the request triggers its event on the application, here `Order placed` as event `n` of the order.
+   `Request accepted` keeps an `EventReference` to it: the entity id of the order and the event number. The application responds by
+   triggering `Request completed`, which gives the response to the `RequestRouting` entity of the request.
+4. A rollback is routed to the entity which claimed the message id its `deduplicateOn` gives, and there takes the
+   `EventReference` of `Request accepted`. It triggers `Events rolled back` on the entity referred to, rolling it back
+   to the event before the one referred to, `n − 1`. `Rollback request accepted` refers to that rollback event, and
+   claims the message id for the rollback.
+
+The events rolled back stay in the event log, but are no longer effective: the state of the order, and everything read
+from its log, is as it was after event `n − 1`. This includes events after `n` which the request did not cause, so the
+application decides, by its transitions on `Events rolled back`, in which states of the entity a rollback is accepted.
+
+A request is rolled back once. A rollback repeated after the first one, which has the same message id, is compared with
+the first one as a request is: equal after normalizing, it is a retry and gets the response of the first one in both
+cases, and otherwise it is a second rollback, which is rejected with 400 Bad Request and `Conflict`. Without a
+normalizer, a rollback is compared as it is, headers included, so a retry must be sent as it was. A normalizer which
+removes e.g. the date and tracing headers lets a retry differ in them, and one which keeps e.g. `X-Correlation-Id` tells
+a second rollback by it.
+
+A rollback has content of its own, of a type of its own, which its `deduplicateOn` and `authorizer` read. The message
+id can be in the content instead of the path, e.g. a reversal posted with the id of the order:
+
+```java
+.rollback(Rollback
+    .matching(m -> m.requestLine().equals("POST /order-reversals"))
+    .contentParser(HttpInbox.jsonParser(OrderReversal.class))
+    .deduplicateOn((_, reversal) -> valid(reversal.orderId()))
+    .authorizer(HttpInbox.bearerToken(verifier, "orders")))
+```
+
+As the content of a rollback isn't the request's, the authorizer of the request isn't used for it. A request with an
+authorizer takes a rollback with an authorizer of its own, and a request without one a rollback without one. The
+message id of a request is the authorized subject's, so the rollback is of the request the same subject sent: another
+subject's rollback with the message id has nothing to roll back. The message ids of all inbox requests share
+`MessageIds`, but a rollback only finds requests of its own inbox request: the message id of another type of request
+has nothing to roll back. The processes of an inbox request with a rollback must have the same entity model, which the
+rollback rolls the events back on.
+
+## The requests of an entity
+
+An accepted request is indexed by the entity of the application its event was triggered on: the inbox request gets an
+index event `Process referenced` of the index entity model `RequestIndex`, `HttpInbox.Index`, with the entity id of the
+application's entity as key. The inbox requests of an entity are thereby found by its entity id, as its
+[outbox requests](http-outbox.md) are by the `Process referenced` of the outbox, e.g. by the
+[backoffice](backoffice.md). `Index` is one of the entity models of the inbox, along with `MessageIds`.
+
 ## Access tokens
 
-Routes requiring an access token, e.g. one issued by the [identity provider](identity-provider.md), take
+Inbox requests requiring an access token, e.g. one issued by the [identity provider](identity-provider.md#signing-users-in), take
 `HttpInbox.bearerToken(verifier, scopes...)` as their authorizer, which authorizes the `sub` of the bearer token if the
 verifier finds it valid and it has the scopes. The `AccessTokenVerifier` is given the keys of the issuer, its issuer
 URI and optionally the audience the tokens must have:
@@ -40,15 +270,198 @@ with the claims `sub` and `client_id`. A refused request is answered as
 challenge `Bearer` without a bearer token, 401 and the error `invalid_token` with a token that is invalid or expired,
 and 403 and the error `insufficient_scope` with a token lacking a scope. An authorizer returns an `Authorization`,
 either `Authorized` with the subject or `Refused` with the status code, challenge and reason of the response;
-`Authorization.refused(reason)` refuses with 400. The keys are fetched once, so the verifier must be created again to see keys the
-issuer has added since.
+`Authorization.refused(reason)` refuses with 400.
+
+`HttpInbox.bearerToken(verify, realm, subject, scopes...)` does the same with a function verifying the token, e.g. with
+the keys of an issuer the application is itself, a realm for the challenge, and the subject the request is authorized
+for, of the token and its claims, which refuses the token as invalid if it is empty. The
+[identity provider](identity-provider.md) authorizes its registrations and UserInfo requests so, for the client id and
+for the `jti` of the token. `HttpInbox.bearerChallenge(realm, error, description, scope)` gives the challenge of a
+refusal made otherwise.
+
+`AccessTokenVerifier.fetchingKeys` fetches the keys from the `jwks_uri` with the HTTP client of the JDK when it is
+created, and fails if it can't. It follows the key rotation of the issuer: a token signed with a key it doesn't know is
+refused, and makes it fetch the keys again in the background, but at most every 30 seconds after the last attempt, so
+tokens of random key ids can't make it fetch more often. Verifying a token never waits for the issuer. Keys fetched
+again which are not valid, e.g. none, are not used, and the keys fetched before are kept. As the first token signed
+with a new key may be refused, an issuer should publish a new key before signing with it, as the
+[identity provider](identity-provider.md#running) is rotated. A verifier created with a JWK set,
+`new AccessTokenVerifier(jwkSet, issuer, audience, clock)`, only knows those keys.
+
+## Signing users in with OpenID Connect
+
+`OpenIdConnectClient` signs users of a web app in with an OpenID Connect provider, e.g. Microsoft Entra ID or the
+[identity provider](identity-provider.md#signing-users-in), with the
+[authorization code flow](https://openid.net/specs/openid-connect-core-1_0.html#CodeFlowAuth). The
+[identity provider](identity-provider.md#signing-users-in) signs its users in with its upstream provider by it, and the
+[backoffice](backoffice.md#signing-in) its users. It builds the requests and verifies the responses, while the app
+keeps the state of the sign-in, in a cookie or an entity:
+
+```java
+var client = new OpenIdConnectClient(new OpenIdConnectClient.Config(
+    URI.create("https://login.microsoftonline.com/<tenant>/v2.0"),
+    "my-app",
+    clientSecret,  // or null for a public client
+    "openid email profile",
+    URI.create("https://app.example.com/callback")
+));
+// A sign-in: redirect the user, and keep the secret in a cookie, and its nonce in the entity of the sign-in
+Mono<URI> url = client.authorizationUrl(state, secret);
+String nonce = OpenIdConnectClient.nonce(secret);
+// The callback: the token request redeeming the code, which an at-most-once outbox request sends
+Mono<HttpRequest<String>> tokenRequest = client.tokenRequest(code, secret);
+// The response the outbox tells: the verified claims of the ID token
+Mono<JWTClaimsSet> claims = client.verifyWithNonce(tokenResponse, nonce);
+```
+
+- The endpoints are found by [OpenID Connect Discovery](https://openid.net/specs/openid-connect-discovery-1_0.html)
+  when first needed, so an app can be a client of itself, and discovery is tried again if it failed. `discover()`
+  discovers them at once, e.g. to fail at startup.
+- The secret of a sign-in, e.g. of `Secrets.generate()`, is kept in the browser the sign-in was started in. The PKCE
+  verifier (S256) and the nonce are derived from it, which binds the sign-in to that browser. A secret which is not a
+  valid PKCE verifier, 43 to 128 characters of letters, digits and `-._~`, fails the sign-in at once.
+- A code can be redeemed only once, so send the token request of `tokenRequest(code, secret)` by an at-most-once
+  [outbox](http-outbox.md#masking) request, masking the code and the verifier of its form and the body of its response.
+  The outbox sends it once the transition dispatching it is stored, so a transition calculated again, e.g. after a
+  concurrent change of its entity, doesn't redeem the code twice. Verify the response with
+  `verifyWithNonce(tokenResponse, nonce)` in the transaction the outbox tells it in, where the secret isn't known, as
+  the nonce, `OpenIdConnectClient.nonce(secret)`, can be stored, unlike the secret, or with
+  `verify(tokenResponse, secret)` where it is. `JdkHttpClient` sends the requests of an outbox with the HTTP client of
+  the JDK, e.g. in a native image.
+- A confidential client authenticates with its secret by HTTP Basic, a public client without a secret sends its
+  `client_id` instead.
+- The ID token must be signed with RS256, ES256 or PS256 by a key of the provider, issued by the provider for the client,
+  not expired, and have the nonce of the secret. The keys of the provider are fetched again for a key not among them,
+  at most every 30 seconds, while the ID token is verified on a worker thread.
+
+`Secrets` generates and hashes secrets of 256 bits, such as the secret of a sign-in, a code or a session token, and
+`Form` parses and encodes forms and queries, as the identity provider and the backoffice do.
+
+The sign-in is not an authorizer of inbox requests, like `bearerToken`: an authorizer checks one request, while a
+sign-in takes several, redirecting the user, keeping a secret in a cookie, and redeeming the code. It is done in the
+transitions of an entity, such as the backoffice's sessions, which keep the secret, the code and the tokens out of the
+event log by [masking](#masking), and redeem the code by an at-most-once outbox request.
+
+## Keeping secrets and bulky data out of the event log
+
+The inbox stores every request it routes, and every response it gives, in the event log of the inbox request. Some of it is better left out: credentials, e.g. a session cookie, an authorization code,
+an ID token or a client secret, bulky or derived data, e.g. an HTML page rendered from other entities, and requests of
+no interest, e.g. for static files or health checks. Rather than handling them in a filter in front of the inbox, an
+inbox request can mask what it stores, or not store its requests at all, so the work is done in transitions, which are
+tested, drawn in the state diagrams and recorded. The application's own events can be kept out of the event log the
+same way (see [events and entities not stored](entities.md#events-and-entities-not-stored)).
+
+### Masking
+
+Every inbox request masks the values of the headers which carry credentials (`Masking.CREDENTIALS`): `Authorization`,
+`Proxy-Authorization` and `Cookie` of the requests it stores, and `Set-Cookie` of the responses. `masking` adds what
+else is masked, of requests and of responses apart: of a request, other headers (`requestHeaders`), query parameters,
+and the fields of an `application/x-www-form-urlencoded` body, and of a response, other headers (`responseHeaders`)
+or the whole body:
+
+```java
+HttpInboxRequest<Callback> SignInCallback = HttpInboxRequest
+    .matching(m -> m.uri().getPath().equals("/callback"))
+    .contentParser(Callback::parse)
+    .masking(Masking.queryParameters("code").andResponseBody())
+    .process(CallbackReceived, Sessions, RoutedRequest::body, (_, callback) -> entityId(callback.state()))
+    .build("SignInCallback", UUID.fromString("..."));
+```
+
+What is masked is replaced by `***` in the event log, e.g. `GET /callback?state=…&code=***` with `Cookie: ***`. The
+transitions see the whole request: the content parser, the authorizer and the process read the code and the cookie,
+and the application's response is sent to the client as it gave it, with its `Set-Cookie`.
+
+Form fields are masked in the body of a request declared `application/x-www-form-urlencoded`. The body of a request
+which isn't declared a form is masked as a whole, as the client may have sent the fields with another content type by
+mistake. What is masked of responses doesn't count as masking more of the requests, so masking e.g. a `Location`
+header leaves a request free to be deduplicated.
+
+As the event log only has the masked request, a retried request with the same message id is compared with the first
+one after masking both: a retry may differ from the first request in its credentials, e.g. in a refreshed access token.
+An inbox request which masks more of its requests than their credentials, e.g. a query parameter, can't have
+`deduplicateOn`, which `build` refuses, as a request differing from the first one in what is masked couldn't be told
+from a retry. As the credentials aren't compared, it is the authorizer which tells clients apart: with one, the message
+id is the authorized subject's, so another client's request with the same id is of another message id. Without an
+authorizer, e.g. when the process checks a token itself, the message ids are shared by all clients, and another client
+sending a request with the message id and the body of an earlier one gets its response. Authenticate the requests of a
+deduplicated inbox request with an authorizer, unless its clients may share their responses.
+
+A retry gets the response of the first one as stored, which can't give what is masked of it. So an inbox request which
+masks the body of its responses can't have `deduplicateOn`, which `build` refuses, and a retry of a request whose
+first response has a masked header, e.g. a `Set-Cookie`, is answered with 409 Conflict and the detail
+`The response of the first request can't be repeated, as it is masked`, rather than with the header as `***`, which
+the client would take as its value. A request whose response has a credential the client may need again, after a
+retry, is better not deduplicated. Encrypting such responses instead, so a retry could get them, is
+[#304](https://github.com/the-backend-project/backend/issues/304).
+
+The monitoring writes no data of the events, and the [backoffice](backoffice.md) shows what is masked as `***`.
+
+### Requests not stored
+
+An inbox request with `notStored()` doesn't store its requests: it is an entity model which is not stored, so its
+requests, like their `RequestRouting` entities, are [entities of the session only](entities.md#events-and-entities-not-stored). The event its
+process triggers on the application is stored if it is of a stored type, so a request not stored can still change an
+entity which is. It suits requests for static files and health checks, pages rendered from other entities, and the
+like:
+
+```java
+HttpInboxRequest<Void> HealthCheck = HttpInboxRequest
+    .matching(m -> m.requestLine().equals("GET /health"))
+    .noContent()
+    .notStored()
+    .process(HealthChecked, Status, HttpInboxRequest.newEntity())
+    .response(HealthReported, c -> ok(c.input()))
+    .build("HealthCheck", UUID.fromString("..."));
+```
+
+A request not stored is found by the transactions of its [session](entities.md#sessions) only, so:
+
+- it can't be deduplicated, as a retry is recognised by the first request stored, so `deduplicateOn` is refused, and
+  without it there is no `rollback`;
+- the application must respond in the session of the request, e.g. by the callback of an outbox request, but not by a
+  delayed or conditional trigger, which fires in a session of its own;
+- it is not indexed by the entity of the application, as the [requests of an entity](#the-requests-of-an-entity) are.
+
+The events of a request not stored are still told the listener, and the [monitoring](monitoring.md#the-lines) writes
+them with `"stored":false`.
+
+### Requests which aren't authenticated
+
+A request whose sender isn't authenticated is best not stored: anyone can send it, as many times as they like, so
+storing it lets anyone fill the event log, and what it carries, e.g. a secret sent where it shouldn't be, is of no use
+to keep. Answer it at once instead, by an inbox request with `notStored()` which matches a request without the
+credentials it needs, and refuses it as the standard of the endpoint says, e.g. RFC 6749 or RFC 6750. Its refusal is still told the listener, so the
+[monitoring](monitoring.md#the-lines) sees attempts to guess a secret. Store a request once its sender has given
+credentials to check, so that what an authenticated client did, or tried, is in the event log.
+
+The exception is state which must outlive the session, which can only be stored: a sign-in begun before the user is
+authenticated, e.g. that of the [backoffice](backoffice.md#signing-in) or the authorization
+request of the [identity provider](identity-provider.md#signing-users-in), must be found again when the user returns.
+
+An inbox request with an authorizer stores a request which the authorizer refuses, as it does every request it routes,
+so a request with credentials that are wrong, e.g. an expired access token, is stored, without the credentials, while one
+without credentials is answered before it reaches the inbox request.
 
 ## State diagrams
+
+`RequestRouting` routes a request to the inbox request matching it. The diagram is of an inbox with one inbox request,
+`PlaceOrder`, which can be rolled back:
 
 <object data="../images/com.github.thxmasj.backend.http.inbox.RequestRouting.svg" type="image/svg+xml"></object>
 
 [Open the RequestRouting diagram in full size](images/com.github.thxmasj.backend.http.inbox.RequestRouting.svg)
 
-<object data="../images/com.github.thxmasj.backend.http.inbox.RequestDispatching.svg" type="image/svg+xml"></object>
+The states of an inbox request, which the diagram of `PlaceOrder` with its rollback, under the
+[rollback](#rollback) example, has all of:
 
-[Open the RequestDispatching diagram in full size](images/com.github.thxmasj.backend.http.inbox.RequestDispatching.svg)
+| State         | Meaning                                                                                                   |
+|---------------|-----------------------------------------------------------------------------------------------------------|
+| `Dispatched`  | The request is dispatched to the application, which hasn't responded yet                                   |
+| `Rejected`    | The application rejected the request, or the message id is taken by another or a rolled back request       |
+| `Completed`   | The request is answered, also if it was invalid or refused                                                 |
+| `RollingBack` | A rollback of the request is received, and its events on the application are being rolled back             |
+| `RolledBack`  | The request is rolled back                                                                                 |
+| `RejectedRollbackFromDispatched`, `RejectedRollbackFromCompleted` | The application rejected the rollback                  |
+
+The rollback states are only there for an inbox request with a `rollback`.

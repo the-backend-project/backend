@@ -1,19 +1,21 @@
 package com.github.thxmasj.backend.http.outbox;
 
+import static com.github.thxmasj.backend.core.EntitySelector.lastReferencing;
 import static com.github.thxmasj.backend.core.IndexEntityModel.referenceEventType;
-import static com.github.thxmasj.backend.core.database.Mappers.eventTypesFor;
+import static com.github.thxmasj.backend.core.internal.EventTypes.eventTypesFor;
 
 import com.github.thxmasj.backend.core.BasicEventType;
 import com.github.thxmasj.backend.core.DataType;
+import com.github.thxmasj.backend.core.EntityId;
+import com.github.thxmasj.backend.core.EntitySelector;
 import com.github.thxmasj.backend.core.EventLog;
 import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.IndexEntityModel;
 import com.github.thxmasj.backend.core.State;
 import com.github.thxmasj.backend.core.TransitionModel;
-import com.github.thxmasj.backend.core.http.HttpDataType;
-import com.github.thxmasj.backend.core.message.http.HttpRequestMessage;
-import com.github.thxmasj.backend.core.message.http.TypedHttpRequest;
-import com.github.thxmasj.backend.core.message.http.TypedHttpResponse;
+import com.github.thxmasj.backend.http.HttpDataType;
+import com.github.thxmasj.backend.http.HttpRequest;
+import com.github.thxmasj.backend.http.HttpResponse;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -28,8 +30,6 @@ import java.util.stream.Stream;
 /// the creator of its request messages.
 public sealed interface HttpOutboxRequest<RQ> extends com.github.thxmasj.backend.core.EntityModel permits AtLeastOnce, AtMostOnce {
 
-  Map<State, List<TransitionModel<?, ?>>> transitions();
-
   default List<EventType<?, ?>> eventTypes() {
     return transitions().values()
         .stream()
@@ -39,7 +39,7 @@ public sealed interface HttpOutboxRequest<RQ> extends com.github.thxmasj.backend
         .toList();
   }
 
-  EventType<TypedHttpRequest<RQ>, ?> requestDispatched();
+  EventType<HttpRequest<RQ>, ?> requestDispatched();
 
   /// Dispatches a request which belongs to a batch, which the request references.
   EventType<BatchedRequest<RQ>, ?> batchedRequestDispatched();
@@ -48,9 +48,9 @@ public sealed interface HttpOutboxRequest<RQ> extends com.github.thxmasj.backend
 
   DataType<?> responsePayloadType();
 
-  TypedHttpRequest<RQ> request(EventLog log);
+  HttpRequest<RQ> request(EventLog log);
 
-  TypedHttpResponse<?> response(EventLog log);
+  HttpResponse<?> response(EventLog log);
 
   static AtLeastOnceBuilder.RequestPayloadTypeStep atLeastOnce() {
     return AtLeastOnceBuilder.create();
@@ -90,6 +90,12 @@ public sealed interface HttpOutboxRequest<RQ> extends com.github.thxmasj.backend
       BatchReferenced
   );
 
+  /// The request of the triggered outbox model that the process dispatched last, found by its [#ProcessReferenced]
+  /// index, e.g. to send it again by [AtLeastOnce#requestRedispatched()]
+  static EntitySelector dispatchedBy(EntityId processId) {
+    return lastReferencing(ProcessReferenced, processId.value());
+  }
+
   static Map<State, List<TransitionModel<?, ?>>> combine(
       Map<State, List<TransitionModel<?, ?>>> m1,
       Map<State, List<TransitionModel<?, ?>>> m2
@@ -105,13 +111,13 @@ public sealed interface HttpOutboxRequest<RQ> extends com.github.thxmasj.backend
         ));
   }
 
-  static <T> HttpRequestMessage toHttpRequest(TypedHttpRequest<T> request, DataType<T> payloadType) {
-    return new HttpRequestMessage(request.method(), request.uri(), request.headers(), payloadType.marshal(request.payload()));
+  static <T> HttpRequest<byte[]> toHttpRequest(HttpRequest<T> request, DataType<T> payloadType) {
+    return request.map(payloadType::marshal);
   }
 
   /// The input of a batched request: the request message to dispatch, and the id of the batch which the request belongs
   /// to.
-  record BatchedRequest<RQ>(TypedHttpRequest<RQ> request, UUID batchId) {
+  record BatchedRequest<RQ>(HttpRequest<RQ> request, UUID batchId) {
 
     public BatchedRequest {
       Objects.requireNonNull(request);
@@ -124,10 +130,10 @@ public sealed interface HttpOutboxRequest<RQ> extends com.github.thxmasj.backend
 
     private static final class BatchedRequestDataType<RQ> implements DataType<BatchedRequest<RQ>> {
 
-      private final DataType<TypedHttpRequest<RQ>> requestType;
+      private final DataType<HttpRequest<RQ>> requestType;
       private final DataType<UUID> batchIdType = DataType.uuid();
 
-      private BatchedRequestDataType(DataType<TypedHttpRequest<RQ>> requestType) {
+      private BatchedRequestDataType(DataType<HttpRequest<RQ>> requestType) {
         this.requestType = requestType;
       }
 

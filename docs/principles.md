@@ -41,6 +41,24 @@ Nothing is kept in memory between requests. Any instance can serve any request, 
 at any time, and a crash loses nothing that was committed (see [Scaling](scaling.md)). There are no caches to warm up
 and no local state to keep consistent.
 
+## Correctness never depends on timing
+
+Timing may affect how fast an application is, but never whether it is correct. What it does is decided by its events
+and the states they lead to, not by how fast something happens, nor by the order in which concurrent work happens to
+run:
+
+* A transition may be calculated again, e.g. after another instance changed one of its entities (see
+  [All or nothing](#all-or-nothing)), so it gives the same outcome whenever it is calculated. An effect which must
+  happen only once, such as redeeming an authorization code, is not done in the transition, but by an at-most-once
+  [outbox](http-outbox.md) request, which is sent once the transaction has committed.
+* No cache decides an outcome. A cache may save work, but the outcome is the same without it, and a request answered
+  from a cache is answered as it would be without it.
+* What must be ready before it is used, such as the endpoints of an OpenID Connect provider, is made ready before,
+  e.g. at startup, rather than relied on to be ready in time.
+* Where the model does depend on time, e.g. an outbox request given up after its timeout or a
+  [delayed trigger](transition-models.md#steps), the time is declared in the model, and its outcome is an event like any
+  other.
+
 ## Safe to change
 
 An application can be refactored without breaking what is already stored:
