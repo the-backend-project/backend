@@ -96,7 +96,7 @@
                 <plugin>
                     <groupId>org.codehaus.mojo</groupId>
                     <artifactId>versions-maven-plugin</artifactId>
-                    <version>2.25.2</version>
+                    <version>2.25.3</version>
                 </plugin>
             </plugins>
         </pluginManagement>
@@ -151,7 +151,7 @@
             <dependency>
                 <groupId>org.hibernate.validator</groupId>
                 <artifactId>hibernate-validator</artifactId>
-                <version>9.1.6.Final</version>
+                <version>9.2.0.Final</version>
             </dependency>
             <dependency>
                 <groupId>com.zaxxer</groupId>
@@ -184,7 +184,7 @@
             <dependency>
                 <groupId>org.postgresql</groupId>
                 <artifactId>postgresql</artifactId>
-                <version>42.7.14</version>
+                <version>42.7.15</version>
             </dependency>
             <dependency>
                 <groupId>org.postgresql</groupId>
@@ -210,13 +210,13 @@
             <dependency>
                 <groupId>io.projectreactor.netty</groupId>
                 <artifactId>reactor-netty</artifactId>
-                <version>1.3.8</version>
+                <version>1.4.0</version>
             </dependency>
             <dependency>
                 <!-- One version of Netty, that of reactor-netty, rather than also the newer one of Vert.x -->
                 <groupId>io.netty</groupId>
                 <artifactId>netty-bom</artifactId>
-                <version>4.2.20.Final</version>
+                <version>4.2.21.Final</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -240,18 +240,18 @@
                 <!-- R2DBC's drivers depend on older versions than reactor-netty and reactor-core, see reactor-bom -->
                 <groupId>io.projectreactor.netty</groupId>
                 <artifactId>reactor-netty-core</artifactId>
-                <version>1.3.8</version>
+                <version>1.4.0</version>
             </dependency>
             <dependency>
                 <groupId>io.projectreactor.addons</groupId>
                 <artifactId>reactor-pool</artifactId>
-                <version>1.2.8</version>
+                <version>1.3.0</version>
             </dependency>
             <dependency>
                 <!-- BCrypt of Spring Security, without dependencies, for the identity provider's imported clients -->
                 <groupId>org.springframework.security</groupId>
                 <artifactId>spring-security-crypto</artifactId>
-                <version>7.1.2</version>
+                <version>7.2.0</version>
             </dependency>
             <dependency>
                 <!-- The logging of Spring Security's BCryptPasswordEncoder, which BCrypt itself does without -->
@@ -314,12 +314,12 @@
             <dependency>
                 <groupId>com.pulumi</groupId>
                 <artifactId>pulumi</artifactId>
-                <version>1.40.0</version>
+                <version>1.40.3</version>
             </dependency>
             <dependency>
                 <groupId>com.pulumi</groupId>
                 <artifactId>azure-native</artifactId>
-                <version>3.30.0</version>
+                <version>3.32.0</version>
             </dependency>
             <dependency>
                 <groupId>com.pulumi</groupId>
@@ -340,7 +340,7 @@
     </dependencyManagement>
 
     <properties>
-        <reactor.version>3.8.8</reactor.version>
+        <reactor.version>3.9.0</reactor.version>
         <jackson.version>3.3.0</jackson.version>
         <maven.compiler.release>25</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
