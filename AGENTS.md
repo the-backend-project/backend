@@ -20,6 +20,9 @@ user-level instructions or memory.
   [Dependency checksums](CONTRIBUTING.md#dependency-checksums), with the Maven version CI uses as well as the local one
   if they differ. Different Maven versions write `.mvn/checksums/checksums.sha256` in different orders, so sort it with
   `LC_ALL=C sort` afterwards to keep the diff to the added lines.
+- Find newer versions of the dependencies and plugins with the versions plugin, which runs without asking like every
+  `mvn` command, instead of looking them up with `curl` or parsing the poms with scripts:
+  `mvn versions:display-dependency-updates versions:display-plugin-updates -DprocessDependencyManagementTransitive=false`.
 
 ## Code
 
