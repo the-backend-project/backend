@@ -167,18 +167,6 @@ public record Masking(
         || !other.formFields.containsAll(formFields);
   }
 
-  /// Whether the response, as stored, has something masked: a header with the value [#MASK] which this masking masks,
-  /// or a body which is [#MASK] if it masks the body of a response. A response stored before it was masked has the
-  /// values as they were.
-  public boolean hasMasked(HttpResponse<byte[]> stored) {
-    if (stored == null)
-      return false;
-    if (wholeResponseBody && stored.body() != null && MASK.equals(new String(stored.body(), UTF_8)))
-      return true;
-    return stored.headers().entrySet().stream()
-        .anyMatch(header -> responseHeaders.contains(header.getKey().toLowerCase(Locale.ROOT)) && MASK.equals(header.getValue()));
-  }
-
   private static boolean hasMaskedHeader(Map<String, String> original, Set<String> names) {
     return !names.isEmpty() && original.keySet().stream().anyMatch(name -> names.contains(name.toLowerCase(Locale.ROOT)));
   }

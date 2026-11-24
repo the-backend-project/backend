@@ -17,11 +17,14 @@ public interface SettlementEvent {
   /// until the first response.
   EventType<MerchantId, BatchNumber> InitialSettlementOpened =
       BasicEventType.of("Initial settlement opened", UUID.fromString("5b0c7f0e-0f6b-4d0e-9a0f-3f2c1c6e8d21"), DataType.json(MerchantId.class), DataType.json(BatchNumber.class));
-  /// Assigns the acquirer's batch number to a settlement which is awaiting it, recording it. In other states it has no
-  /// effect: the number given is recorded, but the first one assigned stays the settlement's. Events of it stored
-  /// before had no data in those states.
+  /// Assigns the acquirer's batch number to a settlement which is awaiting it, recording it. In other states, where it is
+  /// already known, it is taken as [#AcquirerBatchNumberKnown].
   EventType<AcquirerBatchNumber, AcquirerBatchNumber> AcquirerBatchNumberAssigned =
       BasicEventType.of("Acquirer batch number assigned", UUID.fromString("7d3f1b6e-4a52-4c0e-b1d8-5e9a2c4f6a10"), DataType.json(AcquirerBatchNumber.class));
+  /// The acquirer's batch number assigned to a settlement which already has it, which changes nothing, and so isn't
+  /// stored
+  EventType<Void, Void> AcquirerBatchNumberKnown =
+      BasicEventType.notStored("Acquirer batch number known", UUID.fromString("9f8f1a33-b4cf-40f7-9ed0-9f7cb60cfc3a"));
   EventType<CutOff, CutOff> CutOffRequested =
       BasicEventType.of("Cut off requested", UUID.fromString("2163fbfa-3870-43cd-8025-ec3fd9689bd2"), DataType.json(CutOff.class));
   EventType<AcquirerResponse, Void> ReconciliationRequested =

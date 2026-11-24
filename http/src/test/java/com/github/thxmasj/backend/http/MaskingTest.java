@@ -91,27 +91,11 @@ public class MaskingTest {
     assertEquals("/cb?code=***", masked.uri().toString());
   }
 
-  @Test
-  public void aStoredResponseHasSomethingMaskedIfItHasAMaskedHeaderOrBody() {
-    var cookie = Masking.CREDENTIALS.mask(new HttpResponse<byte[]>(200, "OK", Map.of("Set-Cookie", "s=1"), null));
-    assertEquals(true, Masking.CREDENTIALS.hasMasked(cookie));
-    assertEquals(false, Masking.CREDENTIALS.hasMasked(new HttpResponse<>(201, "Created", Map.of("Content-Type", "application/json"), "{}".getBytes(UTF_8))));
-    assertEquals(true, Masking.responseBody().hasMasked(new HttpResponse<>(200, "OK", Map.of(), "***".getBytes(UTF_8))));
-    assertEquals(false, Masking.responseBody().hasMasked(new HttpResponse<byte[]>(204, "No Content", Map.of(), null)));
-  }
-
   /// A form field is masked also when its name is written encoded
   @Test
   public void aFormFieldWithAnEncodedNameIsMasked() {
     var request = new HttpRequest<>(Method.POST, URI.create("/token"), form, "client%5Fsecret=s3cret&x=1".getBytes(UTF_8));
     assertEquals("client%5Fsecret=***&x=1", new String(Masking.formFields("client_secret").mask(request).body(), UTF_8));
-  }
-
-  /// A response stored before it was masked has its values as they were, which a retry can be given
-  @Test
-  public void aResponseStoredBeforeItWasMaskedHasNothingMasked() {
-    var stored = new HttpResponse<byte[]>(200, "OK", Map.of("Set-Cookie", "s=1"), null);
-    assertEquals(false, Masking.CREDENTIALS.hasMasked(stored));
   }
 
   @Test
@@ -122,6 +106,8 @@ public class MaskingTest {
     assertEquals(true, Masking.CREDENTIALS.appliesTo(new HttpRequest<byte[]>(Method.GET, URI.create("/x"), Map.of("Cookie", "c"), null)));
     assertEquals(true, Masking.queryParameters("code").appliesTo(new HttpRequest<byte[]>(Method.GET, URI.create("/x?code=1"), Map.of(), null)));
     assertEquals(false, Masking.responseBody().appliesTo(new HttpResponse<byte[]>(204, "No Content", Map.of(), null)));
+    assertEquals(true, Masking.CREDENTIALS.appliesTo(new HttpResponse<byte[]>(200, "OK", Map.of("Set-Cookie", "s=1"), null)));
+    assertEquals(false, Masking.CREDENTIALS.appliesTo(new HttpResponse<>(201, "Created", Map.of("Content-Type", "application/json"), "{}".getBytes(UTF_8))));
   }
 
 }

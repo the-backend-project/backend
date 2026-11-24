@@ -906,7 +906,8 @@ public class TransitionModelBuilder<I, T, O> {
 
   /// The transition with an event without data, which only an event type without data, of [DataType#none()], may have,
   /// as the state machine checks when it is created. An event type with data has an output, of
-  /// [#output(Function)].
+  /// [#output(Function)]. It has nothing to mask, so the transition can't be masked: only the one of
+  /// [#output(Function)] has [TransitionModel.WithOutput#masked].
   public TransitionModel<I, O> output() {
     return new TransitionModel<>(
         modelContext.asWithoutData(),

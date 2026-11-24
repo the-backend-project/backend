@@ -740,7 +740,7 @@ interface TransitionModels {
   /// masked, which the retry can't be given. It is then refused, rather than given a response with `***` for e.g. a
   /// cookie, which the client would take as the value.
   private static HttpResponse<byte[]> repeated(HttpInboxRequest<?> request, HttpResponse<byte[]> stored, String correlationId, ZonedDateTime timestamp) {
-    if (!request.masking().hasMasked(stored))
+    if (!request.masking().appliesTo(stored))
       return stored;
     return createResponseMessage(new Conflict(), null, correlationId, timestamp, "The response of the first request can't be repeated, as it is masked");
   }
