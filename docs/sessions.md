@@ -89,10 +89,10 @@ sequenceDiagram
     inbox-->>client: HTTP response
 ```
 
-### How far a session reaches
+### What a later transaction sees
 
-The entity of the session is found among the entities of the current transaction and of the transaction that ran the
-action, but not further back. A response triggered on the session after two actions in a row, e.g. after a request to
-one system and then to another, fails, and the caller waits until it times out. Until that is fixed
-([#308](https://github.com/the-backend-project/backend/issues/308)), respond to an inbox request from the transaction
-of the first action's outcome, and identify any other entity of the session by its id.
+A transaction of the session finds the entity of the session in any transaction before it, however many actions back,
+e.g. to answer the inbox request after a request to one system and then to another. The event log of a stored entity
+is read from the database again, as events of other sessions may have been stored on it in the meantime, and with
+the output of [masked events](entities.md#events-and-entities-not-stored) masked. An entity of the session only, which
+is never stored, is found among the events of the session's transactions.

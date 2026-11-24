@@ -8,6 +8,7 @@ module com.github.thxmasj.backend.http {
   requires io.netty.codec.http;
   requires io.netty.handler;
   requires io.netty.resolver;
+  requires java.net.http;
   requires jakarta.validation;
   requires org.hibernate.validator;
 

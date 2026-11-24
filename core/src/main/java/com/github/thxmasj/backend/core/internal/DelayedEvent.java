@@ -13,4 +13,9 @@ public record DelayedEvent<T>(
     T data,
     ZonedDateTime after
 ) {
+
+  public DelayedEvent<T> withEventNumber(int eventNumber) {
+    return new DelayedEvent<>(entityModel, entityId, type, eventNumber, data, after);
+  }
+
 }

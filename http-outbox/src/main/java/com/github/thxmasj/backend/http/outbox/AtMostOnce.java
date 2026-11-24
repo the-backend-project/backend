@@ -32,6 +32,7 @@ import com.github.thxmasj.backend.http.HttpDataType;
 import com.github.thxmasj.backend.core.internal.Memoized;
 import com.github.thxmasj.backend.http.HttpRequest;
 import com.github.thxmasj.backend.http.HttpResponse;
+import com.github.thxmasj.backend.http.Masking;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -65,25 +66,68 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
   /// The copies with rollback message creators, see [#withRollback(BiFunction)]
   private final Map<CopyKey, AtMostOnce<RQ, RRQ>> copies = new HashMap<>();
 
-  private record Shape<T1, T2, T3, T4, T5, T6, T7, RQ, RS>(
-      DataType<RQ> requestPayloadType,
-      DataType<RS> responsePayloadType,
-      ForwardAction forward,
-      Duration inflightTimeout,
-      com.github.thxmasj.backend.core.EntityModel processModel,
+  /// The callbacks of the outcomes of a request, events triggered on the entity of the process which dispatched it
+  record Callbacks<T1, T2, T3, T4, T5, T6, T7, RS>(
       Callback<EntityModel, T1> onPeerUnavailable,
       Callback<EntityModel, T2> onMissingResponse,
       Callback<HttpResponse<RS>, T3> onSuccess,
       Callback<HttpResponse<RS>, T4> onFailure,
-      Callback<HttpResponse<RS>, T7> onValidResponseUnknown, // Rollback
+      Callback<HttpResponse<RS>, T7> onValidResponseUnknown,
       Callback<Tuple2<HttpResponse<byte[]>, String>, T5> onInvalidResponseRejection,
-      Callback<Tuple2<HttpResponse<byte[]>, String>, T6> onInvalidResponseUnknown, // Rollback
+      Callback<Tuple2<HttpResponse<byte[]>, String>, T6> onInvalidResponseUnknown
+  ) {}
+
+  /// How a response is parsed, by a content parser or one aware of the request, and what its outcome is
+  record ResponseRules<RQ, RS>(
       Function<HttpResponse<byte[]>, Validated<RS>> contentParser,
       BiFunction<HttpRequest<RQ>, HttpResponse<byte[]>, Validated<RS>> requestAwareContentParser,
       Predicate<HttpResponse<RS>> isAccepted,
       Predicate<HttpResponse<RS>> isRejected,
       Predicate<Tuple2<HttpResponse<byte[]>, String>> isRejectedByInvalidResponse
+  ) {}
+
+  /// What an at-most-once request is: its payloads, how it is sent, the process it is of, its callbacks, how its
+  /// responses are handled and what is masked of it in the event log
+  record Shape<T1, T2, T3, T4, T5, T6, T7, RQ, RS>(
+      DataType<RQ> requestPayloadType,
+      DataType<RS> responsePayloadType,
+      ForwardAction forward,
+      Duration inflightTimeout,
+      EntityModel processModel,
+      Callbacks<T1, T2, T3, T4, T5, T6, T7, RS> callbacks,
+      ResponseRules<RQ, RS> rules,
+      Masking masking
   ) {
+
+
+
+    /// The request as stored, masked as bytes. A body which can't be read as the payload once masked is stored as none.
+    HttpRequest<RQ> maskedRequest(HttpRequest<RQ> request) {
+      if (!masking.appliesTo(request))
+        return request;
+      HttpRequest<byte[]> raw = request.map(body -> body != null ? requestPayloadType.marshal(body) : null);
+      return masking.mask(raw).map(body -> payload(requestPayloadType, body));
+    }
+
+    /// The response as stored, masked as bytes. A body which can't be read as the payload once masked, e.g. a masked
+    /// JSON body, is stored as none.
+    HttpResponse<RS> maskedResponse(HttpResponse<RS> response) {
+      if (!masking.appliesTo(response))
+        return response;
+      HttpResponse<byte[]> raw = response.map(body -> body != null ? responsePayloadType.marshal(body) : null);
+      return masking.mask(raw).map(body -> payload(responsePayloadType, body));
+    }
+
+    private static <P> P payload(DataType<P> payloadType, byte[] body) {
+      if (body == null)
+        return null;
+      try {
+        return payloadType.unmarshal(body);
+      } catch (RuntimeException e) {
+        return null;
+      }
+    }
+
     EventType<HttpRequest<RQ>, Tuple2<HttpRequest<RQ>, UUID>> requestDispatched() {
       return BasicEventType.of(
           "Request dispatched",
@@ -227,74 +271,12 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
     return rollbackOnUnknownModel;
   }
 
-  public <T1, T2, T3, T4, T5, T6, T7, RS> AtMostOnce(
+  /// An at-most-once request of the shape, which [AtMostOnceBuilder] builds, with the rollback models created by the
+  /// suppliers, given the outbox request, or none if a supplier is null
+  AtMostOnce(
       String name,
       UUID id,
-      DataType<RQ> requestPayloadType,
-      DataType<RS> responsePayloadType,
-      HttpClient forwarder,
-      Duration inflightTimeout,
-      com.github.thxmasj.backend.core.EntityModel processModel,
-      Callback<EntityModel, T1> onPeerUnavailable,
-      Callback<EntityModel, T2> onMissingResponse,
-      Callback<HttpResponse<RS>, T3> onSuccess,
-      Callback<HttpResponse<RS>, T4> onFailure,
-      Callback<HttpResponse<RS>, T7> onValidResponseUnknown, // Rollback
-      Callback<Tuple2<HttpResponse<byte[]>, String>, T5> onInvalidResponseRejection,
-      Callback<Tuple2<HttpResponse<byte[]>, String>, T6> onInvalidResponseUnknown, // Rollback
-      Function<HttpResponse<byte[]>, Validated<RS>> contentParser,
-      BiFunction<HttpRequest<RQ>, HttpResponse<byte[]>, Validated<RS>> requestAwareContentParser,
-      Predicate<HttpResponse<RS>> isAccepted,
-      Predicate<HttpResponse<RS>> isRejected,
-      Predicate<Tuple2<HttpResponse<byte[]>, String>> isRejectedByInvalidResponse,
-      AtLeastOnce<RRQ> rollbackOnAcceptedModel,
-      AtLeastOnce<RRQ> rollbackOnUnknownModel
-  ) {
-    this(
-        name,
-        id,
-        requestPayloadType,
-        responsePayloadType,
-        forwarder,
-        inflightTimeout,
-        processModel,
-        onPeerUnavailable,
-        onMissingResponse,
-        onSuccess,
-        onFailure,
-        onValidResponseUnknown,
-        onInvalidResponseRejection,
-        onInvalidResponseUnknown,
-        contentParser,
-        requestAwareContentParser,
-        isAccepted,
-        isRejected,
-        isRejectedByInvalidResponse,
-        _ -> rollbackOnAcceptedModel,
-        _ -> rollbackOnUnknownModel
-    );
-  }
-
-  public <T1, T2, T3, T4, T5, T6, T7, RS> AtMostOnce(
-      String name,
-      UUID id,
-      DataType<RQ> requestPayloadType,
-      DataType<RS> responsePayloadType,
-      HttpClient forwarder,
-      Duration inflightTimeout,
-      com.github.thxmasj.backend.core.EntityModel processModel,
-      Callback<EntityModel, T1> onPeerUnavailable,
-      Callback<EntityModel, T2> onMissingResponse,
-      Callback<HttpResponse<RS>, T3> onSuccess,
-      Callback<HttpResponse<RS>, T4> onFailure,
-      Callback<HttpResponse<RS>, T7> onValidResponseUnknown, // Rollback
-      Callback<Tuple2<HttpResponse<byte[]>, String>, T5> onInvalidResponseRejection,
-      Callback<Tuple2<HttpResponse<byte[]>, String>, T6> onInvalidResponseUnknown, // Rollback
-      Function<HttpResponse<byte[]>, Validated<RS>> contentParser,
-      BiFunction<HttpRequest<RQ>, HttpResponse<byte[]>, Validated<RS>> requestAwareContentParser,
-      Predicate<HttpResponse<RS>> isAccepted,
-      Predicate<HttpResponse<RS>> isRejected,
-      Predicate<Tuple2<HttpResponse<byte[]>, String>> isRejectedByInvalidResponse,
+      Shape<?, ?, ?, ?, ?, ?, ?, RQ, ?> shape,
       Function<AtMostOnce<RQ, RRQ>, AtLeastOnce<RRQ>> rollbackOnAcceptedModelSupplier,
       Function<AtMostOnce<RQ, RRQ>, AtLeastOnce<RRQ>> rollbackOnUnknownModelSupplier
   ) {
@@ -307,25 +289,7 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
             name + " has no rollback message creator. Use the outbox request of its Dispatcher."
         ))
     );
-    this.shape = new Shape<>(
-        requestPayloadType,
-        responsePayloadType,
-        new ForwardAction(forwarder),
-        inflightTimeout,
-        processModel,
-        onPeerUnavailable,
-        onMissingResponse,
-        onSuccess,
-        onFailure,
-        onValidResponseUnknown,
-        onInvalidResponseRejection,
-        onInvalidResponseUnknown,
-        contentParser,
-        requestAwareContentParser,
-        isAccepted,
-        isRejected,
-        isRejectedByInvalidResponse
-    );
+    this.shape = shape;
     this.rollbackOnAcceptedModelSupplier = rollbackOnAcceptedModelSupplier;
     this.rollbackOnUnknownModelSupplier = rollbackOnUnknownModelSupplier;
     this.rollbackOnAcceptedModel = rollbackOnAcceptedModelSupplier != null ? rollbackOnAcceptedModelSupplier.apply(this) : null;
@@ -371,7 +335,7 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
 
                 .trigger(shape.forward()).with(d -> toHttpRequest(d.t1().t1(), shape.requestPayloadType()))
                 .trigger(TimeoutExpired).after(_ -> shape.inflightTimeout())
-                .output(d -> tuple(d.t1().t1(), d.t1().t2().entityId())),
+                .output(d -> tuple(d.t1().t1(), d.t1().t2().entityId())).masked(d -> tuple(shape.maskedRequest(d.t1()), d.t2())),
             onEvent(shape.batchedRequestDispatched()).to(InFlight)
                 .assemble(c -> tuple(
                     c.input().request(),
@@ -392,7 +356,7 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
 
                 .trigger(shape.forward()).with(d -> toHttpRequest(d.t1().t1().t1(), shape.requestPayloadType()))
                 .trigger(TimeoutExpired).after(_ -> shape.inflightTimeout())
-                .output(d -> tuple(d.t1().t1().t1(), d.t1().t1().t2().entityId()))
+                .output(d -> tuple(d.t1().t1().t1(), d.t1().t1().t2().entityId())).masked(d -> tuple(shape.maskedRequest(d.t1()), d.t2()))
         ),
         InFlight, list(
             rollbackOnUnknownModel != null ?
@@ -403,29 +367,29 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
                     .on(rollbackOnUnknownModel)
                     .identifiedBy(newEntityId())
                     .output() : null,
-            shape.onPeerUnavailable() != null ?
+            shape.callbacks().onPeerUnavailable() != null ?
                 onEvent(ConnectionFailed).to(Failed)
                     .assemble(c -> c.log().entityModel())
-                    .trigger(shape.onPeerUnavailable().eventType())
-                    .with(shape.onPeerUnavailable().dataAdapter())
+                    .trigger(shape.callbacks().onPeerUnavailable().eventType())
+                    .with(shape.callbacks().onPeerUnavailable().dataAdapter())
                     .on(shape.processModel())
                     .identifiedBy(entityIdFromSession())
                     .output() :
                 onEvent(ConnectionFailed).to(Failed).output(),
-            shape.onMissingResponse() != null ?
+            shape.callbacks().onMissingResponse() != null ?
                 onEvent(ConnectionDropped).to(Unknown)
                     .assemble(c -> c.log().entityModel())
-                    .trigger(shape.onMissingResponse().eventType())
-                    .with(shape.onMissingResponse().dataAdapter())
+                    .trigger(shape.callbacks().onMissingResponse().eventType())
+                    .with(shape.callbacks().onMissingResponse().dataAdapter())
                     .on(shape.processModel())
                     .identifiedBy(entityIdFromSession())
                     .output() :
                 onEvent(ConnectionDropped).to(Unknown).output(),
-            shape.onMissingResponse() != null ?
+            shape.callbacks().onMissingResponse() != null ?
                 onEvent(TimeoutExpired).to(Unknown)
                     .assemble(c -> tuple(c.log().entityModel(), shape.dispatched(c.log()).t2()))
-                    .trigger(shape.onMissingResponse().eventType())
-                    .with(d -> shape.onMissingResponse().dataAdapter().apply(d.t1()))
+                    .trigger(shape.callbacks().onMissingResponse().eventType())
+                    .with(d -> shape.callbacks().onMissingResponse().dataAdapter().apply(d.t1()))
                     .on(shape.processModel())
                     .identifiedBy(d -> entityId(d.t2()))
                     .output() :
@@ -433,57 +397,57 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
             onEvent(ResponseReceived).to(Intermediate)
                 .assemble(c -> tuple(
                     c.input(),
-                    shape.requestAwareContentParser() != null ?
-                        shape.requestAwareContentParser().apply(
+                    shape.rules().requestAwareContentParser() != null ?
+                        shape.rules().requestAwareContentParser().apply(
                             shape.dispatched(c.log()).t1(),
                             c.input()
                         ) :
-                        shape.contentParser().apply(c.input())
+                        shape.rules().contentParser().apply(c.input())
                 ))
                 .when(d -> d.t2().isValid())
                 .then(
                     onEvent(shape.validResponse()).to(Intermediate)
                         .assembleInput()
-                        .when(shape.isAccepted())
+                        .when(shape.rules().isAccepted())
                         .then(
-                            shape.onSuccess() != null ?
+                            shape.callbacks().onSuccess() != null ?
                                 onEvent(shape.requestAccepted()).to(Accepted)
                                     .assembleInput()
-                                    .trigger(shape.onSuccess().eventType())
-                                    .with(shape.onSuccess().dataAdapter())
+                                    .trigger(shape.callbacks().onSuccess().eventType())
+                                    .with(shape.callbacks().onSuccess().dataAdapter())
                                     .on(shape.processModel())
                                     .identifiedBy(entityIdFromSession())
-                                    .output(d -> d.t1()) :
+                                    .output(d -> d.t1()).masked(shape::maskedResponse) :
                                 onEvent(shape.requestAccepted()).to(Accepted)
                                     .assembleInput()
-                                    .output(d -> d)
+                                    .output(d -> d).masked(shape::maskedResponse)
                         )
-                        .when(shape.isRejected())
+                        .when(shape.rules().isRejected())
                         .then(
-                            shape.onFailure() != null ?
+                            shape.callbacks().onFailure() != null ?
                                 onEvent(shape.validResponseAndRejected()).to(Failed)
                                     .assembleInput()
-                                    .trigger(shape.onFailure().eventType())
-                                    .with(shape.onFailure().dataAdapter())
+                                    .trigger(shape.callbacks().onFailure().eventType())
+                                    .with(shape.callbacks().onFailure().dataAdapter())
                                     .on(shape.processModel())
                                     .identifiedBy(entityIdFromSession())
-                                    .output(d -> d.t1()) :
+                                    .output(d -> d.t1()).masked(shape::maskedResponse) :
                                 onEvent(shape.validResponseAndRejected()).to(Failed)
                                     .assembleInput()
-                                    .output(d -> d)
+                                    .output(d -> d).masked(shape::maskedResponse)
                         )
                         .otherwise(
-                            shape.onValidResponseUnknown() != null ?
+                            shape.callbacks().onValidResponseUnknown() != null ?
                                 onEvent(shape.validResponseAndUnknown()).to(Unknown)
                                     .assembleInput()
-                                    .trigger(shape.onValidResponseUnknown().eventType())
-                                    .with(shape.onValidResponseUnknown().dataAdapter())
+                                    .trigger(shape.callbacks().onValidResponseUnknown().eventType())
+                                    .with(shape.callbacks().onValidResponseUnknown().dataAdapter())
                                     .on(shape.processModel())
                                     .identifiedBy(entityIdFromSession())
-                                    .output(d -> d.t1()) :
+                                    .output(d -> d.t1()).masked(shape::maskedResponse) :
                                 onEvent(shape.validResponseAndUnknown()).to(Unknown)
                                     .assembleInput()
-                                    .output(d -> d)
+                                    .output(d -> d).masked(shape::maskedResponse)
                         ),
                     d -> HttpResponse.create(
                         d.t1().statusCode(),
@@ -494,32 +458,32 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
                 ).otherwise(
                     onEvent(shape.invalidResponse()).to(Intermediate)
                         .assembleInput()
-                        .when(shape.isRejectedByInvalidResponse())
+                        .when(shape.rules().isRejectedByInvalidResponse())
                         .then(
-                            shape.onInvalidResponseRejection() != null ?
+                            shape.callbacks().onInvalidResponseRejection() != null ?
                                 onEvent(shape.invalidResponseAndRejected()).to(Failed)
                                     .assembleInput()
-                                    .trigger(shape.onInvalidResponseRejection().eventType())
-                                    .with(shape.onInvalidResponseRejection().dataAdapter())
+                                    .trigger(shape.callbacks().onInvalidResponseRejection().eventType())
+                                    .with(shape.callbacks().onInvalidResponseRejection().dataAdapter())
                                     .on(shape.processModel())
                                     .identifiedBy(entityIdFromSession())
-                                    .output(d -> d.t1().t1()) :
+                                    .output(d -> d.t1().t1()).masked(shape.masking()::mask) :
                                 onEvent(shape.invalidResponseAndRejected()).to(Failed)
                                     .assembleInput()
-                                    .output(d -> d.t1())
+                                    .output(d -> d.t1()).masked(shape.masking()::mask)
                         )
                         .otherwise(
-                            shape.onInvalidResponseUnknown() != null ?
+                            shape.callbacks().onInvalidResponseUnknown() != null ?
                                 onEvent(shape.invalidResponseAndUnknown()).to(Unknown)
                                     .assembleInput()
-                                    .trigger(shape.onInvalidResponseUnknown().eventType())
-                                    .with(shape.onInvalidResponseUnknown().dataAdapter())
+                                    .trigger(shape.callbacks().onInvalidResponseUnknown().eventType())
+                                    .with(shape.callbacks().onInvalidResponseUnknown().dataAdapter())
                                     .on(shape.processModel())
                                     .identifiedBy(entityIdFromSession())
-                                    .output(d -> d.t1().t1()) :
+                                    .output(d -> d.t1().t1()).masked(shape.masking()::mask) :
                                 onEvent(shape.invalidResponseAndUnknown()).to(Unknown)
                                     .assembleInput()
-                                    .output(d -> d.t1())
+                                    .output(d -> d.t1()).masked(shape.masking()::mask)
                         ),
                     d -> tuple(d.t1(), d.t2().invalidReason())
                 )

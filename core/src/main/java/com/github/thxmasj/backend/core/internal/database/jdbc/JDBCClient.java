@@ -130,7 +130,7 @@ public class JDBCClient implements DatabaseClient {
   }
 
   private String errorMessage(String message, String queryName, String sql, Map<String, Parameter<?>> parameters) {
-    return "Query "+queryName+" failed: " + message + "\nParameters:\n" + parameters.entrySet().stream().map(e -> e.getKey() + "\t" + e.getValue()).collect(joining("\n")) + "\nSQL:\n" + sql;
+    return "Query "+queryName+" failed: " + message + "\nParameters:\n" + parameters.entrySet().stream().map(e -> e.getKey() + "\t" + e.getValue().described()).collect(joining("\n")) + "\nSQL:\n" + sql;
   }
 
 }

@@ -9,7 +9,9 @@ An event type has two type parameters, `EventType<I, O>`, and so does the transi
   it, by the caller of `StateMachine.onEvent`, or by a delayed or conditional trigger, which stores it until the
   trigger fires. The transition calculates its event from it.
 * **`O`, the output**, is the data of the event the transition stores in the entity's event log. `output(f)` calculates
-  it from the data of the last step, and `output()` stores the event without data. The output is also what a
+  it from the data of the last step, and must not give null, which fails the transition. `output()` stores the event
+  without data, which only an event type without data, of `DataType.none()`, may have: the state machine refuses a
+  transition on an event type with data which ends in `output()`, when it is created. The output is also what a
   transition triggering the event gets back.
 
 `BasicEventType.of(name, id, dataType)` gives an event type whose input and output are the same, and
@@ -51,7 +53,7 @@ flowchart LR
 ```
 
 The input step also has what the other steps need besides the data: the entity's event log, its current state, the
-timestamp, and the `Calculation` the step is part of. The output of each step is:
+timestamp, and the `Transaction` the step is part of. The output of each step is:
 
 | Step                     | Added by                      | Output                                                                                        |
 |--------------------------|-------------------------------|-----------------------------------------------------------------------------------------------|
@@ -121,7 +123,7 @@ flowchart TB
 
 Every step refers to the one before it, `previous`, so the steps of both transitions are stacked in one chain, with
 the steps of the triggered transition nested between the step triggering it and the `TriggerStep`. Below, the first
-step is on top, every step refers to the one above it, and the result of the calculation is the step at the bottom:
+step is on top, every step refers to the one above it, and the result of the transitions is the step at the bottom:
 
 <div class="step-stack">
   <div class="step-stack-title">Order: OrderPlaced</div>
@@ -149,7 +151,7 @@ of these, whose `ProcessResult` the triggering transition can act on, e.g. with 
 |-----------------|-------------------------------------------------------------------------------------|
 | `RejectedStep`  | The event is rejected, e.g. since the entity has no transition on it from its state |
 | `UnknownIdStep` | The entity of the event is not found                                                |
-| `PendingStep`   | The event is circular, i.e. on an entity already changed by the calculation         |
+| `PendingStep`   | The event is circular, i.e. on an entity already changed by the transaction         |
 | `IdExistsStep`  | The id of an id event is held by another entity (see [existing ids](existing-ids.md)) |
 
 ## Choosing a transition
@@ -216,16 +218,22 @@ transitions they can choose. That has these consequences:
   share it.
 * **The severity is the one of the chosen transition.** The [severity](monitoring.md#severity) declared on the
   choosing transition is that of its own event, which is not stored when it chooses another transition.
+* **So is the mask.** An event is stored with the mask of the chosen transition, if it has one (see
+  [masked events](entities.md#events-and-entities-not-stored)).
 * **Data the choosing transition calculates is kept only through the chosen transition.** The output of the choosing
   transition is never stored, so anything it assembles, e.g. from another system, has to be passed on to the chosen
   transition, by `f`, and be in that transition's output to be read from the log later.
+* **The result of the transition is the event of the choosing transition.** A transition triggering the event, and the
+  caller of `StateMachine.onEvent`, get the event of the choosing transition, with its output and the number of the
+  stored event, while the log has the chosen one. Its output is calculated, and must not be null, but it isn't masked
+  or marshalled, as it isn't stored.
 
 ## Collecting the changes
 
-When the calculation is done, the changes to store, i.e. the accepted events, the delayed events and the conditional
+When the transitions are calculated, the changes to store, i.e. the accepted events, the delayed events and the conditional
 triggers, and the actions to run, are collected by following the chain back from its last step to its first. In the
 order above, that gives the `OrderPlaced` and `StockReserved` events.
 
-Every step is taken through the `Calculation` of the event, which records the result of the step. That makes it
+Every step is taken through the `Transaction` of the event, which records the result of the step. That makes it
 possible to calculate the changes again from a step in the middle of the chain, without executing the steps before it
 again, such as an assembler reading from another system.

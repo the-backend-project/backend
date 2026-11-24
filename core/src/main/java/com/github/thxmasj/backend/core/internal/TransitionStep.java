@@ -24,7 +24,7 @@ import com.github.thxmasj.backend.core.internal.database.ConditionalTrigger;
 import java.time.ZonedDateTime;
 import java.util.UUID;
 
-/// A step of the calculation of a transition. The steps of a transition are chained, each one referring to the one
+/// A step of a transition. The steps of a transition are chained, each one referring to the one
 /// before it, from the input step to the output step. A transition triggering an event on another entity continues
 /// the chain with the steps of the triggered transition, from its input step to its output step.
 public sealed interface TransitionStep<T> {
@@ -56,7 +56,7 @@ public sealed interface TransitionStep<T> {
     throw new IllegalStateException("No input step. We have: " + chainToString(this));
   }
 
-  /// @param calculation the calculation the step is part of, which is the one of the step it is triggered from
+  /// @param transaction the transaction the step is part of, which is the one of the step it is triggered from
   record InputStep<I>(
       TransitionStep<?> stage1,
       TransitionStep<?> previous,
@@ -69,7 +69,7 @@ public sealed interface TransitionStep<T> {
       String correlationId,
       I input,
       StateMachine stateMachine,
-      Calculation calculation,
+      Transaction transaction,
       TriggerType triggerType,
       UUID triggerId
   ) implements TransitionStep<I>, TransitionContext<I> {
@@ -85,9 +85,9 @@ public sealed interface TransitionStep<T> {
         String correlationId,
         I input,
         StateMachine stateMachine,
-        Calculation calculation
+        Transaction transaction
     ) {
-      this(stage1, previous, triggerEvent, transitionModel, from, eventNumber, log, timestamp, correlationId, input, stateMachine, calculation, null, null);
+      this(stage1, previous, triggerEvent, transitionModel, from, eventNumber, log, timestamp, correlationId, input, stateMachine, transaction, null, null);
     }
     @Override public I stepOutput() {return input;}
     @Override public String toString() {

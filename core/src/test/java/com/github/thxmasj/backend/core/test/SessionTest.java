@@ -20,7 +20,6 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
@@ -114,7 +113,6 @@ public class SessionTest {
   }
 
   @Test
-  @Disabled("The session reaches one action back, see https://github.com/the-backend-project/backend/issues/308")
   public void entityOfSessionIsFoundTwoActionsBack() {
     assertEquals(List.of(StartedTwice.name(), Answered.name()), eventsOfRequest(stateMachine(), StartedTwice));
   }

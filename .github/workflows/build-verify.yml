@@ -77,7 +77,7 @@ jobs:
         uses: actions/checkout@v7
       - name: Build the native images of hello world and its backoffice
         working-directory: apps/hello-world
-        run: docker compose --profile backoffice build --build-arg NATIVE_IMAGE_OPTS=-Ob migrate backoffice-migrate
+        run: docker compose --profile backoffice build --build-arg NATIVE_IMAGE_OPTS="-Ob -H:+ReportExceptionStackTraces" migrate backoffice-migrate
       # The backoffice has no provider to sign in with here, which it discovers only when a user signs in
       - name: Run them with their database
         working-directory: apps/hello-world
@@ -121,7 +121,7 @@ jobs:
         uses: actions/checkout@v7
       - name: Build the native images of the identity provider and its backoffice
         working-directory: apps/identity-provider
-        run: docker compose build --build-arg NATIVE_IMAGE_OPTS=-Ob migrate backoffice-migrate
+        run: docker compose build --build-arg NATIVE_IMAGE_OPTS="-Ob -H:+ReportExceptionStackTraces" migrate backoffice-migrate
       - name: Run it with its database
         working-directory: apps/identity-provider
         run: |

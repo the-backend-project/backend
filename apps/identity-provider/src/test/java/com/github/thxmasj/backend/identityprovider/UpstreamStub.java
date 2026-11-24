@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
@@ -46,6 +47,10 @@ final class UpstreamStub implements AutoCloseable {
   private final Map<String, Pending> codes = new ConcurrentHashMap<>();
   /// The codes issued, to check that they don't enter the event log
   final List<String> issuedCodes = new CopyOnWriteArrayList<>();
+  /// The token requests received, to check that a code is redeemed once
+  final AtomicInteger tokenRequests = new AtomicInteger();
+  /// The status the token endpoint answers with, rather than as a provider does, or null
+  volatile Integer tokenStatus;
   private volatile User user = new User("upstream-user-1", "ada@example.com", "Ada Lovelace");
   private volatile String error;
 
@@ -141,6 +146,9 @@ final class UpstreamStub implements AutoCloseable {
   }
 
   private Response token(String authorization, Map<String, String> form) {
+    tokenRequests.incrementAndGet();
+    if (tokenStatus != null)
+      return Response.json(tokenStatus, "{}");
     String expected = "Basic " + Base64.getEncoder().encodeToString((clientId + ":" + clientSecret).getBytes(UTF_8));
     if (!expected.equals(authorization))
       return Response.json(401, "{\"error\":\"invalid_client\"}");

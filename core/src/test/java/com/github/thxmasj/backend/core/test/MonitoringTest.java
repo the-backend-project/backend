@@ -124,7 +124,7 @@ public class MonitoringTest {
         Begin, List.of(
             onEvent(InspectionStarted).to(States.Inspecting)
                 .<UUID>assemble(_ -> {throw new IllegalStateException("Scanner broken");})
-                .output()
+                .output(d -> d)
         ),
         States.Inspecting, List.of()
     );
