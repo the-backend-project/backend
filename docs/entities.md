@@ -87,8 +87,7 @@ The state machine reads the event log of the selected entity, finds the transiti
 event's type, and follows the triggers of the transition from entity to entity. The new events of all the entities
 involved are stored in one transaction, together with the triggers to be fired later. If another instance has
 appended an event to one of the entities in the meantime, the transaction fails on the event number, and the event is
-retried on the new event logs, except that of the entity it entered on
-([#356](https://github.com/the-backend-project/backend/issues/356)).
+retried on the new event logs.
 
 A transition has four kinds of triggers:
 

@@ -30,12 +30,10 @@ and stored in one database transaction:
 * the conditional triggers.
 
 Either all of them are stored or none of them are. If another instance has appended an event to one of the
-entities in the meantime, the transaction fails on the event number, and the calculation is done again, up to three
-times (see [Processing an event](entities.md#processing-an-event)). The event logs of the entities the transitions
-trigger events on are read again for it. The entity the event entered on keeps the event log it was read with, so a
-conflict on that entity fails every attempt
-([#356](https://github.com/the-backend-project/backend/issues/356)). The calculation is also done again if an id it
-claims is found to be taken (see [Existing ids](existing-ids.md)).
+entities in the meantime, the transaction fails on the event number, and the calculation is done again from the new
+event logs, up to three times (see [Processing an event](entities.md#processing-an-event)). The calculation is also
+done again if an id it claims is found to be taken (see [Existing ids](existing-ids.md)). The outcome of an action
+is the exception, see [What a later transaction sees](#what-a-later-transaction-sees).
 
 The actions of the transitions, such as sending an [outbox request](http-outbox.md), are run only after the
 transaction is committed. Delayed triggers are fired by a worker when they are due, and conditional triggers when
