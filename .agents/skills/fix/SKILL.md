@@ -47,6 +47,13 @@ git remote -v
    another agent's account, someone may already be working on it: stop and ask the
    user whether to go on before assigning it or moving it on the board.
 
+   When running in JetBrains Air, name the session after the issue, so the user can
+   tell it apart in Air's list of agent sessions: call Air's IDE tool
+   `air_set_session_title` with the title `N - <issue title>`, shortened if the
+   issue title is long. The agent may reach Air's IDE tools through a tool that runs
+   them by name (e.g. `air_set_session_title --title '360 - Fix the timeout'`).
+   Outside Air, or if the tool is unavailable, skip this.
+
 3. **Assign it** to the user `gh` is logged in as:
    `gh issue edit N --add-assignee @me`
 

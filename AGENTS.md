@@ -55,7 +55,9 @@ user-level instructions or memory.
 ## Skills
 
 The repository has two skills in [.agents/skills](.agents/skills), which Claude Code finds through the symbolic link
-`.claude/skills`. Keep them free of features only one agent has, such as argument placeholders or tool names.
+`.claude/skills`. Keep them free of features only one agent has, such as argument placeholders or tool names. A tool
+that the environment gives every agent, such as an IDE tool of JetBrains Air, may be named, if the skill also says what
+to do where the tool is missing.
 
 - `/fix N` takes issue N from the board to a pull request, following the conventions above. See
   [Working on issues with a coding agent](CONTRIBUTING.md#working-on-issues-with-a-coding-agent).
