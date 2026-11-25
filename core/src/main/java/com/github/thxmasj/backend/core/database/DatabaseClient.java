@@ -243,15 +243,7 @@ public interface DatabaseClient extends AutoCloseable {
     }
   }
 
-  class ConcurrencyFailure extends MssqlException {
-
-    public ConcurrencyFailure(String queryName, EntityModel model, String message, Throwable t) {
-      super(queryName, model, message, t);
-    }
-
-  }
-
-  class DataIntegrityViolation extends MssqlException {
+  class DataIntegrityViolation extends DatabaseException {
 
     private final String tableName;
 
@@ -329,32 +321,18 @@ public interface DatabaseClient extends AutoCloseable {
     }
   }
 
-  class MssqlException extends RuntimeException {
+  class DatabaseException extends RuntimeException {
 
-    public MssqlException(String queryName, EntityModel model, String message, Throwable t) {
+    public DatabaseException(String queryName, EntityModel model, String message, Throwable t) {
       super("Query " + queryName + " failed (model=" + (model != null ? model.name() : "N/A)")  + ")" + (message != null ? ": " + message : ""), t);
     }
 
-    public MssqlException(String queryName, EntityModel model, String message) {
+    public DatabaseException(String queryName, EntityModel model, String message) {
       this(queryName, model, message, null);
     }
 
-    public MssqlException(String queryName, EntityModel model, Throwable e) {
+    public DatabaseException(String queryName, EntityModel model, Throwable e) {
       this(queryName, model, null, e);
-    }
-  }
-
-  class UncategorizedMssqlException extends MssqlException {
-
-    private final int errorCode;
-
-    public UncategorizedMssqlException(String queryName, EntityModel model, String message, int errorCode, Throwable cause) {
-      super(queryName, model, message, cause);
-      this.errorCode = errorCode;
-    }
-
-    public int getErrorCode() {
-      return errorCode;
     }
   }
 }

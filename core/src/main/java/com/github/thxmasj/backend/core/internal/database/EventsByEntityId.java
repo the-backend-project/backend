@@ -6,8 +6,6 @@ import com.github.thxmasj.backend.core.EntityModel;
 import com.github.thxmasj.backend.core.Event;
 import com.github.thxmasj.backend.core.EventLog;
 import com.github.thxmasj.backend.core.EventType;
-import com.github.thxmasj.backend.core.IdEntityModel;
-import com.github.thxmasj.backend.core.IndexEntityModel;
 import com.github.thxmasj.backend.core.database.DatabaseClient;
 import com.github.thxmasj.backend.core.database.MappingFailure;
 import com.github.thxmasj.backend.core.database.UnknownEntity;
@@ -26,24 +24,18 @@ public class EventsByEntityId {
   private final Map<EntityModel, String> sqls;
   private final Clock clock;
 
-  /// @param sql the SQL selecting the events of an entity from an event table, given the table name
+  /// @param sql the SQL selecting the events of an entity of an entity model, in the dialect of the database
   public EventsByEntityId(
       DatabaseClient client,
-      Function<String, String> sql,
+      Function<EntityModel, String> sql,
       List<EntityModel> entityModels,
       Clock clock
   ) {
     this.client = client;
     this.clock = clock;
     this.sqls = new HashMap<>();
-    for (var entityModel : entityModels) {
-      String table = switch (entityModel) {
-        case IdEntityModel _ -> "IdEvent";
-        case IndexEntityModel _ -> "IndexEvent";
-        default -> "Event";
-      };
-      this.sqls.put(entityModel, sql.apply(table));
-    }
+    for (var entityModel : entityModels)
+      this.sqls.put(entityModel, sql.apply(entityModel));
   }
 
   public Mono<EventLog> execute(EntityModel entityModel, List<EventType<?, ?>> eventTypes, UUID entityId) {

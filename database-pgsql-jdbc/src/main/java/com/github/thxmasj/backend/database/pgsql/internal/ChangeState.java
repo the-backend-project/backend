@@ -9,12 +9,17 @@ import com.github.thxmasj.backend.core.IdEntityModel;
 import com.github.thxmasj.backend.core.IndexEntityModel;
 import com.github.thxmasj.backend.core.TriggerType;
 import com.github.thxmasj.backend.core.database.DatabaseClient;
+import com.github.thxmasj.backend.core.database.DatabaseClient.PrimaryKeyConstraintViolation;
+import com.github.thxmasj.backend.core.database.DatabaseClient.UniqueIndexConstraintViolation;
+import com.github.thxmasj.backend.core.internal.database.EventAlreadyExists;
+import com.github.thxmasj.backend.core.internal.database.IdEventAlreadyExists;
 import com.github.thxmasj.backend.core.internal.DelayedEvent;
 import com.github.thxmasj.backend.core.internal.database.ChangeState.Change.FiredTrigger;
 import com.github.thxmasj.backend.core.internal.database.ConditionalTrigger;
 import java.time.Clock;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.IntStream;
 
 /// Stores the changes in a single round trip without an explicit transaction. PostgreSQL then executes them in a
@@ -46,9 +51,45 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
     return message != null && message.contains(TRIGGER_FIRED_ELSEWHERE);
   }
 
-  /// The duplicate key of an id event, as reported by PostgreSQL, e.g. "f721bf54-891b-41a0-aa63-5d3cbde52437, \x7b22..."
+  /// A primary key violation on one of the event tables is an event which exists, whose key is its entity id and
+  /// number, or its entity id alone in the entity table, which has the first event. A violation of the unique index of
+  /// the id events is an id which is taken, whose key is the type and data of the id event.
   @Override
-  protected String duplicateKey(Event<?> idEvent) {
+  protected Throwable conflict(Throwable failure, List<Change> changes) {
+    return switch (failure) {
+      case PrimaryKeyConstraintViolation violation when EventTable.named(violation.tableName()) != null ->
+          eventAlreadyExists(violation, EventTable.named(violation.tableName()), changes);
+      case UniqueIndexConstraintViolation violation when EventTable.IdEvent.name().equals(violation.tableName()) ->
+          changes.stream()
+              .filter(change -> change.entityModel() instanceof IdEntityModel && change.newEvent() != null)
+              .map(Change::newEvent)
+              .filter(event -> violation.duplicateKey().equalsIgnoreCase(duplicateKey(event)))
+              .<Throwable>map(event -> new IdEventAlreadyExists(event, violation))
+              .findFirst()
+              .orElse(null);
+      default -> null;
+    };
+  }
+
+  private static EventAlreadyExists eventAlreadyExists(
+      PrimaryKeyConstraintViolation violation,
+      EventTable table,
+      List<Change> changes
+  ) {
+    try {
+      String[] key = violation.duplicateKey().split(",");
+      UUID entityId = UUID.fromString(key[0].trim());
+      int eventNumber = table == EventTable.Entity ? 1 : Integer.parseInt(key[1].trim());
+      return changeStoring(changes, table::stores, entityId, eventNumber)
+          .map(change -> new EventAlreadyExists(change, changes, violation))
+          .orElseGet(() -> new EventAlreadyExists(violation));
+    } catch (RuntimeException _) {
+      return new EventAlreadyExists(violation);
+    }
+  }
+
+  /// The duplicate key of an id event, as reported by PostgreSQL, e.g. "f721bf54-891b-41a0-aa63-5d3cbde52437, \x7b22..."
+  private static String duplicateKey(Event<?> idEvent) {
     return idEvent.type().id() + ", \\x" + HexFormat.of().formatHex(idEvent.getMarshalledData());
   }
 
@@ -75,7 +116,7 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
             :entityId,
             :eventNumber,:type,:timestamp,:data
           );
-          """.replace("{table}", table(schema, entityModel instanceof IdEntityModel ? "IdEvent" : "IndexEvent"));
+          """.replace("{table}", table(schema, EventTable.of(entityModel).name()));
     } else if (event != null) {
       if (event.eventNumber() == 1) {
         sql +=

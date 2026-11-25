@@ -6,7 +6,7 @@ final class Queries {
   private Queries() {}
 
   /// The events of an entity in one of the event tables
-  static String eventsByEntityId(String schema, String table) {
+  static String eventsByEntityId(String schema, EventTable table) {
     return
         """
         SELECT EventNumber, Type, Timestamp, Data
@@ -14,7 +14,7 @@ final class Queries {
         WHERE EntityId=:entityId
         ORDER BY EventNumber;
         """.replace("{schema}", schema)
-            .replace("{table}", table);
+            .replace("{table}", table.name());
   }
 
   static String eventsByIdEvent(String schema) {

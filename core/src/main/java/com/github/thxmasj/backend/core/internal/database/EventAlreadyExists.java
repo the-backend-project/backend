@@ -1,6 +1,7 @@
 package com.github.thxmasj.backend.core.internal.database;
 
 import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.internal.database.ChangeState.Change;
 import java.util.List;
 import java.util.UUID;
 
@@ -13,18 +14,24 @@ public class EventAlreadyExists extends RuntimeException {
   private final UUID entityId;
   private final int eventNumber;
 
-  public EventAlreadyExists(String duplicateKey) {
-    super("Event with raw id " + duplicateKey + " already exists");
+  /// An event exists, but the database's report doesn't tell which
+  public EventAlreadyExists(Throwable cause) {
+    super("An event being stored already exists", cause);
     this.entityModel = null;
     this.entityId = null;
     this.eventNumber = 0;
   }
 
-  public EventAlreadyExists(EntityModel entityModel, UUID entityId, int eventNumber, List<?> changes) {
-    super("Event " + eventNumber + " on entity " + entityModel.name() + ":" + entityId + " already exists. Changes:\n" + changes);
-    this.entityModel = entityModel;
-    this.entityId = entityId;
-    this.eventNumber = eventNumber;
+  /// The event of the change exists
+  public EventAlreadyExists(Change change, List<Change> changes, Throwable cause) {
+    super(
+        "Event " + change.newEvent().eventNumber() + " on entity " + change.entityModel().name() + ":" +
+            change.entityId() + " already exists. Changes:\n" + changes,
+        cause
+    );
+    this.entityModel = change.entityModel();
+    this.entityId = change.entityId();
+    this.eventNumber = change.newEvent().eventNumber();
   }
 
   /// Whether the event which exists is the one of the number on the entity
