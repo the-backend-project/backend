@@ -522,7 +522,7 @@ public class HttpInboxTest {
     return new HttpRequest<>(
         PUT,
         URI.create("/masked/" + messageId + "?code=" + code + "&state=s1"),
-        Map.of("Authorization", "Bearer " + token, "Cookie", "session=" + token, "X-Other", "kept"),
+        Headers.of("Authorization", "Bearer " + token, "Cookie", "session=" + token, "X-Other", "kept"),
         asJson(new InternalProcess("Hello", 1))
     );
   }
@@ -567,11 +567,11 @@ public class HttpInboxTest {
     var request = HttpInboxRequest.matching(m -> m.requestLine().matches("PUT /bell/.*")).noContent()
         .deduplicateOn(parseMessageId("PUT /bell/(.*)", 1))
         .process(BellRung, bell, newEntity())
-        .response(Rang, _ -> new HttpResponse<>(200, "OK", Map.of("Set-Cookie", "session=s3cret"), null))
+        .response(Rang, _ -> new HttpResponse<>(200, "OK", Headers.of("Set-Cookie", "session=s3cret"), null))
         .build("CookieRequest", UUID.fromString("9b1d7f3a-5c2e-4a86-b4d0-e8f6a2c4b917"));
     var cookieInbox = HttpInbox.of(List.of(request));
     var machine = Init.stateMachine(UUID.randomUUID().toString(), cookieInbox.entityModels());
-    var message = new HttpRequest<byte[]>(PUT, URI.create("/bell/" + UUID.randomUUID()), Map.of(), null);
+    var message = new HttpRequest<byte[]>(PUT, URI.create("/bell/" + UUID.randomUUID()), Headers.of(), null);
     Function<HttpRequest<byte[]>, HttpResponse<byte[]>> send = m -> HttpResponse.raw(machine.onEvent(UUID.randomUUID().toString(), cookieInbox.trigger(), m)
         .skip(1).next().block(Duration.ofSeconds(5)).getUnmarshalledData());
 
@@ -596,7 +596,7 @@ public class HttpInboxTest {
     return new HttpRequest<>(
         PUT,
         URI.create("/internal/" + messageId),
-        Map.of("Authorization", "Bearer " + token, "Cookie", "session=" + token),
+        Headers.of("Authorization", "Bearer " + token, "Cookie", "session=" + token),
         asJson(new InternalProcess("Hello", 1))
     );
   }
@@ -659,7 +659,7 @@ public class HttpInboxTest {
           .exchange(new HttpRequest<>(
               PUT,
               URI.create("http://localhost:" + listener.port() + "/internal/" + UUID.randomUUID()),
-              Map.of(),
+              Headers.of(),
               new ObjectMapper().writeValueAsBytes(new InternalProcess("Hello", 1))
           ))
           .block(Duration.ofSeconds(5));
@@ -672,7 +672,7 @@ public class HttpInboxTest {
 
   @Test
   public void whenCorrelationIdHeaderOverHttpThenResponseHasSameCorrelationId() throws IOException {
-    HttpResponse<byte[]> response = exchangeOverHttp(new HttpInboxListener(stateMachine, inbox), Map.of("X-Correlation-Id", "abc-123"));
+    HttpResponse<byte[]> response = exchangeOverHttp(new HttpInboxListener(stateMachine, inbox), Headers.of("X-Correlation-Id", "abc-123"));
     assertEquals("abc-123", response.headerValue("X-Correlation-Id"));
   }
 
@@ -680,14 +680,14 @@ public class HttpInboxTest {
   public void whenCustomCorrelationIdHeaderOverHttpThenResponseHasSameCorrelationId() throws IOException {
     HttpResponse<byte[]> response = exchangeOverHttp(
         new HttpInboxListener(stateMachine, inbox).correlationIdHeader("TID"),
-        Map.of("TID", "tid-123", "X-Correlation-Id", "ignored")
+        Headers.of("TID", "tid-123", "X-Correlation-Id", "ignored")
     );
     assertEquals("tid-123", response.headerValue("X-Correlation-Id"));
   }
 
   @Test
   public void whenNoCorrelationIdHeaderOverHttpThenGeneratedCorrelationId() throws IOException {
-    HttpResponse<byte[]> response = exchangeOverHttp(new HttpInboxListener(stateMachine, inbox), Map.of());
+    HttpResponse<byte[]> response = exchangeOverHttp(new HttpInboxListener(stateMachine, inbox), Headers.of());
     assertThat(response.headerValue("X-Correlation-Id")).matches("SYS-\\d{19}");
   }
 
@@ -739,7 +739,7 @@ public class HttpInboxTest {
     }
   }
 
-  private HttpResponse<byte[]> exchangeOverHttp(HttpInboxListener inboxListener, Map<String, String> headers) throws IOException {
+  private HttpResponse<byte[]> exchangeOverHttp(HttpInboxListener inboxListener, Headers headers) throws IOException {
     DisposableServer listener = inboxListener.listen(0);
     try {
       HttpResponse<byte[]> response = new NettyHttpClient(new NettyHttpClientBuilder().build())
@@ -765,10 +765,10 @@ public class HttpInboxTest {
     try {
       var client = new NettyHttpClient(new NettyHttpClientBuilder().build());
       URI uri = URI.create("http://localhost:" + listener.port() + "/normalized/" + UUID.randomUUID());
-      HttpResponse<byte[]> first = client.exchange(new HttpRequest<>(PUT, uri, Map.of("X-Version", "1"), "Hello!".getBytes()))
+      HttpResponse<byte[]> first = client.exchange(new HttpRequest<>(PUT, uri, Headers.of("X-Version", "1"), "Hello!".getBytes()))
           .block(Duration.ofSeconds(5));
       assertEquals(201, first.statusCode());
-      HttpResponse<byte[]> retried = client.exchange(new HttpRequest<>(PUT, uri, Map.of(), "Hello!".getBytes()))
+      HttpResponse<byte[]> retried = client.exchange(new HttpRequest<>(PUT, uri, Headers.of(), "Hello!".getBytes()))
           .block(Duration.ofSeconds(5));
       assertEquals(500, retried.statusCode());
     } finally {
@@ -791,7 +791,7 @@ public class HttpInboxTest {
           .exchange(new HttpRequest<>(
               PUT,
               URI.create("http://localhost:" + listener.port() + "/rewritten/" + UUID.randomUUID()),
-              Map.of(),
+              Headers.of(),
               new ObjectMapper().writeValueAsBytes(new InternalProcess("Hello", 1))
           ))
           .block(Duration.ofSeconds(5));
@@ -823,7 +823,7 @@ public class HttpInboxTest {
           .exchange(new HttpRequest<>(
               PUT,
               URI.create("http://localhost:" + listener.port() + "/internal/" + UUID.randomUUID()),
-              Map.of(),
+              Headers.of(),
               "{}".getBytes()
           ))
           .block(Duration.ofSeconds(5));
@@ -952,7 +952,7 @@ public class HttpInboxTest {
     Event<?> responseEvent = onRequest(inbox.trigger(), new HttpRequest<>(
         PUT,
         URI.create("/protected/" + UUID.randomUUID()),
-        Map.of("Authorization", "Bearer not-a-token"),
+        Headers.of("Authorization", "Bearer not-a-token"),
         "Hello!".getBytes()
     ));
     HttpResponse<byte[]> response = HttpMessageParser.parseResponse(responseEvent.data());
@@ -1142,7 +1142,7 @@ public class HttpInboxTest {
         Request,
         true
     );
-    assertThatThrownBy(() -> stateMachine.onEvent(UUID.randomUUID().toString(), trigger, new HttpRequest<>(PUT, URI.create("/x"), Map.of(), null)).blockLast(Duration.ofSeconds(5)))
+    assertThatThrownBy(() -> stateMachine.onEvent(UUID.randomUUID().toString(), trigger, new HttpRequest<>(PUT, URI.create("/x"), Headers.of(), null)).blockLast(Duration.ofSeconds(5)))
         .hasMessageContaining("can't be created in the group Request");
   }
 
@@ -1154,7 +1154,7 @@ public class HttpInboxTest {
         Request,
         false
     );
-    assertThatThrownBy(() -> stateMachine.onEvent(UUID.randomUUID().toString(), trigger, new HttpRequest<>(PUT, URI.create("/x"), Map.of(), null)).blockLast(Duration.ofSeconds(5)))
+    assertThatThrownBy(() -> stateMachine.onEvent(UUID.randomUUID().toString(), trigger, new HttpRequest<>(PUT, URI.create("/x"), Headers.of(), null)).blockLast(Duration.ofSeconds(5)))
         .hasMessageContaining("can only be identified by the session");
   }
 
@@ -1257,7 +1257,7 @@ public class HttpInboxTest {
     HttpResponse<byte[]> first = HttpMessageParser.parseResponse(onRollbackRequest(messageId).data());
     assertEquals("Nothing to roll back", ProblemDetail.parse(first.body()).detail());
     // A retry, with another correlation id, which the normalizer removes
-    HttpResponse<byte[]> second = onRollbackRequest(messageId, Map.of("X-Correlation-Id", "retry"));
+    HttpResponse<byte[]> second = onRollbackRequest(messageId, Headers.of("X-Correlation-Id", "retry"));
     assertEquals(201, second.statusCode());
     assertArrayEquals(first.body(), second.body());
   }
@@ -1268,9 +1268,9 @@ public class HttpInboxTest {
   public void whenAnotherRollbackOfRolledBackRequestThenConflict() throws IOException {
     String messageId = UUID.randomUUID().toString();
     onInternalRequest(messageId, new InternalProcess("Hello!", 100));
-    HttpResponse<byte[]> first = onRollbackRequest(messageId, Map.of("X-Reason", "Cancelled"));
+    HttpResponse<byte[]> first = onRollbackRequest(messageId, Headers.of("X-Reason", "Cancelled"));
     assertEquals("Rolled back", ProblemDetail.parse(first.body()).detail());
-    HttpResponse<byte[]> second = onRollbackRequest(messageId, Map.of("X-Reason", "Timed out"));
+    HttpResponse<byte[]> second = onRollbackRequest(messageId, Headers.of("X-Reason", "Timed out"));
     assertEquals(400, second.statusCode());
     assertEquals("Conflict", ProblemDetail.parse(second.body()).detail());
   }
@@ -1280,9 +1280,9 @@ public class HttpInboxTest {
   public void whenRollbackWithoutNormalizerIsRetriedWithAnotherCorrelationIdThenConflict() throws IOException {
     String messageId = UUID.randomUUID().toString();
     onRequest(PUT, URI.create("/owned/" + messageId), asJson(new InternalProcess("alice", 1)));
-    HttpResponse<byte[]> first = onOwnedRollback(messageId, Map.of("X-Owner", "alice", "X-Correlation-Id", "first"));
+    HttpResponse<byte[]> first = onOwnedRollback(messageId, Headers.of("X-Owner", "alice", "X-Correlation-Id", "first"));
     assertEquals("Rolled back", ProblemDetail.parse(first.body()).detail());
-    HttpResponse<byte[]> second = onOwnedRollback(messageId, Map.of("X-Owner", "alice", "X-Correlation-Id", "retry"));
+    HttpResponse<byte[]> second = onOwnedRollback(messageId, Headers.of("X-Owner", "alice", "X-Correlation-Id", "retry"));
     assertEquals(400, second.statusCode());
     assertEquals("Conflict", ProblemDetail.parse(second.body()).detail());
   }
@@ -1303,14 +1303,14 @@ public class HttpInboxTest {
     String messageId = UUID.randomUUID().toString();
     HttpResponse<byte[]> request = HttpMessageParser.parseResponse(onRequest(PUT, URI.create("/owned/" + messageId), asJson(new InternalProcess("alice", 1))).data());
     assertEquals(201, request.statusCode());
-    HttpResponse<byte[]> rollback = onOwnedRollback(messageId, Map.of("X-Owner", "alice"));
+    HttpResponse<byte[]> rollback = onOwnedRollback(messageId, Headers.of("X-Owner", "alice"));
     assertEquals(201, rollback.statusCode());
     assertEquals("Rolled back", ProblemDetail.parse(rollback.body()).detail());
   }
 
   @Test
   public void whenRollbackIsRefusedByItsAuthorizerThenRefusalResponse() throws IOException {
-    HttpResponse<byte[]> rollback = onOwnedRollback(UUID.randomUUID().toString(), Map.of());
+    HttpResponse<byte[]> rollback = onOwnedRollback(UUID.randomUUID().toString(), Headers.of());
     assertEquals(400, rollback.statusCode());
     assertEquals("Owner missing", ProblemDetail.parse(rollback.body()).detail());
   }
@@ -1320,7 +1320,7 @@ public class HttpInboxTest {
   public void whenRollbackByAnotherSubjectThenNothingToRollBack() throws IOException {
     String messageId = UUID.randomUUID().toString();
     onRequest(PUT, URI.create("/owned/" + messageId), asJson(new InternalProcess("alice", 1)));
-    HttpResponse<byte[]> rollback = onOwnedRollback(messageId, Map.of("X-Owner", "bob"));
+    HttpResponse<byte[]> rollback = onOwnedRollback(messageId, Headers.of("X-Owner", "bob"));
     assertEquals(201, rollback.statusCode());
     assertEquals("Nothing to roll back", ProblemDetail.parse(rollback.body()).detail());
   }
@@ -1444,7 +1444,7 @@ public class HttpInboxTest {
     assertThat(EntityModel.reachable(HttpInbox.of(List.of(request)).entityModels())).contains(request, bell, Chime);
   }
 
-  private HttpResponse<byte[]> onOwnedRollback(String messageId, Map<String, String> headers) throws IOException {
+  private HttpResponse<byte[]> onOwnedRollback(String messageId, Headers headers) throws IOException {
     return HttpMessageParser.parseResponse(onRequest(inbox.trigger(), new HttpRequest<>(
         DELETE,
         URI.create("/owned/messages/" + messageId),
@@ -1491,7 +1491,7 @@ public class HttpInboxTest {
   }
 
   private Event<?> onRequest(Method method, URI uri, byte[] body) {
-    return onRequest(inbox.trigger(), new HttpRequest<>(method, uri, Map.of(), body));
+    return onRequest(inbox.trigger(), new HttpRequest<>(method, uri, Headers.of(), body));
   }
 
   private Event<?> onRollbackRequest(String messageId) {
@@ -1502,7 +1502,7 @@ public class HttpInboxTest {
     return new HttpRequest<>(m.method(), m.uri(), m.headers().without("X-Correlation-Id"), m.body());
   }
 
-  private HttpResponse<byte[]> onRollbackRequest(String messageId, Map<String, String> headers) throws IOException {
+  private HttpResponse<byte[]> onRollbackRequest(String messageId, Headers headers) throws IOException {
     return HttpMessageParser.parseResponse(onRequest(inbox.trigger(), new HttpRequest<>(
         DELETE,
         URI.create("/lamps/messages/" + messageId),

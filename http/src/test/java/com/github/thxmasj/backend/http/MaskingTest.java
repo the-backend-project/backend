@@ -6,20 +6,19 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import com.github.thxmasj.backend.http.HttpRequest.Method;
 import java.net.URI;
 import java.util.List;
-import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 public class MaskingTest {
 
-  private static final Map<String, String> form = Map.of("Content-Type", "application/x-www-form-urlencoded");
+  private static final Headers form = Headers.of("Content-Type", "application/x-www-form-urlencoded");
 
   @Test
   public void credentialHeadersAreMaskedWhateverTheirCase() {
-    var request = new HttpRequest<byte[]>(Method.GET, URI.create("/"), Map.of("authorization", "Bearer x", "COOKIE", "s=1", "Accept", "text/html"), null);
+    var request = new HttpRequest<byte[]>(Method.GET, URI.create("/"), Headers.of("authorization", "Bearer x", "COOKIE", "s=1", "Accept", "text/html"), null);
     var masked = Masking.CREDENTIALS.mask(request);
-    assertEquals(Headers.of(Map.of("authorization", "***", "COOKIE", "***", "Accept", "text/html")), masked.headers());
-    var response = new HttpResponse<byte[]>(302, "Found", Map.of("Set-Cookie", "s=1; HttpOnly", "Location", "/"), null);
-    assertEquals(Headers.of(Map.of("Set-Cookie", "***", "Location", "/")), Masking.CREDENTIALS.mask(response).headers());
+    assertEquals(Headers.of("authorization", "***", "COOKIE", "***", "Accept", "text/html"), masked.headers());
+    var response = new HttpResponse<byte[]>(302, "Found", Headers.of("Set-Cookie", "s=1; HttpOnly", "Location", "/"), null);
+    assertEquals(Headers.of("Set-Cookie", "***", "Location", "/"), Masking.CREDENTIALS.mask(response).headers());
   }
 
   /// The values of a header are masked by one mask, e.g. of the cookies a response sets, so that a request equals a
@@ -39,14 +38,14 @@ public class MaskingTest {
 
   @Test
   public void queryParametersAreMaskedAsWrittenKeepingTheOthersAndTheFragment() {
-    var request = new HttpRequest<byte[]>(Method.GET, URI.create("https://rp.example.com/cb?state=a%20b&code=s3cr%2Bt#top"), Map.of(), null);
+    var request = new HttpRequest<byte[]>(Method.GET, URI.create("https://rp.example.com/cb?state=a%20b&code=s3cr%2Bt#top"), Headers.of(), null);
     var masked = Masking.queryParameters("code").mask(request);
     assertEquals("https://rp.example.com/cb?state=a%20b&code=***#top", masked.uri().toString());
   }
 
   @Test
   public void aRequestWithNothingToMaskIsTheSame() {
-    var request = new HttpRequest<byte[]>(Method.GET, URI.create("/cb?state=x"), Map.of("Accept", "*/*"), null);
+    var request = new HttpRequest<byte[]>(Method.GET, URI.create("/cb?state=x"), Headers.of("Accept", "*/*"), null);
     assertEquals(request, Masking.queryParameters("code").mask(request));
   }
 
@@ -56,7 +55,7 @@ public class MaskingTest {
     var request = new HttpRequest<>(Method.POST, URI.create("/token"), form, "grant_type=authorization_code&code=abc&client_secret=xyz".getBytes(UTF_8));
     assertEquals("grant_type=authorization_code&code=***&client_secret=***", new String(masking.mask(request).body(), UTF_8));
     // A body which isn't declared a form may have the fields all the same, so it is masked as a whole
-    var json = new HttpRequest<>(Method.POST, URI.create("/token"), Map.of("Content-Type", "application/json"), "{\"code\":\"abc\"}".getBytes(UTF_8));
+    var json = new HttpRequest<>(Method.POST, URI.create("/token"), Headers.of("Content-Type", "application/json"), "{\"code\":\"abc\"}".getBytes(UTF_8));
     assertEquals("***", new String(masking.mask(json).body(), UTF_8));
   }
 
@@ -65,7 +64,7 @@ public class MaskingTest {
   @Test
   public void whatIsMaskedOfRequestsLeavesResponsesAsTheyAre() {
     var masking = Masking.CREDENTIALS.andFormFields("code").andRequestHeaders("X-Api-Key");
-    var json = new HttpResponse<>(200, "OK", Map.of("Content-Type", "application/json", "Set-Cookie", "s=1", "X-Api-Key", "k"), "{\"code\":\"abc\"}".getBytes(UTF_8));
+    var json = new HttpResponse<>(200, "OK", Headers.of("Content-Type", "application/json", "Set-Cookie", "s=1", "X-Api-Key", "k"), "{\"code\":\"abc\"}".getBytes(UTF_8));
     var stored = masking.mask(json);
     assertEquals("{\"code\":\"abc\"}", new String(stored.body(), UTF_8));
     assertEquals("***", stored.headerValue("Set-Cookie"));
@@ -78,9 +77,9 @@ public class MaskingTest {
   @Test
   public void whatIsMaskedOfResponsesLeavesRequestsAsTheyAre() {
     var masking = Masking.CREDENTIALS.andResponseHeaders("Location");
-    var request = new HttpRequest<byte[]>(Method.GET, URI.create("/cb"), Map.of("Location", "/x"), null);
+    var request = new HttpRequest<byte[]>(Method.GET, URI.create("/cb"), Headers.of("Location", "/x"), null);
     assertEquals(request, masking.mask(request));
-    assertEquals("***", masking.mask(new HttpResponse<byte[]>(302, "Found", Map.of("Location", "/x"), null)).headerValue("Location"));
+    assertEquals("***", masking.mask(new HttpResponse<byte[]>(302, "Found", Headers.of("Location", "/x"), null)).headerValue("Location"));
     assertEquals(false, masking.masksMoreOfRequestsThan(Masking.CREDENTIALS));
     assertEquals(true, Masking.CREDENTIALS.andRequestHeaders("X-Api-Key").masksMoreOfRequestsThan(Masking.CREDENTIALS));
   }
@@ -88,7 +87,7 @@ public class MaskingTest {
   /// An empty body has no fields to mask, so it is stored empty, not as a body the client never sent
   @Test
   public void anEmptyBodyIsStoredEmpty() {
-    var empty = new HttpRequest<>(Method.POST, URI.create("/token"), Map.of(), new byte[0]);
+    var empty = new HttpRequest<>(Method.POST, URI.create("/token"), Headers.of(), new byte[0]);
     assertEquals(0, Masking.formFields("code").mask(empty).body().length);
   }
 
@@ -100,17 +99,17 @@ public class MaskingTest {
 
   @Test
   public void theBodyOfAResponseIsMaskedAsAWhole() {
-    var response = new HttpResponse<>(200, "OK", Map.of("Content-Type", "application/json"), "{\"access_token\":\"x\"}".getBytes(UTF_8));
+    var response = new HttpResponse<>(200, "OK", Headers.of("Content-Type", "application/json"), "{\"access_token\":\"x\"}".getBytes(UTF_8));
     assertEquals("***", new String(Masking.responseBody().mask(response).body(), UTF_8));
-    assertEquals(null, Masking.responseBody().mask(new HttpResponse<byte[]>(204, "No Content", Map.of(), null)).body());
+    assertEquals(null, Masking.responseBody().mask(new HttpResponse<byte[]>(204, "No Content", Headers.of(), null)).body());
   }
 
   @Test
   public void maskingsAreCombined() {
     var masking = Masking.CREDENTIALS.and(Masking.queryParameters("code").andRequestHeaders("X-Api-Key"));
-    var request = new HttpRequest<byte[]>(Method.GET, URI.create("/cb?code=1"), Map.of("X-Api-Key", "k", "Cookie", "c"), null);
+    var request = new HttpRequest<byte[]>(Method.GET, URI.create("/cb?code=1"), Headers.of("X-Api-Key", "k", "Cookie", "c"), null);
     var masked = masking.mask(request);
-    assertEquals(Headers.of(Map.of("X-Api-Key", "***", "Cookie", "***")), masked.headers());
+    assertEquals(Headers.of("X-Api-Key", "***", "Cookie", "***"), masked.headers());
     assertEquals("/cb?code=***", masked.uri().toString());
   }
 
@@ -123,14 +122,14 @@ public class MaskingTest {
 
   @Test
   public void maskingAppliesOnlyToMessagesWithSomethingToMask() {
-    var plain = new HttpRequest<byte[]>(Method.POST, URI.create("/x"), Map.of("Content-Type", "application/json"), "{}".getBytes(UTF_8));
+    var plain = new HttpRequest<byte[]>(Method.POST, URI.create("/x"), Headers.of("Content-Type", "application/json"), "{}".getBytes(UTF_8));
     assertEquals(false, Masking.CREDENTIALS.appliesTo(plain));
     assertEquals(true, Masking.formFields("code").appliesTo(plain));
-    assertEquals(true, Masking.CREDENTIALS.appliesTo(new HttpRequest<byte[]>(Method.GET, URI.create("/x"), Map.of("Cookie", "c"), null)));
-    assertEquals(true, Masking.queryParameters("code").appliesTo(new HttpRequest<byte[]>(Method.GET, URI.create("/x?code=1"), Map.of(), null)));
-    assertEquals(false, Masking.responseBody().appliesTo(new HttpResponse<byte[]>(204, "No Content", Map.of(), null)));
-    assertEquals(true, Masking.CREDENTIALS.appliesTo(new HttpResponse<byte[]>(200, "OK", Map.of("Set-Cookie", "s=1"), null)));
-    assertEquals(false, Masking.CREDENTIALS.appliesTo(new HttpResponse<>(201, "Created", Map.of("Content-Type", "application/json"), "{}".getBytes(UTF_8))));
+    assertEquals(true, Masking.CREDENTIALS.appliesTo(new HttpRequest<byte[]>(Method.GET, URI.create("/x"), Headers.of("Cookie", "c"), null)));
+    assertEquals(true, Masking.queryParameters("code").appliesTo(new HttpRequest<byte[]>(Method.GET, URI.create("/x?code=1"), Headers.of(), null)));
+    assertEquals(false, Masking.responseBody().appliesTo(new HttpResponse<byte[]>(204, "No Content", Headers.of(), null)));
+    assertEquals(true, Masking.CREDENTIALS.appliesTo(new HttpResponse<byte[]>(200, "OK", Headers.of("Set-Cookie", "s=1"), null)));
+    assertEquals(false, Masking.CREDENTIALS.appliesTo(new HttpResponse<>(201, "Created", Headers.of("Content-Type", "application/json"), "{}".getBytes(UTF_8))));
   }
 
 }

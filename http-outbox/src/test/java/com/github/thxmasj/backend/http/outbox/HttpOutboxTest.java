@@ -45,6 +45,7 @@ import com.github.thxmasj.backend.core.internal.TransitionStep.DelayedTriggerSte
 import com.github.thxmasj.backend.core.internal.TransitionStep.InputStep;
 import com.github.thxmasj.backend.core.internal.TransitionStep.TriggerStep;
 import com.github.thxmasj.backend.core.internal.database.Storage;
+import com.github.thxmasj.backend.http.Headers;
 import com.github.thxmasj.backend.http.HttpRequest;
 import com.github.thxmasj.backend.http.Masking;
 import com.github.thxmasj.backend.http.HttpResponse;
@@ -96,7 +97,7 @@ public class HttpOutboxTest {
     return new HttpRequest<>(
         POST,
         URI.create("http://localhost:" + server.getAddress().getPort() + path),
-        Map.of(),
+        Headers.of(),
         null
     );
   }
@@ -345,7 +346,7 @@ public class HttpOutboxTest {
                 .with(_ -> HttpRequest.create(
                     POST,
                     URI.create("http://localhost:" + server.getAddress().getPort() + path),
-                    Map.of("Authorization", "Basic c2VjcmV0", "Content-Type", "application/x-www-form-urlencoded"),
+                    Headers.of("Authorization", "Basic c2VjcmV0", "Content-Type", "application/x-www-form-urlencoded"),
                     "grant_type=authorization_code&code=s3cret"
                 ))
                 .on(exchange).identifiedBy(newEntityId())
@@ -501,7 +502,7 @@ public class HttpOutboxTest {
         1,
         reqDispatchedType,
         Clock.systemUTC(),
-        tuple(new HttpRequest<>(POST, URI.create("http://localhost/test"), Map.of(), null), processEntityId)
+        tuple(new HttpRequest<>(POST, URI.create("http://localhost/test"), Headers.of(), null), processEntityId)
     );
     var log = new EventLog(model.exchange(), UUID.randomUUID(), List.of(reqDispatchedEvent));
     var initialContext = new InputStep<Void>(null, null, null, timeoutTransition, AtMostOnce.States.InFlight, 2, log, ZonedDateTime.now(), "corr-1", null, model.machine(), new Transaction());
@@ -579,10 +580,10 @@ public class HttpOutboxTest {
         1,
         reqDispatchedType,
         Clock.systemUTC(),
-        tuple(new HttpRequest<>(POST, URI.create("http://localhost/test"), Map.of(), null), processEntityId)
+        tuple(new HttpRequest<>(POST, URI.create("http://localhost/test"), Headers.of(), null), processEntityId)
     );
     var log = new EventLog(alo, UUID.randomUUID(), List.of(reqDispatchedEvent));
-    HttpResponse<byte[]> responseMessage = new HttpResponse<>(200, "OK", Map.of(), null);
+    HttpResponse<byte[]> responseMessage = new HttpResponse<>(200, "OK", Headers.of(), null);
     var initialContext = new InputStep<HttpResponse<byte[]>>(null, null, null, responseReceivedTransition, AtLeastOnce.States.InFlight, 2, log, ZonedDateTime.now(), "corr-1", responseMessage, machine, new Transaction());
     var occ = responseReceivedTransition.calculate(initialContext).block();
     assertNotNull(occ);
@@ -679,7 +680,7 @@ public class HttpOutboxTest {
         1,
         reqDispatchedType,
         Clock.systemUTC(),
-        tuple(new HttpRequest<>(POST, URI.create("http://localhost/test"), Map.of(), null), UUID.randomUUID())
+        tuple(new HttpRequest<>(POST, URI.create("http://localhost/test"), Headers.of(), null), UUID.randomUUID())
     );
     UUID requestId = UUID.randomUUID();
     var log = new EventLog(alo, requestId, List.of(reqDispatchedEvent));
@@ -721,7 +722,7 @@ public class HttpOutboxTest {
   @Test
   public void atLeastOnceAcceptedRequestRedispatched() {
     var redispatched = redispatchAcceptedRequest(
-        (_, r) -> HttpRequest.create(r.method(), r.uri(), Map.of("Message-Id", r.headerValue("Message-Id") + "-again"), r.body() + " again")
+        (_, r) -> HttpRequest.create(r.method(), r.uri(), Headers.of("Message-Id", r.headerValue("Message-Id") + "-again"), r.body() + " again")
     );
     List<String> sent = List.of(redispatched.messageId(), "fixed", "payload");
     List<String> again = List.of(redispatched.messageId() + "-again", "fixed", "payload again");
@@ -796,7 +797,7 @@ public class HttpOutboxTest {
         .build("Notification", UUID.randomUUID());
     var dispatcher = AtLeastOnceDispatcher.of(
         notification,
-        (Void _) -> HttpRequest.create(POST, URI.create("http://localhost:" + server.getAddress().getPort() + path), Map.of(), "payload")
+        (Void _) -> HttpRequest.create(POST, URI.create("http://localhost:" + server.getAddress().getPort() + path), Headers.of(), "payload")
     );
     processTransitions.set(Map.of(
         Begin, List.of(
@@ -905,7 +906,7 @@ public class HttpOutboxTest {
     String messageId = UUID.randomUUID().toString();
     var dispatcher = AtLeastOnceDispatcher.of(
         notification,
-        (Void _) -> HttpRequest.create(POST, URI.create("http://localhost:" + server.getAddress().getPort() + path), Map.of("Message-Id", messageId), "payload")
+        (Void _) -> HttpRequest.create(POST, URI.create("http://localhost:" + server.getAddress().getPort() + path), Headers.of("Message-Id", messageId), "payload")
     );
     processTransitions.set(Map.of(
         Begin, List.of(

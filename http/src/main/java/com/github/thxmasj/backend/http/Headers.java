@@ -29,8 +29,7 @@ public final class Headers {
   /// A header field: a name and one of its values, which can be stored as a line `name:value` and read back as they
   /// were: the name is not blank, has no colon, which excludes e.g. the pseudo-headers of HTTP/2, such as `:status`, no
   /// line break and no whitespace around it, and the value has no line break. The names of the headers received are
-  /// tokens of RFC 9110 section 5.6.2, which the HTTP servers and clients check, but a name made by an application or
-  /// stored by an earlier version need not be.
+  /// tokens of RFC 9110 section 5.6.2, which the inbox checks, but a name made by an application need not be.
   public record Field(String name, String value) {
 
     public Field {
@@ -62,11 +61,16 @@ public final class Headers {
     return none;
   }
 
-  /// A header for each entry of the map, with one value per name, in the order of the map
-  public static Headers of(Map<String, String> headers) {
-    Objects.requireNonNull(headers, "headers, which are Map.of() for none");
+  /// The headers of the names and values, in order, e.g. `Headers.of("Content-Type", "text/plain", "Set-Cookie",
+  /// "a=1")`, where a name may repeat
+  ///
+  /// @throws IllegalArgumentException if a name has no value
+  public static Headers of(String... namesAndValues) {
+    if (namesAndValues.length % 2 != 0)
+      throw new IllegalArgumentException("A name without a value: " + namesAndValues[namesAndValues.length - 1]);
     var builder = builder();
-    headers.forEach(builder::add);
+    for (int i = 0; i < namesAndValues.length; i += 2)
+      builder.add(namesAndValues[i], namesAndValues[i + 1]);
     return builder.build();
   }
 
@@ -109,11 +113,6 @@ public final class Headers {
   public static boolean isToken(String name) {
     return !name.isEmpty()
         && name.chars().allMatch(c -> c < 128 && (Character.isLetterOrDigit(c) || "!#$%&'*+-.^_`|~".indexOf(c) >= 0));
-  }
-
-  /// The header with the value
-  public static Headers of(String name, String value) {
-    return builder().add(name, value).build();
   }
 
   /// The fields, in order

@@ -287,7 +287,7 @@ final class Endpoints {
   /// A registration by the identity provider itself, e.g. of the bootstrap client, with the hash of the secret of the
   /// client, as the registrar
   static HttpRequest<byte[]> internalRegistration(String registeredBy, String secretHash, byte[] body) {
-    var headers = Map.of(
+    var headers = Headers.of(
         "Content-Type", "application/json",
         Inbox.InternalHeader, internalKey,
         Inbox.RegisteredByHeader, registeredBy,
@@ -479,7 +479,7 @@ final class Endpoints {
   }
 
   private static HttpResponse<byte[]> methodNotAllowed(String allowed) {
-    return new HttpResponse<>(405, "Method Not Allowed", Map.of("Allow", allowed), null);
+    return new HttpResponse<>(405, "Method Not Allowed", Headers.of("Allow", allowed), null);
   }
 
   private String basicChallenge() {
@@ -495,7 +495,7 @@ final class Endpoints {
       case 401 -> "Unauthorized";
       default -> "Forbidden";
     };
-    return new HttpResponse<>(status, reason, Map.of("WWW-Authenticate", bearerChallenge(error, description, scope)), null);
+    return new HttpResponse<>(status, reason, Headers.of("WWW-Authenticate", bearerChallenge(error, description, scope)), null);
   }
 
   private String bearerChallenge(String error, String description, String scope) {
@@ -517,7 +517,7 @@ final class Endpoints {
     return new HttpResponse<>(
         status,
         reason,
-        contentType != null ? Map.of("Content-Type", contentType) : Map.of(),
+        contentType != null ? Headers.of("Content-Type", contentType) : Headers.of(),
         body != null ? body.getBytes(UTF_8) : null
     );
   }

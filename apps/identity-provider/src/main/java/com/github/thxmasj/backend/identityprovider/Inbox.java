@@ -15,6 +15,7 @@ import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.State;
 import com.github.thxmasj.backend.core.TransitionModelBuilder.TransitionContext;
 import com.github.thxmasj.backend.core.Validated;
+import com.github.thxmasj.backend.http.Headers;
 import com.github.thxmasj.backend.http.HttpDataType;
 import com.github.thxmasj.backend.http.HttpRequest.Method;
 import com.github.thxmasj.backend.http.HttpClient;
@@ -213,7 +214,7 @@ public interface Inbox {
     return new HttpResponse<>(
         c.input().status(),
         reasonPhrase(c.input().status()),
-        Map.of(
+        Headers.of(
             "Content-Type", "application/json;charset=UTF-8",
             // Responses with credentials must not be cached, RFC 6749 section 5.1
             "Cache-Control", "no-store",

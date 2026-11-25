@@ -1,6 +1,5 @@
 package com.github.thxmasj.backend.http;
 
-import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
 
@@ -22,29 +21,19 @@ public record HttpResponse<T>(int statusCode, String reasonPhrase, Headers heade
     this(statusCode, reasonPhrase, headers, null);
   }
 
-  /// With one value per name, in the order of the map
-  public HttpResponse(int statusCode, String reasonPhrase, Map<String, String> headers) {
-    this(statusCode, reasonPhrase, Headers.of(headers), null);
-  }
-
-  /// With one value per name, in the order of the map
-  public HttpResponse(int statusCode, String reasonPhrase, Map<String, String> headers, T body) {
-    this(statusCode, reasonPhrase, Headers.of(headers), body);
-  }
-
   public static HttpResponse<Void> create(int statusCode, String reasonPhrase) {
     return new HttpResponse<>(statusCode, reasonPhrase, Headers.none(), null);
-  }
-
-  public static HttpResponse<Void> create(int statusCode, String reasonPhrase, Map<String, String> headers) {
-    return new HttpResponse<>(statusCode, reasonPhrase, headers, null);
   }
 
   public static <T> HttpResponse<T> create(int statusCode, String reasonPhrase, T body) {
     return new HttpResponse<>(statusCode, reasonPhrase, Headers.none(), body);
   }
 
-  public static <T> HttpResponse<T> create(int statusCode, String reasonPhrase, Map<String, String> headers, T body) {
+  public static HttpResponse<Void> create(int statusCode, String reasonPhrase, Headers headers) {
+    return new HttpResponse<>(statusCode, reasonPhrase, headers, null);
+  }
+
+  public static <T> HttpResponse<T> create(int statusCode, String reasonPhrase, Headers headers, T body) {
     return new HttpResponse<>(statusCode, reasonPhrase, headers, body);
   }
 

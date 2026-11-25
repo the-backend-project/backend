@@ -39,7 +39,7 @@ public class AccessTokenSupplier implements Supplier<String>, AutoCloseable {
 
   private final HttpClient httpClient;
   private final URI url;
-  private final Map<String, String> headers;
+  private final Headers headers;
   private final byte[] body;
 
   private AccessTokenSupplier(
@@ -50,7 +50,9 @@ public class AccessTokenSupplier implements Supplier<String>, AutoCloseable {
       HttpClient httpClient
   ) {
     this.url = url;
-    this.headers = headers;
+    var fields = Headers.builder();
+    headers.forEach(fields::add);
+    this.headers = fields.build();
     this.body = body;
     this.clock = clock;
     this.httpClient = httpClient;

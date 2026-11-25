@@ -9,7 +9,6 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.time.Duration;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
@@ -30,7 +29,7 @@ public class NettyHttpClientTest {
     try {
       var client = new NettyHttpClient(new NettyHttpClientBuilder().build(), () -> "token");
       URI uri = URI.create("http://localhost:" + server.getAddress().getPort() + "/");
-      var response = client.exchange(new HttpRequest<byte[]>(Method.GET, uri, Map.of("Authorization", "Bearer other"), null))
+      var response = client.exchange(new HttpRequest<byte[]>(Method.GET, uri, Headers.of("Authorization", "Bearer other"), null))
           .block(Duration.ofSeconds(5));
       assertEquals(204, response.statusCode());
       assertEquals(List.of("Bearer token"), received.get());

@@ -4,6 +4,7 @@ import com.github.thxmasj.backend.core.JsonLinesListener;
 import com.github.thxmasj.backend.core.StateMachine;
 import com.github.thxmasj.backend.core.database.DataSourceBuilder;
 import com.github.thxmasj.backend.core.database.Database;
+import com.github.thxmasj.backend.http.Headers;
 import com.github.thxmasj.backend.http.HttpRequest.Method;
 import com.github.thxmasj.backend.http.HttpResponse;
 import com.github.thxmasj.backend.database.mssql.MssqlDatabase;
@@ -11,7 +12,6 @@ import com.github.thxmasj.backend.http.inbox.HttpInboxListener;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
-import java.util.Map;
 import reactor.core.publisher.Mono;
 import reactor.netty.DisposableServer;
 
@@ -88,7 +88,7 @@ public final class HelloWorld {
   public static DisposableServer serve(StateMachine stateMachine, int port) {
     return new HttpInboxListener(stateMachine, Greetings.Inbox)
         .filter((request, next) -> isHealthCheck(request.method(), request.uri().getPath())
-            ? Mono.just(new HttpResponse<>(200, "OK", Map.of("Content-Type", "text/plain"), "OK".getBytes(StandardCharsets.UTF_8)))
+            ? Mono.just(new HttpResponse<>(200, "OK", Headers.of("Content-Type", "text/plain"), "OK".getBytes(StandardCharsets.UTF_8)))
             : next.apply(request))
         .listen(port);
   }

@@ -88,7 +88,7 @@ HttpInboxRequest<Void> GreetingRequest = HttpInboxRequest
         c -> new HttpResponse<>(
             200,
             "OK",
-            Map.of("Content-Type", "text/html;charset=UTF-8", "X-Correlation-Id", c.correlationId()),
+            Headers.of("Content-Type", "text/html;charset=UTF-8", "X-Correlation-Id", c.correlationId()),
             page(c.input(), c.correlationId()).getBytes(StandardCharsets.UTF_8)
         )
     )

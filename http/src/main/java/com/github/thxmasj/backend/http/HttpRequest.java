@@ -3,7 +3,6 @@ package com.github.thxmasj.backend.http;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
 import java.util.regex.Matcher;
@@ -29,29 +28,19 @@ public record HttpRequest<T>(Method method, URI uri, Headers headers, T body) im
     this(method, uri, headers, null);
   }
 
-  /// With one value per name, in the order of the map
-  public HttpRequest(Method method, URI uri, Map<String, String> headers) {
-    this(method, uri, Headers.of(headers), null);
-  }
-
-  /// With one value per name, in the order of the map
-  public HttpRequest(Method method, URI uri, Map<String, String> headers, T body) {
-    this(method, uri, Headers.of(headers), body);
-  }
-
   public static HttpRequest<Void> create(Method method, URI uri) {
     return new HttpRequest<>(method, uri, Headers.none(), null);
-  }
-
-  public static HttpRequest<Void> create(Method method, URI uri, Map<String, String> headers) {
-    return new HttpRequest<>(method, uri, headers, null);
   }
 
   public static <T> HttpRequest<T> create(Method method, URI uri, T body) {
     return new HttpRequest<>(method, uri, Headers.none(), body);
   }
 
-  public static <T> HttpRequest<T> create(Method method, URI uri, Map<String, String> headers, T body) {
+  public static HttpRequest<Void> create(Method method, URI uri, Headers headers) {
+    return new HttpRequest<>(method, uri, headers, null);
+  }
+
+  public static <T> HttpRequest<T> create(Method method, URI uri, Headers headers, T body) {
     return new HttpRequest<>(method, uri, headers, body);
   }
 

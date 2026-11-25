@@ -7,7 +7,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.github.thxmasj.backend.http.Headers.Field;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -54,13 +53,11 @@ public class HeadersTest {
   }
 
   @Test
-  public void mapGivesOneValuePerNameInItsOrder() {
-    var map = new LinkedHashMap<String, String>();
-    map.put("B", "2");
-    map.put("A", "1");
-    assertEquals(List.of(new Field("B", "2"), new Field("A", "1")), Headers.of(map).fields());
-    assertTrue(Headers.of(Map.of()).isEmpty());
-    assertEquals(Headers.none(), Headers.of(Map.of()));
+  public void namesAndValuesAreFieldsInTheirOrder() {
+    assertEquals(List.of(new Field("B", "2"), new Field("A", "1"), new Field("b", "3")), Headers.of("B", "2", "A", "1", "b", "3").fields());
+    assertTrue(Headers.of().isEmpty());
+    assertEquals(Headers.none(), Headers.of());
+    assertThrows(IllegalArgumentException.class, () -> Headers.of("A", "1", "B"));
   }
 
   /// A line break would end the header in the stored message, a colon in a name would split the line elsewhere, as for
@@ -75,8 +72,8 @@ public class HeadersTest {
     assertThrows(NullPointerException.class, () -> Headers.of("X-A", null));
   }
 
-  /// A name which isn't a token of RFC 9110, which an application may have made and an earlier version stored, can be
-  /// read back, and is compared and hashed consistently, also when it isn't ASCII
+  /// A name which isn't a token of RFC 9110, which an application may make, though no request received has one, is kept,
+  /// and compared and hashed consistently, also when it isn't ASCII
   @Test
   public void namesWhichArentTokensAreKeptAndComparedConsistently() {
     assertEquals("1", Headers.of("X Trace", "1").firstValue("x trace").orElseThrow());

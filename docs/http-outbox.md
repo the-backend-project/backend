@@ -351,9 +351,9 @@ the `outbox()`.
 The headers of a message are `Headers`: fields of a name and a value, in the order they were sent or received, where a
 name may have several values, e.g. a `Set-Cookie` for each cookie, which can't be joined in one header. Names are looked
 up without case. `headerValue(name)` of a message is the first value of a header, or null, and `headerValues(name)` all
-of them. The constructors and `create(..)` methods taking a `Map<String, String>` make headers of one value per name,
-and `Headers.builder()` makes them a field at a time. Headers are immutable, so a header is added to or replaced in a
-copy, e.g. by a forwarder:
+of them. `Headers.of(name, value, ...)` makes headers of names and values, where a name may repeat, e.g.
+`Headers.of("Content-Type", "text/plain")`, and `Headers.builder()` makes them a field at a time. Headers are
+immutable, so a header is added to or replaced in a copy, e.g. by a forwarder:
 
 ```java
 request.headers().with("Authorization", "Bearer " + token)  // replaces any value of the header
