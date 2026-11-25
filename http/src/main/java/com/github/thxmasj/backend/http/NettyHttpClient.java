@@ -33,7 +33,8 @@ public class NettyHttpClient implements HttpClient {
     long t0 = System.nanoTime();
     return nettyHttpClient
         .headers(h -> message.headers().forEach(h::add))
-        .headers(h -> fixedHeaders.get().forEach(h::add))
+        // The fixed headers, e.g. Authorization, replace those of the message, as a request may have only one
+        .headers(h -> fixedHeaders.get().forEach(h::set))
         .request(switch (message.method()) {
           case GET -> HttpMethod.GET;
           case POST -> HttpMethod.POST;
@@ -46,14 +47,14 @@ public class NettyHttpClient implements HttpClient {
             .map(body -> new HttpResponse<>(
                     httpClientResponse.status().code(),
                     httpClientResponse.status().reasonPhrase(),
-                    Headers.ofEntries(httpClientResponse.responseHeaders().entries()),
+                    Headers.ofResponseEntries(httpClientResponse.responseHeaders().entries()),
                     body
                 )
             )
           .defaultIfEmpty(new HttpResponse<>(
               httpClientResponse.status().code(),
               httpClientResponse.status().reasonPhrase(),
-              Headers.ofEntries(httpClientResponse.responseHeaders().entries())
+              Headers.ofResponseEntries(httpClientResponse.responseHeaders().entries())
           ))
         )
         .single()

@@ -112,10 +112,20 @@ public class HttpInboxListener {
     } catch (IllegalArgumentException e) {
       return response.status(HttpResponseStatus.METHOD_NOT_ALLOWED).send();
     }
+    // A request with an invalid header or URI is rejected rather than repaired (RFC 9110 section 5.5, RFC 9113 section
+    // 8.2.1)
+    Headers headers;
+    URI uri;
+    try {
+      headers = Headers.ofRequestEntries(request.requestHeaders().entries());
+      uri = URI.create(request.uri());
+    } catch (IllegalArgumentException e) {
+      return response.status(HttpResponseStatus.BAD_REQUEST).send();
+    }
     return request.receive().aggregate().asByteArray()
         .filter(body -> body.length > 0)
-        .map(body -> requestMessage(request, method, body))
-        .switchIfEmpty(Mono.fromSupplier(() -> requestMessage(request, method, null)))
+        .map(body -> new HttpRequest<>(method, uri, headers, body))
+        .switchIfEmpty(Mono.fromSupplier(() -> new HttpRequest<>(method, uri, headers, null)))
         .flatMap(exchange)
         .timeout(responseTimeout)
         .flatMap(message -> send(response, message))
@@ -138,11 +148,6 @@ public class HttpInboxListener {
     if (correlationId == null || correlationId.isBlank())
       return "SYS-" + ThreadLocalRandom.current().nextLong(1000000000000000000L, Long.MAX_VALUE);
     return correlationId;
-  }
-
-  /// The request as received, with the values of a header repeated kept apart, in order
-  private static HttpRequest<byte[]> requestMessage(HttpServerRequest request, Method method, byte[] body) {
-    return new HttpRequest<>(method, URI.create(request.uri()), Headers.ofEntries(request.requestHeaders().entries()), body);
   }
 
   private static Mono<Void> send(HttpServerResponse response, HttpResponse<byte[]> message) {

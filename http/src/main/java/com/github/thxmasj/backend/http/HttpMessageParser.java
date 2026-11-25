@@ -55,12 +55,14 @@ public class HttpMessageParser {
       int separatorIndex = lines[i].indexOf(":");
       if (separatorIndex == -1)
         throw new IllegalStateException("Invalid header -- no separator: <" + lines[i] + ">");
-      String name = lines[i].substring(0, separatorIndex).trim();
+      // A message stored is read as it was stored by any version, so a CR or NUL, which an earlier version may have
+      // received and stored, is read as a space, and whitespace around a name or value is not kept
+      String name = Headers.received(lines[i].substring(0, separatorIndex));
       // A pseudo-header of HTTP/2, e.g. :status, which responses were stored with before headers were validated, is
       // a line starting with its colon, and not a header
       if (name.isEmpty())
         continue;
-      headers.add(name, lines[i].substring(separatorIndex + 1).trim());
+      headers.add(name, Headers.received(lines[i].substring(separatorIndex + 1)));
     }
     return headers.build();
   }

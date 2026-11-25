@@ -42,13 +42,15 @@ public final class JdkHttpClient implements HttpClient {
         .onErrorMap(HttpConnectTimeoutException.class, e -> (ConnectException) new ConnectException(e.getMessage()).initCause(e));
   }
 
-  /// The headers of a response, with every value of a name. Over HTTP/2 the client gives the pseudo-headers too, e.g.
-  /// `:status`, which are not headers.
+  /// The headers of a response, with every value of a name, cleaned up as [Headers#ofResponseEntries(List)] does.
+  /// Over HTTP/2 the client gives the pseudo-headers too, e.g. `:status`, which are not headers. The client gives the
+  /// headers by name, sorted, so unlike those of the [NettyHttpClient] they are not in the order received, but the
+  /// values of a name are.
   static Headers headers(java.net.http.HttpHeaders received) {
     var headers = Headers.builder();
     received.map().forEach((name, values) -> {
       if (!name.startsWith(":"))
-        values.forEach(value -> headers.add(name, value));
+        values.forEach(value -> headers.add(name, Headers.received(value)));
     });
     return headers.build();
   }

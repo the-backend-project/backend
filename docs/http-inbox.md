@@ -89,8 +89,8 @@ The response goes back to the `RequestRouting` entity, which the listener sends 
 it rather than as it is stored, which may be [masked](#masking).
 
 The request is stored as the listener received it, a header received several times as several, in the order received,
-and the listener sends every value of a header of the response, e.g. two `Set-Cookie` headers. See
-[headers](http-outbox.md#headers).
+and the listener sends every value of a header of the response, e.g. two `Set-Cookie` headers. A request with an
+invalid header or URI is answered with 400 Bad Request at once, and not stored. See [headers](http-outbox.md#headers).
 
 Requests carrying a message id are deduplicated through the `MessageIds` id entity model: a retried request gets the
 response of the first one, also if the application rejected it, without triggering anything again. A message id is

@@ -2,6 +2,7 @@ package com.github.thxmasj.backend.http;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -85,11 +86,27 @@ public class HeadersTest {
     assertEquals(dotted.hashCode(), plain.hashCode());
   }
 
-  /// A CR, LF or NUL in a value received is replaced by a space, as RFC 9110 section 5.5 lets a recipient do, rather
-  /// than failing the request or response
+  /// A request with an invalid header is rejected rather than repaired (RFC 9110 section 5.5, RFC 9113 section 8.2.1)
   @Test
-  public void lineBreaksInValuesReceivedAreReplacedBySpaces() {
-    var received = Headers.ofEntries(List.of(Map.entry("X-A", "a\rb\nc\0d"), Map.entry("X-B", "e")));
+  public void requestHeadersWhichAreInvalidAreRejected() {
+    assertEquals(List.of(new Field("X-A", "1"), new Field("x-a", "2")), Headers.ofRequestEntries(List.of(Map.entry("X-A", "1"), Map.entry("x-a", "2"))).fields());
+    for (var invalid : List.of(Map.entry("X-A", "a\rb"), Map.entry("X-A", "a\0b"), Map.entry("X-A", "a "), Map.entry("X A", "a"), Map.entry("\u0130", "a")))
+      assertThrows(IllegalArgumentException.class, () -> Headers.ofRequestEntries(List.of(invalid)), invalid.toString());
+  }
+
+  /// A CR, LF or NUL in a value of a response is replaced by a space, as RFC 9110 section 5.5 lets a recipient do, and
+  /// whitespace around it removed, as when the response is read back, rather than failing the response
+  @Test
+  public void responseHeadersAreCleanedUp() {
+    var received = Headers.ofResponseEntries(List.of(Map.entry("X-A", "a\rb\nc\0d"), Map.entry("X-B", " e\0")));
     assertEquals(List.of(new Field("X-A", "a b c d"), new Field("X-B", "e")), received.fields());
+  }
+
+  /// Set-Cookie can't be joined, as a cookie may have a comma, so its values are compared apart
+  @Test
+  public void cookiesSetAreComparedApart() {
+    var one = Headers.of("Set-Cookie", "a=1; Expires=Wed, 21 Oct 2026 07:28:00 GMT");
+    var two = Headers.builder().add("Set-Cookie", "a=1; Expires=Wed").add("Set-Cookie", "21 Oct 2026 07:28:00 GMT").build();
+    assertNotEquals(one, two);
   }
 }

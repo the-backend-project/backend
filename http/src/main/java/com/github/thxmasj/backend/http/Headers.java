@@ -20,7 +20,7 @@ import java.util.stream.Stream;
 ///
 /// Headers are equal if they have the same values for each name, with the names compared without case, and the values
 /// of a name joined in order with `, `, as a recipient may join them (RFC 9110 section 5.3): a header sent once as
-/// `a, b` equals one sent twice, as `a` and `b`. The order of fields of different names doesn't matter, as it carries
+/// `a, b` equals one sent twice, as `a` and `b`. The values of `Set-Cookie`, which can't be joined, are compared apart. The order of fields of different names doesn't matter, as it carries
 /// no meaning in HTTP.
 public final class Headers {
 
@@ -70,19 +70,45 @@ public final class Headers {
     return builder.build();
   }
 
-  /// A header for each entry, in order, e.g. the header lines of a message as Netty received them, where a name may
-  /// appear several times. A CR, LF or NUL in a value, which the server or client may have let through, is replaced
-  /// by a space, as RFC 9110 section 5.5 lets a recipient do, rather than failing the message.
-  public static Headers ofEntries(List<? extends Map.Entry<String, String>> entries) {
+  /// The headers of a request received, a field for each entry, in order, where a name may appear several times
+  ///
+  /// @throws IllegalArgumentException if a field is invalid (RFC 9110 section 5.5 and RFC 9113 section 8.2.1): its
+  ///                                  name isn't a token, or its value has a CR, LF or NUL, or starts or ends with
+  ///                                  whitespace, which the server answers as a bad request
+  public static Headers ofRequestEntries(List<? extends Map.Entry<String, String>> entries) {
+    var builder = builder();
+    for (var entry : entries) {
+      String name = entry.getKey();
+      String value = entry.getValue();
+      if (!isToken(name))
+        throw new IllegalArgumentException("Invalid header name: <" + name + ">");
+      if (value.chars().anyMatch(c -> c == '\r' || c == '\n' || c == 0) || !value.equals(value.strip()))
+        throw new IllegalArgumentException("Invalid value of header " + name);
+      builder.add(name, value);
+    }
+    return builder.build();
+  }
+
+  /// The headers of a response received, a field for each entry, in order, where a name may appear several times. A
+  /// CR, LF or NUL in a value is replaced by a space, as RFC 9110 section 5.5 lets a recipient do, and whitespace around
+  /// it is removed, as it is when the response is read back from the event log. The response isn't failed, as the
+  /// request it answers may have taken effect.
+  public static Headers ofResponseEntries(List<? extends Map.Entry<String, String>> entries) {
     var builder = builder();
     entries.forEach(e -> builder.add(e.getKey(), received(e.getValue())));
     return builder.build();
   }
 
-  private static String received(String value) {
-    return value.indexOf('\r') < 0 && value.indexOf('\n') < 0 && value.indexOf('\0') < 0
-        ? value
-        : value.replace('\r', ' ').replace('\n', ' ').replace('\0', ' ');
+  /// The value received, with a CR, LF or NUL replaced by a space and the whitespace around it removed
+  static String received(String value) {
+    return value.replace('\r', ' ').replace('\n', ' ').replace('\0', ' ').strip();
+  }
+
+  /// Whether the name is a token, of the characters `tchar` of RFC 9110 section 5.6.2, as the name of a header
+  /// received must be
+  public static boolean isToken(String name) {
+    return !name.isEmpty()
+        && name.chars().allMatch(c -> c < 128 && (Character.isLetterOrDigit(c) || "!#$%&'*+-.^_`|~".indexOf(c) >= 0));
   }
 
   /// The header with the value
@@ -177,8 +203,13 @@ public final class Headers {
     Map<String, String> result = combined;
     if (result == null) {
       var map = new HashMap<String, String>();
-      for (Field field : fields)
-        map.merge(folded(field.name()), field.value(), (a, b) -> a + ", " + b);
+      for (Field field : fields) {
+        String name = folded(field.name());
+        // Set-Cookie can't be joined, as a cookie may have a comma, e.g. in its Expires (RFC 9110 section 5.3), so its
+        // values are compared apart, joined by a line break, which a value can't have
+        String separator = name.equals("set-cookie") ? "\n" : ", ";
+        map.merge(name, field.value(), (a, b) -> a + separator + b);
+      }
       result = Map.copyOf(map);
       combined = result;
     }

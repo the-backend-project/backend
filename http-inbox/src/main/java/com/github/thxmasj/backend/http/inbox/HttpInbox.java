@@ -260,12 +260,14 @@ public interface HttpInbox {
       String... requiredScopes
   ) {
     return (request, _) -> {
-      // A request with several Authorization headers is refused, as a proxy in front may have checked another one
-      if (request.headerValues("Authorization").size() > 1)
-        return bearerRefusal(400, realm, "invalid_request", "Several Authorization headers", null);
-      String authorization = request.singleHeaderValue("Authorization");
-      if (authorization == null)
+      List<String> authorizations = request.headerValues("Authorization");
+      if (authorizations.isEmpty())
         return new Refused(401, bearerChallenge(realm, null, null, null), "Authorization header missing");
+      // A request with several Authorization headers is malformed (RFC 6750 section 3.1), and a proxy in front may
+      // have checked another one than the first
+      if (authorizations.size() > 1)
+        return bearerRefusal(400, realm, "invalid_request", "Several Authorization headers", null);
+      String authorization = authorizations.getFirst();
       if (!authorization.regionMatches(true, 0, "Bearer ", 0, 7))
         return new Refused(401, bearerChallenge(realm, null, null, null), "Authorization token is not of type Bearer");
       String token = authorization.substring(7).trim();

@@ -13,6 +13,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonValue;
 import com.github.thxmasj.backend.core.BasicEventType;
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EntityModel;
@@ -48,6 +49,7 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -198,18 +200,49 @@ final class Sessions {
       this(status, headers.fields(), body);
     }
 
-    /// The reply as stored: with its headers a list of fields, or, as stored before a header could have several
-    /// values, an object of a value per name
+    /// The reply as stored. Its headers are an object of a value per name, as an earlier version stores and reads them,
+    /// so that a node not yet upgraded can read it, unless a name repeats, when they are a list of fields.
+    @JsonValue
+    Map<String, Object> stored() {
+      var stored = new LinkedHashMap<String, Object>();
+      stored.put("status", status);
+      Headers all = Headers.of(headers);
+      if (all.names().size() == headers.size()) {
+        var byName = new LinkedHashMap<String, String>();
+        headers.forEach(field -> byName.put(field.name(), field.value()));
+        stored.put("headers", byName);
+      } else {
+        stored.put("headers", headers.stream().map(field -> Map.of("name", field.name(), "value", field.value())).toList());
+      }
+      stored.put("body", body);
+      return stored;
+    }
+
+    /// The reply stored, with its headers an object of a value per name or a list of fields
+    ///
+    /// @throws IllegalArgumentException if a header has no name or value
     @JsonCreator
     static Reply stored(@JsonProperty("status") int status, @JsonProperty("headers") Object headers, @JsonProperty("body") String body) {
       var fields = Headers.builder();
-      if (headers instanceof Map<?, ?> byName)
-        byName.forEach((name, value) -> fields.add(String.valueOf(name), String.valueOf(value)));
-      else if (headers instanceof List<?> list)
-        for (Object field : list)
-          if (field instanceof Map<?, ?> f)
-            fields.add(String.valueOf(f.get("name")), String.valueOf(f.get("value")));
+      switch (headers) {
+        case Map<?, ?> byName -> byName.forEach((name, value) -> fields.add(text(name), text(value)));
+        case List<?> list -> {
+          for (Object field : list) {
+            if (!(field instanceof Map<?, ?> f))
+              throw new IllegalArgumentException("A header of a reply is not a field: " + field);
+            fields.add(text(f.get("name")), text(f.get("value")));
+          }
+        }
+        case null -> throw new IllegalArgumentException("A reply has no headers");
+        default -> throw new IllegalArgumentException("The headers of a reply are neither an object nor a list: " + headers);
+      }
       return new Reply(status, fields.build(), body);
+    }
+
+    private static String text(Object value) {
+      if (!(value instanceof String text))
+        throw new IllegalArgumentException("A header of a reply has no name or value, or one which isn't text: " + value);
+      return text;
     }
   }
 

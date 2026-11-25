@@ -131,11 +131,14 @@ final class Endpoints {
 
   }
 
-  /// The refusal of a request to the token endpoint which isn't authenticated, as it isn't a form or has no Basic
-  /// credentials, or null if it is. Such a request is answered at once and not stored, as anyone can send it. Its form
-  /// is only parsed here if it has no credentials, as RFC 6749 refuses a secret in the form as an invalid request
-  /// rather than as a failed client authentication.
+  /// The refusal of a request to the token endpoint which isn't authenticated, as it isn't a form, has no Basic
+  /// credentials or has several Authorization headers, or null if it is. Such a request is answered at once and not
+  /// stored, as anyone can send it. Its form is only parsed here if it has no credentials, as RFC 6749 refuses a secret
+  /// in the form as an invalid request rather than as a failed client authentication.
   private Tokens.Refusal unauthenticated(HttpRequest<byte[]> request) {
+    // Credentials sent more than once are an invalid request, RFC 6749 section 5.2
+    if (request.headerValues("Authorization").size() > 1)
+      return new Tokens.Refusal(null, "invalid_request", "Several Authorization headers");
     if (!Masking.isForm(request))
       return new Tokens.Refusal(null, "invalid_request", "Content-Type must be application/x-www-form-urlencoded");
     if (basicCredentials(request.singleHeaderValue("Authorization")).isPresent())
@@ -389,6 +392,9 @@ final class Endpoints {
   /// The refusal of RFC 6750 section 3 of a request without an access token, or null if it has one, which the
   /// authorizer of its inbox request verifies
   private HttpResponse<byte[]> withoutToken(HttpRequest<byte[]> request) {
+    // Several Authorization headers are an invalid request, RFC 6750 section 3.1
+    if (request.headerValues("Authorization").size() > 1)
+      return bearerError(400, "invalid_request", "Several Authorization headers", null);
     return bearerToken(request) == null ? bearerError(401, null, null, null) : null;
   }
 
@@ -484,7 +490,12 @@ final class Endpoints {
   ///
   /// @param scope the scope required, for insufficient_scope
   private HttpResponse<byte[]> bearerError(int status, String error, String description, String scope) {
-    return new HttpResponse<>(status, status == 401 ? "Unauthorized" : "Forbidden", Map.of("WWW-Authenticate", bearerChallenge(error, description, scope)), null);
+    String reason = switch (status) {
+      case 400 -> "Bad Request";
+      case 401 -> "Unauthorized";
+      default -> "Forbidden";
+    };
+    return new HttpResponse<>(status, reason, Map.of("WWW-Authenticate", bearerChallenge(error, description, scope)), null);
   }
 
   private String bearerChallenge(String error, String description, String scope) {

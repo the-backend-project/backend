@@ -68,9 +68,13 @@ import com.nimbusds.jose.JOSEException;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.gen.RSAKeyGenerator;
 import com.sun.net.httpserver.HttpServer;
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.net.Socket;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.time.Clock;
 import java.time.Duration;
@@ -685,6 +689,21 @@ public class HttpInboxTest {
   public void whenNoCorrelationIdHeaderOverHttpThenGeneratedCorrelationId() throws IOException {
     HttpResponse<byte[]> response = exchangeOverHttp(new HttpInboxListener(stateMachine, inbox), Map.of());
     assertThat(response.headerValue("X-Correlation-Id")).matches("SYS-\\d{19}");
+  }
+
+  /// A request with an invalid header is rejected as a bad request rather than repaired (RFC 9110 section 5.5), here a
+  /// NUL in a value, which an HTTP client won't send, so the request is written to the socket
+  @Test
+  public void whenHeaderValueInvalidOverHttpThenBadRequest() throws IOException {
+    DisposableServer listener = new HttpInboxListener(stateMachine, inbox).listen(0);
+    try (var socket = new Socket("localhost", listener.port())) {
+      socket.setSoTimeout(5000);
+      socket.getOutputStream().write("GET /internal/1 HTTP/1.1\r\nHost: localhost\r\nX-Foo: a\0b\r\nConnection: close\r\n\r\n".getBytes(StandardCharsets.ISO_8859_1));
+      String statusLine = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.ISO_8859_1)).readLine();
+      assertThat(statusLine).startsWith("HTTP/1.1 400");
+    } finally {
+      listener.disposeNow();
+    }
   }
 
   /// A header received several times is kept as several, in order, rather than joined, and every value of a header of

@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.github.thxmasj.backend.http.HttpRequest.Method;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -112,6 +113,15 @@ public class HttpMessageTest {
     var parsed = HttpMessageParser.parseResponse("HTTP/1.1 200 \n:status:200\ncontent-type:application/json\n\n{}".getBytes());
     assertEquals(List.of("application/json"), parsed.headerValues("Content-Type"));
     assertEquals(1, parsed.headers().fields().size());
+  }
+
+  /// A message stored by an earlier version is read whatever its headers, e.g. with a CR in a value received over
+  /// HTTP/2, or a name with Unicode whitespace after it
+  @Test
+  public void messageStoredWithHeadersNowInvalidParses() {
+    var parsed = HttpMessageParser.parseRequest("GET /\nX-Foo:a\rb\nX-Bar\u2003:c\n".getBytes(StandardCharsets.UTF_8));
+    assertEquals(List.of("a b"), parsed.headerValues("X-Foo"));
+    assertEquals(List.of("c"), parsed.headerValues("X-Bar"));
   }
 
   /// A request stored with the values of a repeated header joined, as the listener received them before they were kept
