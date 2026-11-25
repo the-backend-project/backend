@@ -102,7 +102,15 @@ it triggers an event on is read from the database again, as events of other sess
 the meantime, and with the output of [masked events](entities.md#events-and-entities-not-stored) masked. An entity
 of the session only, which is never stored, is found among the events of the session's transactions.
 
+A stored entity read again may also have been [rolled back](http-inbox.md#rollback) since an earlier transaction of
+the session, by a rollback in a session of its own, e.g. a `DELETE` arriving while the session waits for the response
+to an outbox request. The events rolled back stay in the event log but are no longer effective, also those the
+session stored itself, so the later transaction sees the entity in the state before the events rolled back, and takes
+its transitions from that state, or rejects the event if there is none. The entity of the session is still found, as
+it is identified by the steps of the earlier transaction, not by its events. An entity of the session only is never
+rolled back, as a rollback rolls back stored events only.
+
 The entity whose action gave the outcome is the exception: its outcome is calculated from the event log the action
-was triggered with, not one read again. If another session, e.g. the timeout of an outbox request, has stored an
-event on it in the meantime, the outcome fails
+was triggered with, not one read again. If another session, e.g. the timeout of an outbox request or a rollback, has
+stored an event on it in the meantime, the outcome fails
 ([#357](https://github.com/the-backend-project/backend/issues/357)).
