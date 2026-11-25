@@ -3,11 +3,11 @@
 The state machine processes events in three units of work, each made of one or more of the one before it. A
 transaction stores one or more transitions, and a session is one or more transactions.
 
-| Unit        | What it is                                                                                                   | What it guarantees                                                          |
-|-------------|--------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------|
-| Transition  | An entity going from one state to the next on an event                                                       | It is only calculated, with no side effects                                 |
-| Transaction | The transitions one event leads to through event triggers, whose new events and triggers are stored together | All of it is stored or none of it is                                        |
-| Session     | The transactions one event entering the state machine leads to through actions                               | Its transactions share the session's entities and caller, but not atomicity |
+| Unit        | What it is                                                                                                   | What it guarantees                                                                                                                           |
+|-------------|--------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------|
+| Transition  | An entity going from one state to the next on an event                                                       | It is only calculated, with no side effects                                                                                                  |
+| Transaction | The transitions one event leads to through event triggers, whose new events and triggers are stored together | All of it is stored or none of it is                                                                                                         |
+| Session     | The transactions one event entering the state machine leads to through actions                               | Each transaction comes after the one that ran its action, finds the session's entity and reaches its caller, but they are not all or nothing |
 
 ## Transitions
 
@@ -45,23 +45,33 @@ A session starts with an event entering the state machine through `StateMachine.
 by an [HTTP inbox](http-inbox.md). It is the transaction storing what that event leads to, and the transactions of
 the outcomes of its actions, such as the response to an outbox request. The outcome of an action is processed as a
 new event, in a transaction of its own, on the entity whose transition ran the action. Its transaction is part of the
-session, and can:
+session.
 
-* **Find the entity of the session.** An event triggered on the entity identified by the session
+### What a session guarantees
+
+A session guarantees three things about each of its transactions:
+
+* **It comes after the transaction that ran its action.** An action runs only after the transaction of its transition is
+  committed, so the entity has stored that it started the action before the outcome is processed. If another event is
+  stored on the entity first, the outcome is dropped (see
+  [What a later transaction sees](#what-a-later-transaction-sees)). The outcomes of several actions of one
+  transaction are processed independently, in any order.
+* **It finds the entity of the session.** An event triggered on the entity identified by the session
   (`entityIdFromSession()`) goes to the entity of the trigger's entity model that the session last took a transition
   on before the trigger: in the transaction of the trigger first, then in the transactions before it. For an
   `EntityModelGroup`, such as `HttpInbox.Request`, it is the entity of a model in the group, and the session is the
   only way to identify it. That is how an application responds to the
   [inbox request](http-inbox.md) it was called from, e.g. from the callback of an outbox request, without knowing
   which inbox request that is.
-* **Reach the caller.** `StateMachine.onEvent` returns the new events with the entity id it was called on, of any
+* **It reaches the caller.** `StateMachine.onEvent` returns the new events with the entity id it was called on, of any
   entity model, so also those of an id or index entity with the same id, and also events which are not stored. The
   events of later transactions of the session are returned as well, which is how the `HttpInboxListener` gets a
   response given after a request to another system.
 
-A session gives no atomicity across its transactions. Each one is committed on its own, and a failure in a later one
-doesn't undo the ones before it. That is why the entities involved record what they have started, and why an outbox
-request stores a timeout in the transaction sending it (see [HTTP outboxes](http-outbox.md)).
+A session doesn't guarantee that all its transactions are stored or none of them are. Each one is committed on its
+own, and a failure in a later one doesn't undo the ones before it. That is why the entities involved record what
+they have started, and why an outbox request stores a timeout in the transaction sending it (see
+[HTTP outboxes](http-outbox.md)).
 
 Delayed and conditional triggers start a session of their own when they fire. They keep the correlation id of the
 transaction storing them, but neither its entity nor its caller.
