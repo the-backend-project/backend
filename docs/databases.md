@@ -124,7 +124,7 @@ Cons:
 * A Vert.x instance with event loop threads of its own runs next to Reactor Netty, and its futures are converted to
   Reactor.
 * More dependencies: Vert.x core and its SQL client, and Jackson 2 next to the state machine's Jackson 3. The build pins
-  Netty to the version of Reactor Netty, and the SCRAM authentication to the version of Vert.x.
+  one version of Netty, the latest, and the SCRAM authentication to the version of Vert.x.
 * Statements are only pipelined when prepared statements are cached, which the module turns on. Each connection keeps
   the statements it has prepared.
 * A connection is held for the whole of a transition's changes.
