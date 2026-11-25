@@ -147,7 +147,7 @@ public class MonitoringTest {
   @Test
   public void anEventIsWrittenWithItsEntityAndTime() {
     String correlationId = UUID.randomUUID().toString();
-    Event<?> sent = machine.onEvent(correlationId, trigger(ParcelSent, Parcel)).blockFirst();
+    Event<?> sent = machine.onEvent(trigger(ParcelSent, Parcel).withCorrelationId(correlationId)).blockFirst();
 
     // The delayed event is not written, as it is yet to happen
     assertEquals(1, linesOf(correlationId).size());
@@ -165,7 +165,7 @@ public class MonitoringTest {
   public void theEventsOfAChangeAreWrittenInTheOrderTheyWereCalculatedWithTheSeveritiesOfTheirTransitions() {
     UUID parcel = machine.onEvent(trigger(ParcelSent, Parcel)).blockFirst().entityId();
     String correlationId = UUID.randomUUID().toString();
-    machine.onEvent(correlationId, trigger(ParcelLost, Parcel, parcel)).blockFirst();
+    machine.onEvent(trigger(ParcelLost, Parcel, parcel).withCorrelationId(correlationId)).blockFirst();
 
     assertEquals(
         List.of(
@@ -188,7 +188,7 @@ public class MonitoringTest {
   @Test
   public void anEventIsWrittenAlsoWhenTheOneWhoTriggeredItHasStoppedListening() throws InterruptedException {
     String correlationId = UUID.randomUUID().toString();
-    machine.onEvent(correlationId, trigger(CourierCalled, Courier)).blockFirst();
+    machine.onEvent(trigger(CourierCalled, Courier).withCorrelationId(correlationId)).blockFirst();
 
     for (int i = 0; i < 100 && linesOf(correlationId).size() < 2; i++)
       Thread.sleep(100);
@@ -206,7 +206,7 @@ public class MonitoringTest {
     String correlationId = UUID.randomUUID().toString();
     var failure = assertThrows(
         IllegalStateException.class,
-        () -> machine.onEvent(correlationId, trigger(ParcelInspected, Parcel, parcel)).blockFirst()
+        () -> machine.onEvent(trigger(ParcelInspected, Parcel, parcel).withCorrelationId(correlationId)).blockFirst()
     );
     assertEquals("Scanner broken", failure.getMessage());
 
@@ -226,7 +226,7 @@ public class MonitoringTest {
   private static List<String> received(String condition) {
     UUID parcel = machine.onEvent(trigger(ParcelSent, Parcel)).blockFirst().entityId();
     String correlationId = UUID.randomUUID().toString();
-    machine.onEvent(correlationId, trigger(ParcelReceived, Parcel, parcel), condition).blockFirst();
+    machine.onEvent(trigger(ParcelReceived, Parcel, parcel).withCorrelationId(correlationId), condition).blockFirst();
     return summariesOf(correlationId);
   }
 

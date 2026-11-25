@@ -22,9 +22,6 @@ import reactor.netty.http.server.HttpServerResponse;
 /// Receives HTTP requests with reactor-netty and feeds them to the HTTP inbox of a state machine. The response is taken
 /// from the response event produced by the inbox' request routing.
 ///
-/// The correlation id of a request is decided by the inbox' [HttpInbox#trigger()], e.g. from a header set with
-/// [HttpInbox#correlationIdHeader(String)].
-///
 /// Filters can be added to e.g. authenticate, log, rewrite or short-circuit requests before they reach the inbox.
 public class HttpInboxListener {
 

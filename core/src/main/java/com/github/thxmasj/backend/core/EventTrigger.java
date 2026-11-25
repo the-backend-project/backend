@@ -119,11 +119,16 @@ public class EventTrigger<T, I, O> {
   }
 
   /// This trigger with the correlation id of the events it triggers taken from its input, e.g. from a header of a
-  /// received request, when the trigger is given to [StateMachine#onEvent(EventTrigger, Object)] without a correlation
-  /// id. The function is applied once for each call, so a correlation id it generates, e.g. for a request without the
-  /// header, is the same in the attempts of the call. Without the function, such a call has a random UUID.
+  /// received request. The function is applied once for each call of [StateMachine#onEvent(EventTrigger, Object)], so
+  /// a correlation id it generates, e.g. for a request without the header, is the same in the attempts of the call.
+  /// Without the function, each call has a random UUID.
   public EventTrigger<T, I, O> withCorrelationId(Function<T, String> correlationId) {
     return new EventTrigger<>(eventSpec, entitySelectors, entityModel, createEntity, condition, triggerType, triggerId, correlationId);
+  }
+
+  /// This trigger with the given correlation id of the events it triggers
+  public EventTrigger<T, I, O> withCorrelationId(String correlationId) {
+    return withCorrelationId(_ -> correlationId);
   }
 
   private List<Function<T, ? extends EntitySelector>> replaceFallbackSelector() {

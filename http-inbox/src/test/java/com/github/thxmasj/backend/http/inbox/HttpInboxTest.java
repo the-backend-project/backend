@@ -572,7 +572,7 @@ public class HttpInboxTest {
     var cookieInbox = HttpInbox.of(List.of(request));
     var machine = Init.stateMachine(UUID.randomUUID().toString(), cookieInbox.entityModels());
     var message = new HttpRequest<byte[]>(PUT, URI.create("/bell/" + UUID.randomUUID()), Headers.of(), null);
-    Function<HttpRequest<byte[]>, HttpResponse<byte[]>> send = m -> HttpResponse.raw(machine.onEvent(UUID.randomUUID().toString(), cookieInbox.trigger(), m)
+    Function<HttpRequest<byte[]>, HttpResponse<byte[]>> send = m -> HttpResponse.raw(machine.onEvent(cookieInbox.trigger(), m)
         .skip(1).next().block(Duration.ofSeconds(5)).getUnmarshalledData());
 
     HttpResponse<byte[]> first = send.apply(message);
@@ -685,7 +685,6 @@ public class HttpInboxTest {
     assertEquals("tid-123", response.headerValue("X-Correlation-Id"));
   }
 
-  /// The inbox, not the listener, takes the correlation id from the request, so it is the same without the listener
   @Test
   public void whenCorrelationIdHeaderWithoutListenerThenResponseHasSameCorrelationId() {
     var request = internalRequest(UUID.randomUUID().toString(), "t0ken");
@@ -1169,7 +1168,7 @@ public class HttpInboxTest {
         Request,
         true
     );
-    assertThatThrownBy(() -> stateMachine.onEvent(UUID.randomUUID().toString(), trigger, new HttpRequest<>(PUT, URI.create("/x"), Headers.of(), null)).blockLast(Duration.ofSeconds(5)))
+    assertThatThrownBy(() -> stateMachine.onEvent(trigger, new HttpRequest<>(PUT, URI.create("/x"), Headers.of(), null)).blockLast(Duration.ofSeconds(5)))
         .hasMessageContaining("can't be created in the group Request");
   }
 
@@ -1181,7 +1180,7 @@ public class HttpInboxTest {
         Request,
         false
     );
-    assertThatThrownBy(() -> stateMachine.onEvent(UUID.randomUUID().toString(), trigger, new HttpRequest<>(PUT, URI.create("/x"), Headers.of(), null)).blockLast(Duration.ofSeconds(5)))
+    assertThatThrownBy(() -> stateMachine.onEvent(trigger, new HttpRequest<>(PUT, URI.create("/x"), Headers.of(), null)).blockLast(Duration.ofSeconds(5)))
         .hasMessageContaining("can only be identified by the session");
   }
 
@@ -1540,7 +1539,7 @@ public class HttpInboxTest {
 
   private Event<?> onRequest(EventTrigger<HttpRequest<byte[]>, ?, ?> eventTrigger, HttpRequest<byte[]> requestMessage) {
     System.out.println(getClass().getSimpleName() + ": onRequest(...) with " + requestMessage.requestLine());
-    return stateMachine.onEvent(UUID.randomUUID().toString(), eventTrigger, requestMessage)
+    return stateMachine.onEvent(eventTrigger, requestMessage)
         .doOnNext(e -> System.out.println("Test got response: " + e.type().name()))
         .switchIfEmpty(Mono.defer(() -> Mono.error(new RuntimeException("Test error"))))
         // First event is the triggered event.

@@ -436,28 +436,19 @@ public class StateMachine implements AutoCloseable {
     return storage.eventsByEntityId().execute(entityModel, eventTypesByEntityModel.get(entityModel), entityId);
   }
 
-  /// Triggers the event with the correlation id of the trigger (see [EventTrigger#correlationId(Object)])
+  /// Triggers the event of a trigger without input, as [#onEvent(EventTrigger, Object)]
   public <O> Flux<Event<?>> onEvent(EventTrigger<Void, Void, O> eventTrigger) {
-    return Flux.defer(() -> onEvent(eventTrigger.correlationId(null), eventTrigger));
+    return onEvent(eventTrigger, null);
   }
 
-  public <O> Flux<Event<?>> onEvent(String correlationId, EventTrigger<Void, Void, O> eventTrigger) {
-    return onEvent(correlationId, eventTrigger, null);
-  }
-
-  /// Triggers the event with the correlation id the trigger takes from the input (see
-  /// [EventTrigger#correlationId(Object)])
-  public <I, O> Flux<Event<?>> onEvent(EventTrigger<I, I, O> eventTrigger, I input) {
-    return Flux.defer(() -> onEvent(eventTrigger.correlationId(input), eventTrigger, input));
-  }
-
-  /// Fails with an [IllegalArgumentException] if the state machine doesn't run the entity model triggered on, the
-  /// same instance (see [#runs(EntityModel)]).
-  public <T, I, O> Flux<Event<?>> onEvent(String correlationId, EventTrigger<T, I, O> eventTrigger, T input) {
+  /// Triggers the event with the correlation id the trigger gives the input (see
+  /// [EventTrigger#correlationId(Object)]). Fails with an [IllegalArgumentException] if the state machine doesn't run
+  /// the entity model triggered on, the same instance (see [#runs(EntityModel)]).
+  public <T, I, O> Flux<Event<?>> onEvent(EventTrigger<T, I, O> eventTrigger, T input) {
     EntityModel target = eventTrigger.entityModel();
     if (target != null && !(target instanceof EntityModelGroup) && !runs(target))
       return Flux.error(models.notRun(target, "the state machine"));
-    return onEvent(correlationId, eventTrigger, input, null);
+    return Flux.defer(() -> onEvent(eventTrigger.correlationId(input), eventTrigger, input, null));
   }
 
   /// Whether the state machine runs the entity model, the same instance as it was given or found. Another instance

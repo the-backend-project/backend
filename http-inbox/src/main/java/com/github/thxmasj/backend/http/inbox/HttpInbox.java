@@ -226,10 +226,9 @@ public interface HttpInbox {
   ///                                  checked the first time they are asked for (see [#of(List)])
   List<EntityModel> entityModels();
 
-  /// Triggers a received request on a new entity of [#requestRouting()]. The correlation id of the events it triggers,
-  /// when given to [com.github.thxmasj.backend.core.StateMachine#onEvent(EventTrigger, Object)] without one, is taken
-  /// from the request header `X-Correlation-Id`, or the one given by [#correlationIdHeader(String)]. A request without
-  /// the header gets a generated correlation id prefixed with `SYS-`.
+  /// Triggers a received request on a new entity of [#requestRouting()]. The correlation id of the events it triggers
+  /// is taken from the request header `X-Correlation-Id`, or the one given by [#correlationIdHeader(String)]. A request
+  /// without the header gets a generated correlation id prefixed with `SYS-`.
   EventTrigger<HttpRequest<byte[]>, HttpRequest<byte[]>, ?> trigger();
 
   /// Returns the inbox with the correlation id of a request taken from the given header, e.g. `TID`, instead of
