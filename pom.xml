@@ -213,7 +213,7 @@
                 <version>1.4.0</version>
             </dependency>
             <dependency>
-                <!-- One version of Netty, that of reactor-netty, rather than also the newer one of Vert.x -->
+                <!-- One version of Netty for everything, the latest, rather than the older 4.2.20.Final that both reactor-netty 1.4.0 and Vert.x 5.2.3 declare -->
                 <groupId>io.netty</groupId>
                 <artifactId>netty-bom</artifactId>
                 <version>4.2.21.Final</version>
