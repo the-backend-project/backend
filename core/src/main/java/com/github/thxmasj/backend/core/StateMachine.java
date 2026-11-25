@@ -281,7 +281,7 @@ public class StateMachine implements AutoCloseable {
               // fired the trigger too, or by an event which replaced it. Either way the trigger is done with, as when its
               // event isn't stored (TriggerFiredElsewhere), so it is not a failure.
               .onErrorResume(
-                  e -> e instanceof EventAlreadyExists exists && exists.isOf(delayedTrigger.entityId(), delayedTrigger.eventNumber()),
+                  e -> e instanceof EventAlreadyExists exists && exists.isOf(delayedTrigger.entityModel(), delayedTrigger.entityId(), delayedTrigger.eventNumber()),
                   e -> {
                     Debug.log("The event of delayed trigger " + delayedTrigger + " was stored by another transaction first");
                     return Mono.just(ResolverStatus.Ok);
@@ -1435,7 +1435,16 @@ public class StateMachine implements AutoCloseable {
         );
   }
 
+  /// Runs the action and passes its outcome to its entity as the next event after the one which triggered the action,
+  /// as the outcome is one of the action of that state. Another event stored on the entity first, e.g. the timeout of
+  /// an outbox request, which is numbered as the next event too, wins the race, and the outcome is dropped: calculated
+  /// from a newer event log it could be taken as the outcome of a later action, e.g. the response of a redispatched
+  /// request. A transaction which failed as another one stored an event first on one of the other entities it
+  /// triggers events on, also its id or index entity, which has the same entity id, is calculated again, which reads
+  /// their event logs again.
   private <T> Mono<ProcessResult<?>> triggerAction(ActionTrigger<T> actionTrigger, String correlationId, TransitionStep<?> stage1) {
+    EntityModel entityModel = actionTrigger.eventLog().entityModel();
+    UUID entityId = actionTrigger.eventLog().entityId();
     return actionTrigger.trigger()
         .flatMap(triggerResult -> onEvent(
                 correlationId,
@@ -1443,7 +1452,14 @@ public class StateMachine implements AutoCloseable {
                 actionTrigger.eventLog(),
                 stage1
             )
-            .doOnError(e -> Debug.log("onEvent ERROR for " + triggerResult.eventType().name() + " on " + actionTrigger.eventLog().entityModel().name() + ":" + actionTrigger.eventLog().entityId() + ": " + e))
+            .doOnError(e -> Debug.log("onEvent ERROR for " + triggerResult.eventType().name() + " on " + actionTrigger.eventLog().entityModel().name() + ":" + entityId + ": " + e))
+            .onErrorResume(
+                e -> e instanceof EventAlreadyExists exists && exists.isOn(entityModel, entityId),
+                _ -> {
+                  Debug.log("The outcome " + triggerResult.eventType().name() + " of the action " + actionTrigger.action().name() + " on " + entityId + " is dropped, as another event was stored on the entity first");
+                  return Mono.empty();
+                }
+            )
             .retryWhen(RetrySpec.fixedDelay(3, Duration.ofMillis(500))
                 .filter(e -> e instanceof EventAlreadyExists)
                 // Avoid the "Thundering Herd" problem
