@@ -162,6 +162,18 @@ transition follow, in the chain, up to its `OutputStep`. `otherwise(model, f)` e
 transition chosen if no other one was. The event of the chosen transition is then the event stored; the output of the
 transition itself is a `Completed` result referring to it.
 
+A transition with choices always ends in `otherwise`, and the compiler sees to it: after `when(...).then(...)`, the
+builder offers only another `when(...)`, `choice(...)` or `otherwise(...)`, not `output(...)`, `trigger(...)` or other
+steps. The same goes for `when(...)` on the result of a trigger, and for `when(Map)` and `choice(List)`. So every
+outcome of a choice is a transition the model names, and there is no last alternative left for the reader to infer,
+as there would be if the transition fell through to its own output when none of its predicates holds. If nothing
+should happen in that case, `otherwise` names it, usually with an event type of its own, e.g.
+`.otherwise(onEvent(RequestIgnored).toSelf().output(), _ -> null)`.
+
+The steps the transitions share go before the choice, and those of each outcome in the transition it chooses. A reverse
+model can make a choice too, and is then given to `reversible(...)` ending in `otherwise`, e.g.
+`reversible(assemble(...).when(p).then(m).otherwise(n))`.
+
 The identity provider registers a client by `RegistrationRequested`, whose output is `Void`, and the event stored is
 either `RegistrationRejected` or `RegistrationAccepted`, depending on whether the client id is taken:
 
@@ -190,8 +202,8 @@ flowchart LR
 
 ### The events stored for a choice
 
-Only the event of the chosen transition is stored in the entity's event log, not the one of the transition making the
-choice. The log of a client has `RegistrationAccepted` or `RegistrationRejected`, but never `RegistrationRequested`. A
+Only the event of the chosen transition is stored in the entity's event log, never the one of the transition making
+the choice, as a choice always ends in one of the transitions it names. The log of a client has `RegistrationAccepted` or `RegistrationRejected`, but never `RegistrationRequested`. A
 chosen transition can make a choice too, and then the event stored is the one of the last transition chosen. The
 changes of the steps before the choice are still stored, e.g. the `ClientIdClaimed` event triggered on another entity
 above.
