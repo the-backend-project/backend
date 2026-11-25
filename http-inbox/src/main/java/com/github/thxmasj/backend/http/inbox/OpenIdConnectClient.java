@@ -3,6 +3,7 @@ package com.github.thxmasj.backend.http.inbox;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.github.thxmasj.backend.core.DataType;
+import com.github.thxmasj.backend.http.Headers;
 import com.github.thxmasj.backend.http.HttpRequest;
 import com.github.thxmasj.backend.http.HttpRequest.Method;
 import com.nimbusds.jose.JWSAlgorithm;
@@ -102,18 +103,16 @@ public final class OpenIdConnectClient {
       parameters.put("code", code);
       parameters.put("redirect_uri", config.redirectUri().toString());
       parameters.put("code_verifier", verifier(secret));
-      var headers = new LinkedHashMap<String, String>();
-      headers.put("Content-Type", "application/x-www-form-urlencoded");
-      headers.put("Accept", "application/json");
+      var headers = Headers.builder().add("Content-Type", "application/x-www-form-urlencoded").add("Accept", "application/json");
       if (config.clientSecret() != null) {
         // HTTP Basic, which RFC 6749 section 2.3.1 requires every provider to support
         String credentials = URLEncoder.encode(config.clientId(), UTF_8) + ":" + URLEncoder.encode(config.clientSecret(), UTF_8);
-        headers.put("Authorization", "Basic " + Base64.getEncoder().encodeToString(credentials.getBytes(UTF_8)));
+        headers.add("Authorization", "Basic " + Base64.getEncoder().encodeToString(credentials.getBytes(UTF_8)));
       } else {
         // A public client, RFC 6749 section 4.1.3
         parameters.put("client_id", config.clientId());
       }
-      return HttpRequest.create(Method.POST, provider.tokenEndpoint(), headers, Form.encode(parameters));
+      return HttpRequest.create(Method.POST, provider.tokenEndpoint(), headers.build(), Form.encode(parameters));
     });
   }
 

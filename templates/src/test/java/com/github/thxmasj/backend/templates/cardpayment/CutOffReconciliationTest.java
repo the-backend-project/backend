@@ -54,6 +54,7 @@ import com.github.thxmasj.backend.http.outbox.BatchedAtMostOnceWithRollbackDispa
 import com.github.thxmasj.backend.http.outbox.Dispatcher;
 import com.github.thxmasj.backend.http.outbox.HttpOutboxRequest.BatchedRequest;
 import com.github.thxmasj.backend.http.outbox.HttpOutboxRequest;
+import com.github.thxmasj.backend.http.Headers;
 import com.github.thxmasj.backend.http.HttpRequest;
 import com.github.thxmasj.backend.http.HttpResponse;
 import com.github.thxmasj.backend.core.test.Init;
@@ -77,7 +78,6 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.ZonedDateTime;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicReference;
@@ -172,7 +172,7 @@ public class CutOffReconciliationTest {
   }
 
   private static Event<?> request(Application application, String path) {
-    var message = new HttpRequest<>(POST, URI.create(path), Map.of(), "{}".getBytes());
+    var message = new HttpRequest<>(POST, URI.create(path), Headers.of(), "{}".getBytes());
     return application.machine().onEvent(UUID.randomUUID().toString(), application.inbox().trigger(), message)
         .switchIfEmpty(Mono.error(new RuntimeException("No response to " + path)))
         // First event is the triggered event, second is the response event

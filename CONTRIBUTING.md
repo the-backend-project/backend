@@ -106,7 +106,8 @@ where N is the number of the issue. The agent then:
 
 1. Assigns the issue to you (the user `gh` is logged in as) and moves it to In Progress on the board. If someone else,
    such as another agent's account, is already assigned, it asks you first. Without write access to the repository it
-   skips this step, and you work from a fork instead.
+   skips this step, and you work from a fork instead. In JetBrains Air, it also names its session
+   `N - <issue title>`, so you can tell the sessions apart in Air's list of agent sessions.
 2. Creates the branch `issue-N-<slug>` off `main` in a worktree of its own, `.worktrees/issue-N-<slug>` (ignored by
    git), so the branch and local changes of the main checkout are left alone and several issues can be worked on at the
    same time. If a worktree or branch for the issue already exists, it asks whether that is your earlier work and
