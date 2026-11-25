@@ -473,7 +473,9 @@ public class StateMachine implements AutoCloseable {
     Debug.log("onEvent " + correlationId + " " + eventTrigger.eventSpec().eventType().name());
     I adaptedInput = eventTrigger.eventSpec().inputAdapter().apply(input);
     // Each attempt reads the event log again, so an attempt which failed on the event number, as another instance
-    // appended an event to the entity first, is calculated again from the new event log, with a response sink of its own
+    // appended an event to the entity first, is calculated again from the new event log. Each has a response sink of
+    // its own too. A failed attempt emits nothing to its sink today, as events are emitted only once they are stored,
+    // but with a sink of its own a later attempt can't pass on events of one which failed, wherever they are emitted.
     return Flux.defer(() -> {
           Many<Event<?>> responseSink = Sinks.many().unicast().onBackpressureBuffer();
           return eventLog(eventTrigger, input, null)
