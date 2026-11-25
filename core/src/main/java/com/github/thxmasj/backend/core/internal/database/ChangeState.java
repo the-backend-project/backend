@@ -4,6 +4,7 @@ import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EntityModel;
 import com.github.thxmasj.backend.core.Event;
 import com.github.thxmasj.backend.core.IdEntityModel;
+import com.github.thxmasj.backend.core.IndexEntityModel;
 import com.github.thxmasj.backend.core.Severity;
 import com.github.thxmasj.backend.core.StateMachine.ProcessResult;
 import com.github.thxmasj.backend.core.TriggerType;
@@ -271,34 +272,37 @@ public abstract class ChangeState {
 
   private Function<PrimaryKeyConstraintViolation, Throwable> primaryKeyConstraintViolationMapper(List<Change> changes) {
     return pkViolation -> {
-      if (pkViolation.tableName().equals("Entity")) {
+      if (List.of("Entity", "Event", "IndexEvent", "IdEvent").contains(pkViolation.tableName())) {
         try {
-          UUID entityId = UUID.fromString(pkViolation.duplicateKey().trim());
-          return new EventAlreadyExists(
-              "Entity",
-              entityId,
-              1,
-              changes
-          );
-        } catch (Exception e) {
-          return new EventAlreadyExists(pkViolation.duplicateKey());
-        }
-      } else if (List.of("Event", "IndexEvent", "IdEvent").contains(pkViolation.tableName())) {
-        try {
-          UUID entityId = UUID.fromString(pkViolation.duplicateKey().split(",")[0]);
-          int eventNumber = Integer.parseInt(pkViolation.duplicateKey().split(",")[1].trim());
-          return new EventAlreadyExists(
-              pkViolation.tableName(),
-              entityId,
-              eventNumber,
-              changes
-          );
+          String[] key = pkViolation.duplicateKey().split(",");
+          UUID entityId = UUID.fromString(key[0].trim());
+          // The entity table has the first event of an entity
+          int eventNumber = pkViolation.tableName().equals("Entity") ? 1 : Integer.parseInt(key[1].trim());
+          EntityModel entityModel = changes.stream()
+              .filter(change -> change.newEvent() != null
+                  && entityId.equals(change.entityId())
+                  && change.newEvent().eventNumber() == eventNumber
+                  && isStoredIn(change.entityModel(), pkViolation.tableName()))
+              .map(Change::entityModel)
+              .findFirst()
+              .orElseThrow();
+          return new EventAlreadyExists(entityModel, entityId, eventNumber, changes);
         } catch (Exception e) {
           return new EventAlreadyExists(pkViolation.duplicateKey());
         }
       } else {
         return pkViolation;
       }
+    };
+  }
+
+  /// Whether the events of the entity model are stored in the table. The id and index entities of an entity have its
+  /// entity id, so the table tells them apart from the entity.
+  private static boolean isStoredIn(EntityModel entityModel, String table) {
+    return switch (entityModel) {
+      case IdEntityModel _ -> table.equals("IdEvent");
+      case IndexEntityModel _ -> table.equals("IndexEvent");
+      default -> table.equals("Event") || table.equals("Entity");
     };
   }
 
