@@ -46,6 +46,9 @@ user-level instructions or memory.
   why none needed to change.
 - Add issues you create to the [project board](https://github.com/orgs/the-backend-project/projects/1), as Todo, if you
   have access to it.
+- Pass the text of an issue, pull request or comment to `gh` with `--body-file`, from a file or from a quoted heredoc
+  (`--body-file - <<'EOF'`), never with `--body`. Inside double quotes the shell runs whatever is in backticks, so
+  Markdown code spans would be executed as commands and dropped from the text.
 - Write a bare `@name` in issues, pull requests and comments only to notify that user. Put code and placeholders such as
   `@me` in backticks.
 
