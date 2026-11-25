@@ -1,4 +1,6 @@
 000dd616298aebd21a9d5731874df083d7298424b91e037b73cbdd07ebc83e0e  org/jboss/jboss-parent/36/jboss-parent-36.pom
+003dec235ee54f955f2ddfba1899b1f5fb85d18974896383c9ae8c33f7d45d4d  com/pulumi/azure-native/3.32.0/azure-native-3.32.0.pom
+004f28eecf5cf3c9b09bb947e195d153c8d98a0c2a06426ece04fc1b09b8c986  org/codehaus/plexus/plexus-io/3.8.1/plexus-io-3.8.1.jar
 005b5a3a88736bd2584f69cc59467e67c106e6a4b7a2dbd1ba2251267e96011d  org/apache/commons/commons-lang3/3.10/commons-lang3-3.10.pom
 00cae1113d6051aa15f3259c96def9064793756dc62c5f1ae2363b16c55b533f  org/eclipse/jetty/jetty-alpn-client/11.0.26/jetty-alpn-client-11.0.26.jar
 00eaece2225d5ff2e0936a7041699aa818f668b878f93996065258fc0b8904c7  org/codehaus/plexus/plexus-compiler-manager/2.17.0/plexus-compiler-manager-2.17.0.pom
@@ -9,13 +11,16 @@
 0124227bc47efc9a00b9aa4fc3ef7f70823d322213c26489e5369a914339c84a  org/codehaus/plexus/plexus-component-annotations/1.5.4/plexus-component-annotations-1.5.4.pom
 018bfda653dbf6c4191b7b05fe4efed8a3d8d70e3de70a7bed1b188a6de26cd2  com/github/jknack/handlebars-helpers/4.3.1/handlebars-helpers-4.3.1.pom
 01942a9b8f0df1c8a41c3053a22e2aab23995bdc297143abfef4598d7339bc61  io/vertx/vertx5-parent/15/vertx5-parent-15.pom
+01a0965989049a71061a38678b5b537bc6b7666360118984ed15004d3c5fbc16  io/netty/netty-codec-compression/4.2.21.Final/netty-codec-compression-4.2.21.Final.pom
 01b01dfa366550b40ac5760548a7d728b6109d17c451e83864d1e5e0ce862c94  org/junit/junit-bom/5.14.1/junit-bom-5.14.1.pom
 01b7f4829dbec642a1bead4d552ccf9777dcb501f93f34f6f400092f9bd364b4  com/fasterxml/jackson/jackson-base/2.23.0/jackson-base-2.23.0.pom
+01f816e20d7baaa6edf140c0e973599f756772e55712f97824866f6483979ad5  io/netty/netty-transport-native-unix-common/4.2.21.Final/netty-transport-native-unix-common-4.2.21.Final.pom
 02ac867dd84010b474817228a1ddfeba53e33d093cae866abf57d5761e4b61e7  io/netty/netty-codec-compression/4.2.20.Final/netty-codec-compression-4.2.20.Final.pom
 02dfd0b0439a5591e35b708ed2f5474eb0948f53abf74637e959b8e4ef69bfeb  org/objenesis/objenesis/3.3/objenesis-3.3.jar
 033f4c78d632da88d0eb8ead974fc14a264392cebf12ab6c68d6cea7adf0c64a  org/apache/commons/commons-compress/1.28.0/commons-compress-1.28.0.pom
 034e12a9d1d5f5618a9e0dda23aadda4ed659ec55240876b6e954cc2172be456  org/apache/maven/shared/maven-common-artifact-filters/3.1.0/maven-common-artifact-filters-3.1.0.pom
 0358ce75bca1a54c141e16b7f1621e973fa177ddf64fe02b0f38df23ad400543  com/github/javaparser/javaparser-parent/3.28.2/javaparser-parent-3.28.2.pom
+03f9af6c2ef998b55f141fc328c7a3b36032b2bb0ee5941c97abc95bd426f187  io/netty/netty-codec-http2/4.2.21.Final/netty-codec-http2-4.2.21.Final.jar
 042a1cd1ac976cdcfe5eb63f1d8e0b0b892c9248e15a69c8cfba495d546ea52a  org/jetbrains/kotlin/kotlin-stdlib/1.8.21/kotlin-stdlib-1.8.21.jar
 04534dea350a2187970a5b74444338bcf78ba8e537d44f262acfba16ebb33056  org/apache/maven/maven-parent/42/maven-parent-42.pom
 0478fa78a908b3c31fe6d77be9978aaa621e2a181db84007e3d3b37424a2ac61  com/google/guava/guava/33.5.0-jre/guava-33.5.0-jre.pom
@@ -24,6 +29,7 @@
 05c51cedba2c06a9770707391e006cee825876937dea580b94a265ce145d4939  org/junit/jupiter/junit-jupiter-params/6.1.3/junit-jupiter-params-6.1.3.jar
 05c5d3b498e94a4107f5851c87aebde155e7dea24c1dd4edf983bae3d11727b2  org/apache/maven/doxia/doxia-integration-tools/2.1.0/doxia-integration-tools-2.1.0.jar
 05cc5e150552602305986f6dc74fc1643741452a38d436b6d3a88d2cfa9f1f49  io/netty/netty-codec-http2/4.2.19.Final/netty-codec-http2-4.2.19.Final.pom
+05d656a43e754c5c00b1b8c87e6c8876fce3c3d6a58c27965ec0253e4f749ef7  com/pulumi/azure-native/3.32.0/azure-native-3.32.0.jar
 0615b429e3a21a0d6bd925d09ede2937892034272b4cd04bb9ab617d57e72b42  org/jboss/jboss-parent/52/jboss-parent-52.pom
 064d61d87b3346b874cbe56c624d66225e831ece3c758e2bea5013c3cadfe782  com/ongres/scram/scram-client/3.4/scram-client-3.4.jar
 0683008db01c6121e52eaa05d96e7b47a48e1c5d411da879f29b564da6ba3a09  com/pulumi/azure-native/3.30.0/azure-native-3.30.0.pom
@@ -34,6 +40,7 @@
 070d75f261fe4c5b8202508366715f7f2d4660f88c8ef7e6d3575e48c9683b66  org/jspecify/jspecify/1.0.1/jspecify-1.0.1.jar
 0737bb5d3011ad5b388399a793990a728767de6b78d41812ddc365fb120fd6bb  io/netty/netty-codec-http/4.2.20.Final/netty-codec-http-4.2.20.Final.pom
 07407815f3c1441a078e16e5dde2deaf652a3dbdfbf2eba3b563d561210794bf  org/apache/commons/commons-parent/103/commons-parent-103.pom
+07c0de2d9df0c1a285ce78489b0b4a76babd4544ecd001b0f75d21373b410c3f  io/netty/netty-common/4.2.21.Final/netty-common-4.2.21.Final.pom
 08039d0e9c197fa3c1bfce3f86be7824602a2e1c22d0f482d2ac63de1a3c59f6  io/vertx/vertx-core/5.2.3/vertx-core-5.2.3.jar
 080e2984173238b50e064c226afffbb1b0233520295c790a7fd3d6ae4593f063  com/google/protobuf/protobuf-bom/3.25.5/protobuf-bom-3.25.5.pom
 087d02f39a46ab79b18f883ac7c3a3d6c2df1fd3bf7eaafeade699e0743d0dbe  com/github/luben/zstd-jni/1.5.7-9/zstd-jni-1.5.7-9.jar
@@ -43,6 +50,7 @@
 091ebaadb9ebf7747467cad425a42858a8480d095a4c8d4681fc91b67f70f38e  com/ongres/stringprep/stringprep/2.2/stringprep-2.2.pom
 093be1b03331bce2932d6825c37e98272d7621e6a9e9fb93289a002518b8dd5a  org/tukaani/xz/1.9/xz-1.9.pom
 094f5d92b4b7d9c8a2bf53cc69d356243ae89c3499457bcb4b92f7ed3bf95879  org/hamcrest/hamcrest-core/2.2/hamcrest-core-2.2.jar
+09b2ed8387d41bf7ecb424fabdf6ac0c1936119d08d0aa4312bf6097ddac9096  io/netty/netty-transport-classes-epoll/4.2.21.Final/netty-transport-classes-epoll-4.2.21.Final.pom
 09b999a969e73525a6cc3ad2868ea744766e1d93b25c6c656d61a5ff9c881da9  org/codehaus/plexus/plexus/1.0.10/plexus-1.0.10.pom
 0a30b797adb6822147ef98cb249ef3fbf4a243542aa86bf9f42fad9e68305a44  net/java/dev/jna/jna-platform/5.17.0/jna-platform-5.17.0.pom
 0a4077f6aeae2865532a564807af8d30c26acc6f63b7928d93bd7ab1f2190449  org/tukaani/xz/1.11/xz-1.11.jar
@@ -50,7 +58,9 @@
 0a97201afe17874f035f8a25ffb970678e49aadf2992c7d97c6ff9fb1d5da211  io/grpc/grpc-core/1.57.2/grpc-core-1.57.2.pom
 0b748ab0cc7f287db5b6018c614cfe67e7e1f4d80941ce2f41d317ccc3b5b5c5  com/fasterxml/jackson/jackson-base/2.20.1/jackson-base-2.20.1.pom
 0bcc42a6b4bf8615fcefacc99ceed15a2b46aeb43cb53e2a828465cd6ab33921  org/apache/maven/surefire/surefire-junit-platform/3.6.1/surefire-junit-platform-3.6.1.jar
+0be3d1ba00c813ef724fb7821b69b05a85e2bb788358f693bea4d391522cd11d  org/hibernate/accessor/hibernate-accessor/0.1.0/hibernate-accessor-0.1.0.jar
 0c1eec26d9c0aa2629592080106b3c75eb7f10cdde4a6b251e2873f29c431c1e  io/netty/netty-resolver-dns-native-macos/4.2.19.Final/netty-resolver-dns-native-macos-4.2.19.Final-osx-x86_64.jar
+0c2d4fd7e91aa5f15c5d4e91b6f3bfe8881a16f0260c9e82d1383f5453293974  io/netty/netty-codec-compression/4.2.21.Final/netty-codec-compression-4.2.21.Final.jar
 0c6467ed4c8c7392524ce703ca6ce3ed88596eec390f13b0c264f2f961308a54  com/fasterxml/jackson/jackson-bom/2.20.1/jackson-bom-2.20.1.pom
 0c71e3304202a1740a36b861152a99f24594b663273dfb1c6cfae960de823711  com/fasterxml/jackson/jackson-bom/2.23.0/jackson-bom-2.23.0.pom
 0c829c9641ccac870d7d7ff012cbbad8447e912eb9a26d0d7283f09cba44c0d9  org/eclipse/sisu/sisu-inject/0.9.0.M4/sisu-inject-0.9.0.M4.pom
@@ -63,6 +73,7 @@
 0f18f85a552c6d3f702867938985d75ec32632209384fe8d76edf8014cedf2c2  org/codehaus/plexus/plexus-compiler-manager/2.17.0/plexus-compiler-manager-2.17.0.jar
 0f4665c943df2692d75e28b6b24923ab18ff00369b8c7f5eba4bedef07e4ecd4  org/codehaus/plexus/plexus-interpolation/1.28/plexus-interpolation-1.28.pom
 0f5a265a06331b0049e352be32ca322de18b17f3d4dbb70635d40da692e3582f  org/yaml/snakeyaml/2.3/snakeyaml-2.3.pom
+0f9cd21b8f739e29f447ce3eebf25d40b9d4ae22f13b3e34fae89b26ef4d93d9  org/springframework/security/spring-security-crypto/7.2.0/spring-security-crypto-7.2.0.jar
 10937d44c425984cb8739225d34712e1a3145641ca93ac3f7ef186fa25f6babc  org/junit/junit-bom/5.10.3/junit-bom-5.10.3.pom
 10bbc5674fab0fa2bbcf8f7696796d3e1b92ab31525330921fbdb8da74fe1472  org/apache/maven/doxia/doxia-skin-model/2.0.0/doxia-skin-model-2.0.0.pom
 10e24fa6b900c7530f56c6946eb515c75f196d79f080d0767e7837af01b621a9  org/eclipse/jetty/jetty-xml/11.0.26/jetty-xml-11.0.26.pom
@@ -91,6 +102,8 @@
 15d5d2bcd6fe003c4d181f1b9e88b3e09611e85385246105fc5977301f2c7e96  org/apache/maven/doxia/doxia-module-apt/2.0.0/doxia-module-apt-2.0.0.pom
 161172f2137d1ebfc974ed8750df4c4cc331e1ae44dede88e0be59caf2a36d71  org/codehaus/plexus/plexus-interactivity-api/1.6.0/plexus-interactivity-api-1.6.0.pom
 168790c8d10d2e7cc53fa08906162e3d6c23b4528e7d062eea328d4a281484c6  io/netty/netty-codec-http2/4.2.20.Final/netty-codec-http2-4.2.20.Final.jar
+1688149fc44d6d387d7e4def11acde16759c863cae2bd21175f2dbc998fc6061  org/codehaus/mojo/versions/versions-model/2.25.3/versions-model-2.25.3.pom
+169486d552e0c4ccedc9f9d25b92bd4fe9286ee633859aa6aa70051229c2d1bb  io/netty/netty-transport-classes-epoll/4.2.21.Final/netty-transport-classes-epoll-4.2.21.Final.jar
 169dd904a4b0f6520cffe658cc62292bfe9f3c14a989fa92120724cde43a9968  org/junit/junit-bom/5.10.2/junit-bom-5.10.2.pom
 16a0a99ae9a3261c9ed2f246ee6926a518dcf81d6b020d3b44abf5115792b998  io/netty/netty-codec-native-quic/4.2.19.Final/netty-codec-native-quic-4.2.19.Final-osx-aarch_64.jar
 16bce1c64c6840085dd6b87c53569567e651e1df1c4bc93dc3ee2366fbe0e106  io/projectreactor/netty/reactor-netty-core/1.3.8/reactor-netty-core-1.3.8.jar
@@ -108,6 +121,7 @@
 1973d499cc2c1264aff2d6d052a1c716ae613d018ae1c2f610dd6a4d1c24578e  com/sun/activation/all/1.2.2/all-1.2.2.pom
 19889dbdf1b254b2601a5ee645b8147a974644882297684c798afe5d63d78dfe  com/google/code/findbugs/jsr305/3.0.2/jsr305-3.0.2.pom
 19d4b747b204805325b6334553296f986562277a4ac1cb5e593a5e4c4f5e4115  org/junit/junit-bom/5.11.4/junit-bom-5.11.4.pom
+19d912c3d63ac8093d9cdf944d65e04acb4fe2017eec7c0248ac7bf333442a30  io/netty/netty-codec-socks/4.2.21.Final/netty-codec-socks-4.2.21.Final.pom
 1a008d0a7ca4103c26fe51a4de8b6df3a5b92864191cd18b19f101ba6177c994  net/javacrumbs/json-unit/json-unit-parent/2.40.1/json-unit-parent-2.40.1.pom
 1a3775fa4b265910941ca7f09c6b0df4b30f61e301f03dbebbfd35c49ca740af  org/apache/commons/commons-parent/102/commons-parent-102.pom
 1a8faf7a6a2b848acb26a959954ee115c0d79dbe75a6206fb3b8c7c2f45a237f  org/apache/maven/maven-parent/34/maven-parent-34.pom
@@ -140,6 +154,7 @@
 1f289aa0ebaa5b0a1678cad1384ba36d67237d991426d42b873f182c160b7e7c  io/projectreactor/netty/reactor-netty-core/1.3.8/reactor-netty-core-1.3.8.pom
 1f39d4f2906a04f501567cd1211cef3fd95fea4cb979e1eba1d8dd84e4b67098  org/codehaus/plexus/plexus-archiver/4.10.4/plexus-archiver-4.10.4.jar
 1f895a587df4844d9b7565e8e9a6352afe1d55532458a0dbeb746bc1d02e9216  org/apache/maven/maven-archiver/3.6.2/maven-archiver-3.6.2.jar
+1f91a0610996d1b65645a03a8b84bda1c2e7bc3509070317a88e194355b001c9  org/codehaus/mojo/versions/versions/2.25.3/versions-2.25.3.pom
 1fad6e6be7557781e4d33729d49ae1cdc8fdda6fe477bb0cc68ce351eafdfbab  org/jspecify/jspecify/1.0.0/jspecify-1.0.0.jar
 20065077da667ed30a67cf2568261344a07a107a30de656988c1465e52de2c8e  org/codehaus/mojo/versions-maven-plugin/2.25.0/versions-maven-plugin-2.25.0.jar
 2032531f05994121c2fdb5df7235ed548f53d294d0b7ac45e797148d85a30ee2  org/apache/maven/reporting/maven-reporting-api/4.0.0/maven-reporting-api-4.0.0.pom
@@ -157,6 +172,8 @@
 231d54da78f368204fe1374c19cefbf094c065ee9e2322c1136ef9eb4a162b00  io/vertx/vertx-core-logging/5.2.3/vertx-core-logging-5.2.3.pom
 232a9fd682e5c5bc82c1a463ef434c806240e62f5c1f9a167c0ad69d15d9fd64  org/eclipse/jetty/jetty-bom/11.0.26/jetty-bom-11.0.26.pom
 238216a620363d7c370fb005fd3b92d146e6c150af031f2be7c4d5766b76e677  com/microsoft/azure/msal4j/1.15.0/msal4j-1.15.0.pom
+2391e6617244e186a2adfcc9fed7ddd428781194ef3462d550499d10c9ee0d03  com/pulumi/pulumi/1.40.3/pulumi-1.40.3.pom
+24470782932c3fefa68f4e1b2eb257d05f8a4e3bf3cf2609868285e1f45d3ae7  io/projectreactor/netty/reactor-netty/1.4.0/reactor-netty-1.4.0.pom
 246cb4845991ab52196ef90ee8a361164512b5cc7ec0547c9fab8f3db75f2679  com/fasterxml/woodstox/woodstox-core/7.3.0/woodstox-core-7.3.0.jar
 24f2e52bde65e2dc9cfcebb2fc22d8de0edb3726925ccf80b13db4eeb515a302  org/apache/commons/commons-parent/14/commons-parent-14.pom
 2539d301ee7c267445b090fdc420213710c35bb84531315a0aea6d4486017077  org/codehaus/mojo/versions/versions-common/2.25.2/versions-common-2.25.2.jar
@@ -170,6 +187,7 @@
 284daf76f8ba14fe8d8c47bb22b78845e6df3abdf25d00dffa60873b586c2c4a  io/netty/netty-handler-proxy/4.2.19.Final/netty-handler-proxy-4.2.19.Final.pom
 28ebb2998bc7d7acb25078526971640892000f3413586ff42d611f1043bfec30  commons-io/commons-io/2.5/commons-io-2.5.pom
 28fc63720c4a5ff92bf0e358ed55a6f24626f35bccc13cc3e194231e158848f6  org/apache/maven/maven/3.0/maven-3.0.pom
+290ca8f7f0334e19c6d51da583d36efb4fb9807583bd57defc116159998de359  io/netty/netty-codec-base/4.2.21.Final/netty-codec-base-4.2.21.Final.pom
 29b8f1f8e055653297b07c3844a056541bdbf5c8199517598d9fa6edbefcc82e  com/fasterxml/jackson/datatype/jackson-datatype-jsr310/2.18.7/jackson-datatype-jsr310-2.18.7.jar
 29c1f9a8329ba29806f98fb2ec78768870c7def2cc8be435617680577662cfaf  org/apache/maven/doxia/doxia-sink-api/2.2.0/doxia-sink-api-2.2.0.pom
 29e3eaed16fff23633143e7e2b0482cfc853ad6fe7155a0026c4328917f89490  com/azure/azure-json/1.5.1/azure-json-1.5.1.pom
@@ -177,6 +195,7 @@
 2ac81b9d05755d051e530cce9dffd24198e41c8221532e8e121a567f3053b45d  net/sourceforge/plantuml/plantuml-mit/1.2026.9/plantuml-mit-1.2026.9.pom
 2b3f02f2d0ec3e95884f9ab415596ce627492469c2d8fd75e3fb00fb69532c44  org/sonatype/sisu/sisu-guice/2.1.7/sisu-guice-2.1.7.pom
 2b4f0741f79c63f111990cd902a64bc266d2b8c5b1335b71b486341a393532e8  io/netty/netty-transport-classes-epoll/4.2.20.Final/netty-transport-classes-epoll-4.2.20.Final.pom
+2b73ff73bcafdaab15b71b8bec4bc31096dee30fdce5c0d444684813283fee3d  io/projectreactor/netty/reactor-netty-core/1.4.0/reactor-netty-core-1.4.0.jar
 2b9878a22e7e8b60d5ee2ea8d3260b63992face0dc0ccfb54717a62a662155a4  tools/jackson/jackson-bom/3.3.0/jackson-bom-3.3.0.pom
 2b9a7b1f726fb86216dbd2c8321eabe0221dbd5b1be81c18e1cb53811b104758  commons-io/commons-io/2.22.0/commons-io-2.22.0.jar
 2be45c641b841e81df87292e181f2c203500c5f0e9a1676f135927387f3cf40b  com/zaxxer/HikariCP/7.1.0/HikariCP-7.1.0.jar
@@ -194,6 +213,7 @@
 30fac4a85af7199ab3a8edbbfe7fab293c98f788cf92f33f1836a87672089106  org/codehaus/plexus/plexus-archiver/4.15.0/plexus-archiver-4.15.0.pom
 31182d4adbb41a8452edc3b661bc3d65bf40c89b3f10580b5daf01079ef9b775  io/opentelemetry/opentelemetry-sdk-extension-autoconfigure-spi/1.40.0/opentelemetry-sdk-extension-autoconfigure-spi-1.40.0.jar
 31630d8a9e9f08a959862015e30a4863908be3680c3a686f4c1f08d2ffeaf706  io/grpc/grpc-protobuf/1.57.2/grpc-protobuf-1.57.2.jar
+319f70f98ab52c27c3a46c1fd8f0f32746b7bab39bf7e3f126f2c3f2d0ab9b23  io/netty/netty-codec-base/4.2.21.Final/netty-codec-base-4.2.21.Final.jar
 31a68daabb4b361453788b9045ac87a6ae87c705e578facd99e4d9ddb6a481e9  org/apache/commons/commons-parent/105/commons-parent-105.pom
 321ddbb7ee6fe4f53dea6b4cd6db74154d6bfa42391c1f763b361b9f485acf05  org/ow2/ow2/1.5.1/ow2-1.5.1.pom
 32355081d109095c3d5d374d5a43b4f4c1b75d549e983ef50723e2772e5302a0  org/apiguardian/apiguardian-api/1.1.2/apiguardian-api-1.1.2.pom
@@ -202,6 +222,7 @@
 32bf222ed2e137a2dfdc32d87ac9556ace966784c4c2c37b2cce87d3984be468  com/microsoft/sqlserver/mssql-jdbc/13.6.2.jre11/mssql-jdbc-13.6.2.jre11.pom
 32de38ee39a6985e777019a6364774c02781ee312f9f4e530bbdb45b875b1e38  org/apache/maven/plugins/maven-jar-plugin/3.5.1/maven-jar-plugin-3.5.1.pom
 335513ce1dd2cf4c7d1dbfa1b8aa14656d9be5f9f3f0d0875ac528893c9f0f06  org/apache/maven/resolver/maven-resolver-api/1.4.1/maven-resolver-api-1.4.1.pom
+33b1da80927ded8741beaaca165e333a03eeef6fc60de272ffb9279229c1d4ec  org/codehaus/mojo/versions/versions-api/2.25.3/versions-api-2.25.3.pom
 33d148db0e11debd0d90677d28242bced907f9c77730000fd597867089039d86  org/jetbrains/kotlin/kotlin-stdlib-jdk7/1.8.21/kotlin-stdlib-jdk7-1.8.21.jar
 33dc67306cc95da14e5444e8b494d967924abf1d01bae1894676164cbd3f6112  org/apache/maven/resolver/maven-resolver-api/1.4.1/maven-resolver-api-1.4.1.jar
 34105a834109054473fd064808d63df2b379a1ac585d94c2809a944ec2bb21c1  org/codehaus/mojo/versions/versions-model/2.25.2/versions-model-2.25.2.pom
@@ -234,8 +255,10 @@
 3ac1479d0fd4b0c8ad90898400de109473511e78fb4e6f9dec68d3c99d118755  io/netty/netty-resolver-dns/4.2.20.Final/netty-resolver-dns-4.2.20.Final.pom
 3add9e92edb232902aaf8f663b48d9f8dbec1792436f4f9c36f3665b86266d8d  org/apache/maven/doxia/doxia-site-renderer/2.0.0/doxia-site-renderer-2.0.0.pom
 3b47ae8e2b2bfad810586c37537f002273c05237bd3adecafe9f9f57a2b18fde  net/javacrumbs/future-converter/future-converter-java8-guava/1.2.0/future-converter-java8-guava-1.2.0.jar
+3ba53c71a41248f10cd49e27d3d969903f327353c8bf218e378ca902b89c6abd  io/netty/netty-resolver/4.2.21.Final/netty-resolver-4.2.21.Final.jar
 3bd067ea250f20a437bd59b4f4d020310ef4e35da203d219f93c231441140d7c  org/eclipse/jetty/jetty-alpn-parent/11.0.26/jetty-alpn-parent-11.0.26.pom
 3bd3d07c910477091bb9602f931f696c4aa115c86a322bff6a604ec7543afc07  org/apache/maven/shared/maven-shared-components/47/maven-shared-components-47.pom
+3bfe0b8feba613aba673b97a865073d57b07fd15aef1380800180ea02cf41ce4  io/netty/netty-transport/4.2.21.Final/netty-transport-4.2.21.Final.jar
 3c1bcba8d80d7002277effe67509979b3a7bd22341bab276b946837f0b76f831  io/netty/netty-tcnative-classes/2.0.85.Final/netty-tcnative-classes-2.0.85.Final.jar
 3c6bff4151d35b94c3afb4a0c9377c262ced4eb2dd1009970396d4c79eb73e6e  org/apache/maven/doxia/doxia-module-xhtml5/2.0.0/doxia-module-xhtml5-2.0.0.pom
 3c71490eb703d82cc330a5de9cfcb7f25d69c6d2f3235e64d10bc1649c856604  io/netty/netty-transport-native-unix-common/4.2.19.Final/netty-transport-native-unix-common-4.2.19.Final.pom
@@ -246,6 +269,7 @@
 3d6fdeb72b2967f1fa2784134fb832d08d8d6e879b7ace7712f2c7281994fc1e  org/apache/maven/maven-model/3.0/maven-model-3.0.pom
 3db752a30074f06ee6c57984aa6f27da44f4d2bbc7f5442651f6988f1cb2b7d7  org/jetbrains/kotlin/kotlin-stdlib-jdk8/1.8.21/kotlin-stdlib-jdk8-1.8.21.jar
 3dd01532f34540676c9e0153f96a44c78a73f2b0118ef46cb14247e512dde76b  io/netty/netty-transport-native-epoll/4.2.19.Final/netty-transport-native-epoll-4.2.19.Final-linux-x86_64.jar
+3dd6cf1333d037510ccab5bb544cd845da6ca008345fb2907b726d770d85141b  io/projectreactor/netty/reactor-netty-http/1.4.0/reactor-netty-http-1.4.0.jar
 3de389e23dad48e88047c01dd3c9fedfbf569b8d1e985b74cb0c7a8f6ad85dd3  com/fasterxml/jackson/jackson-base/2.18.7/jackson-base-2.18.7.pom
 3ded47536faeb3c4c544a84871d82f461511589afb2a892a180ca425f281363e  io/netty/netty-resolver/4.2.19.Final/netty-resolver-4.2.19.Final.jar
 3df9925f62a2fbe0cd5d156aebd297c7b1eef4f8164d95da847359081ed30dfe  org/codehaus/plexus/plexus-io/3.8.0/plexus-io-3.8.0.pom
@@ -272,9 +296,13 @@
 4225f860bccdcb48a315de478e70ab817b411077974de5c9d1b8e2761be5f515  org/apache/maven/plugins/maven-plugins/49/maven-plugins-49.pom
 4232a2477bcaacca4cb1b67af032d8683fc6a61aebd96a61a901ebc7e7e391e1  org/apache/maven/maven-archiver/3.6.6/maven-archiver-3.6.6.pom
 42b72e6572c084055ac3ce03e6efe433eb05ef620b3daf5136a4359fc72cc3e1  io/grpc/grpc-api/1.57.2/grpc-api-1.57.2.jar
+431fce9607853e8d8c84f82b8d0cb78f068a9b2b82fbffd66d8688d2c7d54b64  io/projectreactor/netty/reactor-netty-core/1.4.0/reactor-netty-core-1.4.0.pom
+434af3094ae1d5e4bc5bbd16b801c711459e550e4d6654cc71a6eebbf08df223  org/codehaus/mojo/versions-maven-plugin/2.25.3/versions-maven-plugin-2.25.3.pom
 434de28e1e21c9d1c3dd2ef497e3f8ff3abba000a963fcd5eb1d85970ce434f0  io/netty/netty-resolver-dns-classes-macos/4.2.19.Final/netty-resolver-dns-classes-macos-4.2.19.Final.jar
 43711783fcd4846e97d73916bea5d9451f5bfc4902bb198d2538450a726b7930  io/netty/netty-tcnative-parent/2.0.84.Final/netty-tcnative-parent-2.0.84.Final.pom
+43b2ac7d4090ae713ff9eb00b904c457aa7ad688f369503723e48fb73d549058  org/springframework/security/spring-security-crypto/7.2.0/spring-security-crypto-7.2.0.pom
 4408d69bebbf7f4d63bcd57f1276b96f14a2ab4d666004d5d7c4f977ad18c91c  org/codehaus/plexus/plexus-compiler-javac/2.17.0/plexus-compiler-javac-2.17.0.pom
+440c17666f6e3a18b7d9bfe2c522df833c6bdbc79a84393b02af801c74a751f0  io/netty/netty-codec-native-quic/4.2.21.Final/netty-codec-native-quic-4.2.21.Final-osx-aarch_64.jar
 4412e133520b8f9d01d3601080ce7fe146ee486f6a5a69ca9278d4a4ec69704d  com/github/luben/zstd-jni/1.5.7-9/zstd-jni-1.5.7-9.pom
 449798beb4c4ec26de9cc25b39ca2198036883fb905ca968cbef7136d19a25d9  com/fasterxml/jackson/core/jackson-core/2.23.0/jackson-core-2.23.0.jar
 449f00ecf08a9e78ec67661ac3b155b6a4493c90aeb4dcb7e2869eef1f067127  org/codehaus/plexus/plexus-utils/4.1.0/plexus-utils-4.1.0.pom
@@ -284,7 +312,10 @@
 4682e9cc7373600319802bd1a9682abe8e6df085527f80bdf03ab71be22577cb  tools/jackson/core/jackson-databind/3.3.0/jackson-databind-3.3.0.pom
 468a1262e9aaa5febf9d604e2836267f815351f2b4520f28fb17f53c71e33554  org/apache/maven/maven-parent/43/maven-parent-43.pom
 469b96d495081e2a51c57c23862f6d3c26b10de0c703edef4c84ad0f5ef8eeb7  io/opentelemetry/opentelemetry-sdk-metrics/1.40.0/opentelemetry-sdk-metrics-1.40.0.jar
+46bb33437b2888c170e3531ff7b7e8c6fcf89e915803e06198faa3d228bf1a53  io/netty/netty-codec-dns/4.2.21.Final/netty-codec-dns-4.2.21.Final.jar
 47504a3ce71d73a1b0af07675546b8d8c5af87f82ef12b6381f9eb3c17dd5a5b  commons-codec/commons-codec/1.23.0/commons-codec-1.23.0.jar
+477fe4181e649a5bb88147a16c81a92f33525bc5811bd64f36908ed55517040d  io/netty/netty-transport-native-epoll/4.2.21.Final/netty-transport-native-epoll-4.2.21.Final.pom
+47836e5fffa2e4aca994c5e31f992a12df2511a8be697d9bf104ac8c8df51459  io/netty/netty-transport-native-unix-common/4.2.21.Final/netty-transport-native-unix-common-4.2.21.Final.jar
 479a8aa5e6f99030a2a446a68d1f62320698932746f811fc656a1ea06b94184d  org/apache/httpcomponents/core5/httpcore5-h2/5.3.6/httpcore5-h2-5.3.6.jar
 47c7b0e65718ca89df6fdf5cb3f24a49e076cacd9499236c7e18ad78e993cddb  org/codehaus/plexus/plexus-build-api/1.2.0/plexus-build-api-1.2.0.pom
 47f22e99c7bf466391def16f8377985e5d3ba6f5bbcf65853644805513e15fad  com/google/errorprone/error_prone_parent/2.18.0/error_prone_parent-2.18.0.pom
@@ -294,6 +325,7 @@
 48e2df636cab6563ced64dcdff8abb2355627cb236ef0bf37598682ddf742f1b  org/opentest4j/opentest4j/1.3.0/opentest4j-1.3.0.jar
 48fd6dc846e56b1f408660d163e75300f9e384bb63be482a8082a21d72a8db9c  org/apache/commons/commons-parent/66/commons-parent-66.pom
 4915a0a3683e9afad03db155ee85050396bbcdc240a83bf04aba58701b36d8ba  org/codehaus/plexus/plexus-i18n/1.1.0/plexus-i18n-1.1.0.pom
+4917b5fba77e4dd603b5bce73efffcd1d761cfc79e993b5e7d1d6d403737bb89  io/netty/netty-resolver-dns/4.2.21.Final/netty-resolver-dns-4.2.21.Final.pom
 4946e60a547c8eda69f3bc23c5b6f0dadcf8469ea49b1d1da7de34aecfcf18dd  org/apache/apache/9/apache-9.pom
 4969c424f2db4f53b68934980b21000a139fd70bdf1c8941bc22edb74eeb7b8a  org/apache/maven/surefire/surefire-extensions-spi/3.6.1/surefire-extensions-spi-3.6.1.pom
 4a55cff79ca6326639181041b2ab1a6d9237661205c1f7f62db7bf85ccd7815f  org/apache/maven/plugins/maven-source-plugin/3.4.0/maven-source-plugin-3.4.0.jar
@@ -302,7 +334,9 @@
 4ad1fafd3fbc9369d558950619f5c2a22389490f4127844a56338731e05d9e15  io/projectreactor/reactor-test/3.8.8/reactor-test-3.8.8.jar
 4aee72f9b30b507964c2f52b63f70e7b41fb9d957359cb5dc13c428abb4b6189  org/apache/maven/doxia/doxia-integration-tools/2.0.0/doxia-integration-tools-2.0.0.jar
 4b05895d1cd65013d4b8e7eeb09cde6b567b4c31729fe5c77c0f0898b5e04b88  org/apache/maven/doxia/doxia-sink-api/2.0.0/doxia-sink-api-2.0.0.pom
+4b3420b8a0e3928838895749af250fac3454b61ec48a95434345f815e7205b09  io/netty/netty-buffer/4.2.21.Final/netty-buffer-4.2.21.Final.jar
 4b3b26c438d0b41d5a0613787115ea4013adeae1478314535976b2b3a65fc2f8  org/codehaus/plexus/plexus-archiver/4.12.0/plexus-archiver-4.12.0.pom
+4b40f05580af84390e465569836dc77d7a5fc9387dff87a823a45df3ed39520f  io/netty/netty-handler/4.2.21.Final/netty-handler-4.2.21.Final.pom
 4c0e4a92f6870f399b946d5bb789d177e4a47941147c3fddc2e6f063e9cb96db  org/apache/velocity/velocity-engine-parent/2.3/velocity-engine-parent-2.3.pom
 4c992ecef3569e73f19cd6b3be027108fb73139bb67d55d1218ac72e92219ebc  com/fasterxml/jackson/core/jackson-annotations/2.18.7/jackson-annotations-2.18.7.jar
 4d0329cd9e72f2420e5ca15724cbfe6ffa6e5fd2888361516271190fdc342ed7  org/junit/junit-bom/5.9.3/junit-bom-5.9.3.pom
@@ -324,8 +358,10 @@
 50970e6069c21182689eb44ae9f8193970e080b6f37fc13f22aa4201cca2dfe4  org/xmlunit/xmlunit-core/2.11.0/xmlunit-core-2.11.0.jar
 50ca15cadd7723e9947f80179f54d89a4ed38e3689bb2ac32a275c08f13c33c6  io/vertx/vertx-sql-client-codec/5.2.3/vertx-sql-client-codec-5.2.3.pom
 5151c13bdd7cc3a5569583a7f4267392f013ffd3115eab8db5f86de420a366af  org/codehaus/plexus/plexus-utils/4.0.2/plexus-utils-4.0.2.pom
+51824eaf893473e6f28997874c816ebd7701b5affb156b33e98d9a8d1da0eabd  org/postgresql/postgresql/42.7.15/postgresql-42.7.15.pom
 5194dad25d878985646a49df71bd985e8d2dd4c6b6765717093ac8a31bdb32e4  org/junit/platform/junit-platform-engine/6.1.3/junit-platform-engine-6.1.3.pom
 51e4256e8afca679cde38c13d674eda54eb1ea5c3d94cac0f98d36190fec7002  io/opentelemetry/opentelemetry-exporter-otlp-common/1.40.0/opentelemetry-exporter-otlp-common-1.40.0.pom
+51fa3949b4d6ebde50b5906e9745549aaaed210a2bda44a17ffa736e0ae7318b  io/projectreactor/addons/reactor-pool/1.3.0/reactor-pool-1.3.0.pom
 521d5d8f6e90fd09c8a6f419e458c3ec2ac419b7e0ad3f5f4f3f54c1effbe964  org/codehaus/plexus/plexus-xml/3.1.0/plexus-xml-3.1.0.pom
 52479a907c6d16de176f20fa46bd55745a9165095078fc148fdc80e3f20272f7  io/opentelemetry/opentelemetry-api-incubator/1.40.0-alpha/opentelemetry-api-incubator-1.40.0-alpha.pom
 524ec4787aff73af6b3a9fafa154c7f1881b648299b663fdbfcadda1286f2353  org/apache/apache/37/apache-37.pom
@@ -339,6 +375,7 @@
 5425501edd9e0bd7b01eca53cc92e06836d24851151304f9c6759e1713541685  org/apache/maven/maven-parent/23/maven-parent-23.pom
 542b7a502ed61950d1b83112b51b1617d3407e3a4df5ab56a98d760e0f8c5950  commons-io/commons-io/2.19.0/commons-io-2.19.0.pom
 542eb281334ba4867e6eb052b8192cfbb878a951066f6d704e332d70b1e33a53  org/eclipse/jetty/jetty-project/11.0.26/jetty-project-11.0.26.pom
+545d1f6da7e326568bbf71b56954785c4a88c4256206bb6f3294b79a7577c792  io/projectreactor/reactor-core/3.9.0/reactor-core-3.9.0.jar
 54ba23d87a2d438540c99ef8794a0856fc573a256b498678283c3c67ef18ada8  org/reactivestreams/reactive-streams/1.0.4/reactive-streams-1.0.4.pom
 54e1f85864bc617c9e4ce9c652382312a0a03aacfaea3852b7203e6015acca37  io/opentelemetry/opentelemetry-exporter-otlp/1.40.0/opentelemetry-exporter-otlp-1.40.0.jar
 552ad56800bc6010f1e6ea8c7638f24c74230e9991a52568df20d5b5aa5c4b20  commons-beanutils/commons-beanutils/1.8.3/commons-beanutils-1.8.3.pom
@@ -349,6 +386,7 @@
 5610db06b733641acbc7a0c48a80c40069db627bad043f8c7c8d7afb4f6a3d27  org/codehaus/mojo/animal-sniffer-annotations/1.23/animal-sniffer-annotations-1.23.pom
 5673daacc6e855976decedeb46dc63395a6b1ac9a483e672f0831cf46fe06e25  com/fasterxml/jackson/dataformat/jackson-dataformats-text/2.18.3/jackson-dataformats-text-2.18.3.pom
 567aeb2907088298fe5e67fd0fb1843571c24b46ef5b369f495c3d52c654b67b  net/javacrumbs/future-converter/future-converter-common/1.2.0/future-converter-common-1.2.0.jar
+56d7a9d2c2ff70ab3026c63bf5f563062a3dcefa36b0f7a88f303168c55d8ec1  io/projectreactor/reactor-core/3.9.0/reactor-core-3.9.0.pom
 56f0ad4defb444b038a708a8e0d003692df1b912b91219736a764de88ff7867c  com/github/jknack/handlebars-helpers/4.3.1/handlebars-helpers-4.3.1.jar
 57014e98ba621d9d254cf79ad4dfcdcf690290fd97a935bab9ebe72bd5be40d3  org/apache/maven/plugins/maven-plugins/48/maven-plugins-48.pom
 5702c8097cc81e939dd12e5b39ac2e81f83737c320f6f4d88553577842f9ceb6  io/netty/netty-codec-base/4.2.19.Final/netty-codec-base-4.2.19.Final.jar
@@ -361,6 +399,7 @@
 57e97797b4a70a3b0e63f40df628568446d0a06c231d7b67970876ee19e4652b  org/apache/maven/doxia/doxia-core/2.2.0/doxia-core-2.2.0.pom
 5807fef7eb619bc0a5d1c0e6c83199ea9bca8503203a3eb73cfdccec2d215743  io/netty/netty-common/4.2.20.Final/netty-common-4.2.20.Final.jar
 5808838aaffb1de2f9f596122c0bc6d5970dfccc1477437fbef17e08efe8e653  io/opentelemetry/opentelemetry-sdk-logs/1.40.0/opentelemetry-sdk-logs-1.40.0.pom
+5846e38e7266a166fd6c276016a9eaa46f0f06697d3f9cb8dda17b5bffe63b92  io/netty/netty-handler-proxy/4.2.21.Final/netty-handler-proxy-4.2.21.Final.jar
 5879e023d9bcafda006d28b42b2495c6f3db587d3e71eefa0a3cedeeea36d987  org/apache/maven/shared/maven-shared-components/45/maven-shared-components-45.pom
 58ddbb8e429cb5e9054c2f5f7b7cdfeb7adbcdfda21d92b67f67fa2b94edf982  org/apache/maven/plugins/maven-plugins/47/maven-plugins-47.pom
 5969f5b1f55e1f6f060b96e35bbcd0da5a7b1672128697dbc0a9e532aefd098a  io/opentelemetry/opentelemetry-context/1.40.0/opentelemetry-context-1.40.0.pom
@@ -373,15 +412,18 @@
 5a61aca96757c8e3e138ec9825f342750b79e54389c15d3421332495c027cd92  org/codehaus/mojo/versions-maven-plugin/2.25.2/versions-maven-plugin-2.25.2.jar
 5a66da26b86d7eecedd9e0d8fe0e22ef1733bbf873e476cb9b860afbed22210c  io/netty/netty-codec-base/4.2.20.Final/netty-codec-base-4.2.20.Final.jar
 5aacda89be38563bdf3bfac79333616c0802ca617070dea66ba649507c994441  io/airlift/aircompressor/0.27/aircompressor-0.27.pom
+5ac3034daf0d7affd335fb760e63606c9f1ef8294ee4a0b991f17746d5bc1a85  io/netty/netty-codec-native-quic/4.2.21.Final/netty-codec-native-quic-4.2.21.Final.pom
 5b675530178c55bf34c400618f222606c78246fe8ec37fafca49688a770c7cda  io/vertx/vertx-core/5.2.3/vertx-core-5.2.3.pom
 5b8df2699933ea898aa50d4def4fc2226b15e6f4d993e373a16070f7ed480216  com/zaxxer/HikariCP/7.1.0/HikariCP-7.1.0.pom
 5bb8a198adb597c30204b4f1c336fdb3d2816536403e9ad3349ab200032e5445  org/apache/commons/commons-digester3/3.2/commons-digester3-3.2.pom
 5c0452a133f76872bed5bbd685c7f9515b15d43db8a46b2f8ca8409a390bf424  io/opentelemetry/opentelemetry-context/1.40.0/opentelemetry-context-1.40.0.jar
+5c086a22efbfeb4446a79dc85c6585599349a07cf1559928fbc9c2e376c75ee7  io/netty/netty-codec-socks/4.2.21.Final/netty-codec-socks-4.2.21.Final.jar
 5c3881e4f556855e9c532927ee0c9dfde94cc66760d5805c031a59887070af5f  commons-codec/commons-codec/1.19.0/commons-codec-1.19.0.jar
 5cf40ab0cc77828ab2b875b1f3ecd71c8295d7721933476abc2e08fddcea164a  com/ethlo/time/itu/1.14.0/itu-1.14.0.jar
 5dceb6ab206a419179273f15d0d2b472f9472bbb747c6c8b7e96daaf78cc4527  org/apache/httpcomponents/httpcomponents-parent/14/httpcomponents-parent-14.pom
 5e50fe938068471f504a7efc4071823425b520eabc6f80c72d935ebd54683091  jakarta/activation/jakarta.activation-api/1.2.2/jakarta.activation-api-1.2.2.pom
 5e62846a89f05cd78cd9c1a553f340d002458380c320455dd1f8fc5497a8a1c1  org/hamcrest/hamcrest/2.2/hamcrest-2.2.jar
+5f445ad7e8c793f6adee57876a71ed1a01d39992a6e9fda8bb2f72ad351599a6  io/netty/netty-transport-native-epoll/4.2.21.Final/netty-transport-native-epoll-4.2.21.Final-linux-x86_64.jar
 5f448a021d88c96f3840dfe619128d62e5cfb62712cd6e66dca8a7704945b06e  org/apache/commons/commons-compress/1.26.1/commons-compress-1.26.1.pom
 5f4b94dd3065a7764c37fa15de2ad6d81f40d59f8cb33f17d181c6384fb7a72e  org/jetbrains/kotlin/kotlin-stdlib-jdk8/1.9.10/kotlin-stdlib-jdk8-1.9.10.pom
 5fbc0a70fe4d1d563d431a41b23f493d68807571f0bb49db0bb1737e83e9161f  com/microsoft/sqlserver/mssql-jdbc/13.6.2.jre11/mssql-jdbc-13.6.2.jre11.jar
@@ -397,6 +439,7 @@
 61988e54486a5dc38f06c70fdae5b108556c63bd433697b9f4305fcdb30fa40e  org/apache/maven/shared/maven-shared-incremental/1.1/maven-shared-incremental-1.1.jar
 619e0a465e7506c019c5d1627d4629b495c7a171004a778fd9baf3297e8df11e  org/apache/maven/surefire/surefire-extensions-api/3.6.1/surefire-extensions-api-3.6.1.jar
 61b4d7c515a0894ffad925fd7052620c1425a86433fd35113b5fab0de890a57f  com/squareup/okio/okio-jvm/3.6.0/okio-jvm-3.6.0.pom
+61ee3be1908bbf696aa1c49763e8af2c7f9090a2e836e84f403f93dfb3d76e8e  io/netty/netty-transport/4.2.21.Final/netty-transport-4.2.21.Final.pom
 6208c52346d7802b43f4d523dce64d25053c64d53e857d5e9ef43af046db0a5a  io/netty/netty-codec-native-quic/4.2.20.Final/netty-codec-native-quic-4.2.20.Final-linux-x86_64.jar
 627d92aa92fd4d6bb8c2b56bcbb38543417f49d38b5a62fbdb4aeff551e7b760  org/checkerframework/checker-qual/3.55.1/checker-qual-3.55.1.pom
 62eae3b1bb053060b4375c393664a9559afdfafd6de133924f81794aa20caf68  org/codehaus/plexus/plexus-compiler/2.17.0/plexus-compiler-2.17.0.pom
@@ -412,9 +455,11 @@
 653432ed213573b6b209deb7346dc2ed89f20e647dbdb6fc868051b334b31d27  org/codehaus/plexus/plexus-io/3.6.0/plexus-io-3.6.0.pom
 6648f5dba22b0cd2d0f994fb6e31d1a3cb7134428a62574fdba5637eb0aa2c37  io/projectreactor/netty/reactor-netty-http/1.3.8/reactor-netty-http-1.3.8.pom
 66d4f819a062a51a1d5627bffc23fac55d1677f0e0a1feba144aabdd670a64bb  net/java/dev/jna/jna/5.13.0/jna-5.13.0.jar
+67081011edd492c4e95d5bb90e23d80adf959a99fea2842c0f52f1c3d5758bf9  org/codehaus/plexus/plexus-xml/3.1.1/plexus-xml-3.1.1.jar
 6730a9d0e8657d7b531d457d907397aaad1e721aeb4869a222f45e3cd1ba342b  org/codehaus/mojo/versions/versions-model-report/2.25.2/versions-model-report-2.25.2.jar
 67543f0736fc422ae927ed0e504b98bc5e269fda0d3500579337cb713da28412  com/squareup/okio/okio-jvm/3.6.0/okio-jvm-3.6.0.jar
 679be8f12aa2864f7c286f7f5bcbac8365851c01821de5b99a12d6f772f521e6  org/apache-extras/beanshell/bsh/2.0b6/bsh-2.0b6.pom
+67a4240e08284c7514bf1e34de349125dfce7a3d1f51aaab32010d5b61df5068  org/codehaus/plexus/plexus-utils/4.2.0/plexus-utils-4.2.0.jar
 68719e687c6e4c9ff3e0fecbef7bd20896f0f4f7b314743ed33c72f962568215  com/google/guava/guava-parent/33.5.0-jre/guava-parent-33.5.0-jre.pom
 68b1cb263ae7b595d296bf03e482d870e6508bdf73673e67eb9ffe0c28e2e41e  com/ongres/scram/scram-client/3.2/scram-client-3.2.jar
 68c2a5aa6e8f345743093e52b5b9e0190ba4d5a5215c0a59b4d7d33647208cbb  com/github/stephenc/jcip/jcip-annotations/1.0-1/jcip-annotations-1.0-1.pom
@@ -429,12 +474,15 @@
 6a46fb5716c8b2a227e3d5e4533ab67abaccc6cb3a4f431ff0ed0859ae8a6993  io/netty/netty-handler-proxy/4.2.19.Final/netty-handler-proxy-4.2.19.Final.jar
 6a67763b76afcd9c80b95e5c5e24782d18cc1b0e3d9b454ad3f8754c76b76815  net/sf/jopt-simple/jopt-simple/5.0.4/jopt-simple-5.0.4.pom
 6a78e619f7944278101442291cc583195e6e0ac407f0708216c6827e4da56f0f  io/opentelemetry/opentelemetry-exporter-common/1.40.0/opentelemetry-exporter-common-1.40.0.jar
+6aa71c44a0568892c717333010f9340a2f94e00e1a0acbbf5f95fef8db213d35  org/codehaus/plexus/plexus-archiver/4.16.0/plexus-archiver-4.16.0.jar
 6b0a14075c74221de53047e363860b7d19fce802bebc152df2c35c4089c6c379  org/junit/jupiter/junit-jupiter/6.1.3/junit-jupiter-6.1.3.jar
 6b4e7a9d2b5742aea138c15c0c9de04632f1a2d8de6e761edef8b36092b4864a  com/fasterxml/jackson/dataformat/jackson-dataformat-yaml/2.18.3/jackson-dataformat-yaml-2.18.3.pom
 6b7f054ab86a87f8e2599f35808b0989922e86b6cab13988021cd12640a4b404  org/codehaus/mojo/animal-sniffer-parent/1.23/animal-sniffer-parent-1.23.pom
 6baf4d39fe0797a5d623218215568252b2b94049c984d71e8b4da2925e024705  org/codehaus/plexus/plexus-java/1.6.0/plexus-java-1.6.0.jar
+6bdb69951d72631f7c913d21bb5051375ff94991c7528aeb5c458146803e7de2  com/fasterxml/classmate/1.8.0/classmate-1.8.0.pom
 6cdee370194f4b9f742d12ef46528042f480d9bdf3de832de2792e1ae9ffc68d  org/apache/maven/doxia/doxia-site-renderer/2.0.0/doxia-site-renderer-2.0.0.jar
 6cf3495fc2e6ac913a2b7f2e03fb5908fb3f229fb06d3358dc45678d5af3e36e  org/apache/commons/commons-parent/65/commons-parent-65.pom
+6d20bd053725a22bb58e72d28a98f4df9886307b24ab64026305e22e60471361  org/codehaus/mojo/versions/versions-common/2.25.3/versions-common-2.25.3.pom
 6d60134c7644852574cca4caa37573206b21ff21439fd3203c42785d071166b9  com/github/luben/zstd-jni/1.5.7-4/zstd-jni-1.5.7-4.pom
 6d7a744e4027649fbb50895df9497d109f98c766a637062fe8d2eabbb3140ba4  commons-logging/commons-logging/1.3.5/commons-logging-1.3.5.jar
 6e2501a9c19155292f51cd2df588a09e97be0a6a26a6adf5e61019c866bbd77d  com/fasterxml/jackson/jackson-bom/2.18.7/jackson-bom-2.18.7.pom
@@ -450,6 +498,7 @@
 7105423e4018234c65eda7a4d3ccc9256f696e1efe18ed5520cbc1fc766ec20e  org/apache/maven/doxia/doxia-integration-tools/2.1.0/doxia-integration-tools-2.1.0.pom
 7157b622a0d6885cb5526a10f1220ddf090dbb52ca2fe38c32cc69c4f1530788  net/bytebuddy/byte-buddy/1.18.3/byte-buddy-1.18.3.pom
 71752ed4c2435a1d8385fe0a4d330f39d04efec89f0d1ba5d1598d39f7397a44  org/apache/apache/39/apache-39.pom
+717eb48ea0c4609d53dea6d2e67e2c53ff0a4868998fe26bf09865aae9539acb  io/projectreactor/netty/reactor-netty/1.4.0/reactor-netty-1.4.0.jar
 718074bfcba3592e3283a1cbcff2eb0163dddd742e2ed22d54a78eafedadc062  org/mockito/mockito-core/5.24.0/mockito-core-5.24.0.pom
 7220ede61026596fbc720ee4b93246fa2d14f328058532b59ef053de397c7d83  com/google/guava/guava-parent/33.4.0-android/guava-parent-33.4.0-android.pom
 7229b03b30a73ee91008072d9e4569a51d8547fae8c50f527841aef4c1b0baa8  org/ow2/asm/asm/9.7.1/asm-9.7.1.pom
@@ -458,6 +507,7 @@
 743f42d967d02826ee79f0601108e2deeb11dd3e6add24fc5f2758b1b68634ec  org/codehaus/plexus/plexus-containers/2.2.0/plexus-containers-2.2.0.pom
 745a86a75ecb5e03f464f05ea2dc76e0f04d07273c5509fa74f393bff9b222b7  io/opentelemetry/semconv/opentelemetry-semconv/1.25.0-alpha/opentelemetry-semconv-1.25.0-alpha.jar
 74a12548f0d6aad13c728666288c1e81201c24bd05bb4e4ec8c1558517b379a7  org/apache/maven/resolver/maven-resolver-util/1.9.27/maven-resolver-util-1.9.27.jar
+7521ddca6795a3679594db606b9454570634b385799f5507442446735371f349  io/netty/netty-resolver-dns/4.2.21.Final/netty-resolver-dns-4.2.21.Final.jar
 75dbe8f34e98e4c3ff42daae4a2f9eb4cbcd3b5f1047d54460ace906dbb4502e  org/apache/commons/commons-parent/52/commons-parent-52.pom
 760b6e22e0a361646bb99e2050eaa5a202a0712817a782fe67cce2b6bf46b428  org/eclipse/jetty/jetty-io/11.0.26/jetty-io-11.0.26.pom
 762fcdd4ce8621c5fa0a2cf6495ad26972a8093eb432aa3e402bc2d4e2500c53  org/apache/maven/maven-parent/41/maven-parent-41.pom
@@ -491,6 +541,7 @@
 7bd2fe2f145c8479824757ab76130c0815a7b55850714ef0c28b39bd5d692ca4  org/tukaani/xz/1.11/xz-1.11.pom
 7c12ee575508f81e22b1db9334b969d0ec54ef0fd1dcba24eeab1a44235fc366  org/jboss/logging/jboss-logging/3.6.3.Final/jboss-logging-3.6.3.Final.jar
 7c28809a4f527746fbce2369f5ac5d5fcef45cfe9da21aa3dd9d3f6bdf00cbe0  io/netty/netty-codec-http/4.2.19.Final/netty-codec-http-4.2.19.Final.jar
+7c501587b9496b79cc65822a4cf53b07b5067ebac9533b8484524b94ab182c74  io/netty/netty-common/4.2.21.Final/netty-common-4.2.21.Final.jar
 7c71d3dd4abc9e26b2259dbf3afaa5c794f12ab957f5b36b6b3366b5a08dd8a3  org/eclipse/jetty/jetty-alpn-java-server/11.0.26/jetty-alpn-java-server-11.0.26.jar
 7c737040a9419522e7c50cc027416a70fe7c7629e52b219935ade6b4119c7d38  com/squareup/okhttp3/okhttp/4.12.0/okhttp-4.12.0.pom
 7c826bc72beddc817dad9263027f9012a0f55a377d38df89c42932a2501c2bf0  org/junit/junit-bom/5.12.1/junit-bom-5.12.1.pom
@@ -516,6 +567,7 @@
 7f005ff3f900e86955f5a534b5a9aa8ea54bb5d60bb60ac23759550a36676835  com/github/zafarkhaja/java-semver/0.10.2/java-semver-0.10.2.pom
 7f517b55f4047788a6df6ece552bf5ff36b418fedbdf2321e5d1fd6e1ffbe49d  org/eclipse/jetty/jetty-server/11.0.26/jetty-server-11.0.26.pom
 7f70f7c35068a99a9e0c527bdd6392a6e07678bd9933ca4429116b8275629f74  eu/maveniverse/maven/domtrip/domtrip-core/1.5.1/domtrip-core-1.5.1.jar
+7f8feca8e9f6c7361eb3919be78541cc74e45f07cc60aa54a30118e01fa1c228  org/codehaus/mojo/versions/versions-model-report/2.25.3/versions-model-report-2.25.3.pom
 7fd6d60212696fb5d6dc422c2a1c8fb82c088d66dd7e4f30738d5d7606eabcd1  org/codehaus/woodstox/stax2-api/4.3.2/stax2-api-4.3.2.jar
 7fe2ca5dce4b14a646bbf921d13ca42caf2a2c0654da155c7563865c989396fd  jakarta/xml/bind/jakarta.xml.bind-api/2.3.3/jakarta.xml.bind-api-2.3.3.pom
 80d8252f4762d52f7145667c490825e55fb7607f0a66b834ef9a3cddfbd1492b  com/fasterxml/jackson/core/jackson-annotations/2.23/jackson-annotations-2.23.pom
@@ -538,18 +590,22 @@
 83caadbb007daee4653825100ab85a7a3deb5f32aae61cdd3507bddf968a062e  org/apache/maven/surefire/surefire/3.6.1/surefire-3.6.1.pom
 83ecb93e61d6bd9c8c81fc25cdcad4a7738dc7b2c08829d1722863ee469a488a  org/eclipse/jetty/toolchain/jetty-jakarta-servlet-api/5.0.2/jetty-jakarta-servlet-api-5.0.2.pom
 83f193cfaef334ee79a249453042ed5f084db8cd9c916a2387b436e9a8fb73a7  net/minidev/json-smart/2.6.0/json-smart-2.6.0.pom
+83f3cc2857e545e3049d04b2e3433ae1c95273cd4cda7f7c468b70c1a1db9087  io/netty/netty-codec-classes-quic/4.2.21.Final/netty-codec-classes-quic-4.2.21.Final.pom
 84d2af12719168f76375f2afdfd6eb5133a865edba9244d40e6b968e3adde1d3  io/grpc/grpc-stub/1.57.2/grpc-stub-1.57.2.jar
 84d3a150518485f8140ea99b8a985656749629f6433c92b80c75b36aba3b099b  com/google/j2objc/j2objc-annotations/3.1/j2objc-annotations-3.1.jar
 84e91db544a36e0a9671626c4c89870f52ad54592e449def1b2b64c97696444b  org/apache/maven/resolver/maven-resolver/2.0.24/maven-resolver-2.0.24.pom
 8510f0ceee40a4254760b2927431e2403a6588c4068022e2440356acfc5e24c1  io/netty/netty-codec-socks/4.2.20.Final/netty-codec-socks-4.2.20.Final.jar
 8519be52c3d5adb7f1f7aa7a67e739cf8fc00f57dc80891330101f77708f4c8c  io/opentelemetry/opentelemetry-exporter-sender-okhttp/1.40.0/opentelemetry-exporter-sender-okhttp-1.40.0.jar
 8540247fad9e06baefa8fb45eb313802d019f485f14300e0f9d6b556ed88e753  com/google/protobuf/protobuf-java/3.25.5/protobuf-java-3.25.5.jar
+855f95536c719f4f4c8f71a19de68c5afe6aa58570ffbd2365ecb13bc654bbbc  io/netty/netty-parent/4.2.21.Final/netty-parent-4.2.21.Final.pom
 856b7348bd08efe5791cf617cc3bed21f5f4a02569507c61e946666d13c33ba4  tools/jackson/core/jackson-databind/3.3.0/jackson-databind-3.3.0.jar
 857658c8bdcbff794949a8d9922f88d63ee3751c203c7cd7d21ea97f9e745288  org/checkerframework/checker-qual/3.55.1/checker-qual-3.55.1.jar
 857cca6a9d4908409f6e6864e2e4d63d32be97e75d6b0806563b95428e5b8a6b  org/codehaus/mojo/versions-maven-plugin/2.25.2/versions-maven-plugin-2.25.2.pom
 863f09b46cfe7d83872c9499086b9681cd9878c30a319d9f1f3a681bbfb0b12f  io/netty/netty-buffer/4.2.19.Final/netty-buffer-4.2.19.Final.jar
 865726dba03a6c58d277cd04f4bad20d5a1fc66af80eec5cf939315c2da27eba  com/fasterxml/jackson/core/jackson-core/2.23.0/jackson-core-2.23.0.pom
 865b5300034fc08c790215d7d97f141914c932191bef9338a7dcef589f7536e9  org/eclipse/sisu/org.eclipse.sisu.plexus/1.0.0/org.eclipse.sisu.plexus-1.0.0.jar
+8709a4aae0a7dbcd5a3fb644eb89b393a88aed771d40d6c496f27beae402728a  io/netty/netty-resolver-dns-native-macos/4.2.21.Final/netty-resolver-dns-native-macos-4.2.21.Final-osx-x86_64.jar
+87356fc32fbb01f8cffd826281abe4f0677d9643c7e2912de11b11789a43aa62  com/fasterxml/classmate/1.8.0/classmate-1.8.0.jar
 87523ad32fd23ae206f68885060ed2fb0b36a7cf377c0283ba35b19ebda558d4  com/pulumi/pulumi/1.40.0/pulumi-1.40.0.jar
 87b2c403256b17c3903a3ba35320ac32a79b3838b62ab9eda010a0976ca49ba3  org/apache/maven/maven-archiver/3.6.5/maven-archiver-3.6.5.pom
 87c73a8b476c9d26c373a0fab1e915951b060a08fd21406ff63b5cc1bd058622  org/apache/maven/plugins/maven-deploy-plugin/3.2.0/maven-deploy-plugin-3.2.0.pom
@@ -557,11 +613,14 @@
 87d2b333dfec96896d5a49e80a95b92ef572f610e848276b45eaa061e05b4132  com/github/javaparser/javaparser-core/3.28.2/javaparser-core-3.28.2.pom
 87f03039596011ab7c8456798717d70ba464b7d50e24f6dcbfac2e77c01a5377  org/codehaus/mojo/versions/versions-model-report/2.25.0/versions-model-report-2.25.0.pom
 885c40a7c4dce4cdf01db37fb26c167cdbe1d484595c76e486185b265bb944d7  tools/jackson/core/jackson-core/3.1.8/jackson-core-3.1.8.pom
+887948ada481f1f64418bf8fa7c642727241afc12605bf901ce809613d44ded1  io/netty/netty-buffer/4.2.21.Final/netty-buffer-4.2.21.Final.pom
 888b0162ad7fabdeb6ee34ff6123025bffe34e064761da962e87de5c8cce5d39  org/codehaus/mojo/mojo-parent/97/mojo-parent-97.pom
+88a2d4d1cc64b28361723a21dba375a2fffacf64f81a6eb4e044304303f3382c  io/netty/netty-bom/4.2.21.Final/netty-bom-4.2.21.Final.pom
 88e9cb007335ab5fdb314a6e3c987734ec2308c9a063ff747c7469189d0a92bf  com/google/guava/guava-parent/32.1.2-jre/guava-parent-32.1.2-jre.pom
 8924b41711cce058f83c46d79ad83d6e04edcf13ed5631ec11135656e0b87f56  org/apache/maven/resolver/maven-resolver/1.9.27/maven-resolver-1.9.27.pom
 8927f77d6381e24487682708196a6ca728368b8fd7cebb104fd9324b6b124917  io/grpc/grpc-context/1.57.2/grpc-context-1.57.2.pom
 8935c51c7217780ae56d178c938b50ea5729b1e088cf3c2568674e331665554c  io/netty/netty-codec-compression/4.2.19.Final/netty-codec-compression-4.2.19.Final.jar
+894bf0d8f016ff11ea2ba8e4945fcaec25f6bc588199b0bdc306e141d5622076  org/hibernate/accessor/hibernate-accessor/0.1.0/hibernate-accessor-0.1.0.pom
 8957274e75fe2c278b1428dd16a0daeee1dd38152cb6eff816177ac28fccb697  org/codehaus/plexus/plexus-utils/4.0.2/plexus-utils-4.0.2.jar
 897010dfebcc9339f36abef8b3b2a6879f49a8b93d83e3881b9fb6b0b382cd5b  org/codehaus/plexus/plexus-archiver/4.15.0/plexus-archiver-4.15.0.jar
 8979a2ab34a498ab447eaad71cd233ca3a3c5043695d57b0f035f1add776836f  io/netty/netty-codec-native-quic/4.2.19.Final/netty-codec-native-quic-4.2.19.Final-windows-x86_64.jar
@@ -582,6 +641,8 @@
 8c924198a6dc5bcfe640bcf24607776bb4c233a1de7f07ea2562a6145dde1631  org/xmlunit/xmlunit-legacy/2.11.0/xmlunit-legacy-2.11.0.jar
 8cadd43ac5eb6d09de05faecca38b917a040bb9139c7edeb4cc81c740b713281  org/ow2/asm/asm/9.7.1/asm-9.7.1.jar
 8caf7caa089841f8de4b10004c588ec28ace145deaaae6fc813aee09d061b242  org/eclipse/jetty/jetty-webapp/11.0.26/jetty-webapp-11.0.26.pom
+8cc6ba7b96a5f51b6b8479902acd7980d5a714e3fd832a76c76d02b61e537255  org/codehaus/plexus/plexus-archiver/4.16.0/plexus-archiver-4.16.0.pom
+8ccf397d89e636159b3659f2413be1a13b8e3427f0d0dea895525cef696c031d  org/codehaus/mojo/versions/versions-model-report/2.25.3/versions-model-report-2.25.3.jar
 8d3e51c3902fd7596e548eab121ebf6b0d4aa73857077f26a24fc86f9b8455b4  org/codehaus/plexus/plexus/19/plexus-19.pom
 8d6feb1da335f3ab13c584c613e23c7b3c61b392e37956872057baf8f0ca1d6f  com/github/luben/zstd-jni/1.5.7-6/zstd-jni-1.5.7-6.jar
 8e37043c6fc40289fe3f0cafd33d0d7e1a10ace4f74495bbc5be39586614718f  org/apache/httpcomponents/core5/httpcore5/5.3.6/httpcore5-5.3.6.pom
@@ -595,6 +656,7 @@
 9037dee318a68d7ee5dd2e20f2e657a39597ed2622b52e325ab9becddfbc4d38  org/apache/maven/maven-archiver/3.6.6/maven-archiver-3.6.6.jar
 90b4be7a71c979d0c4dea20c20a28eb9e76a29df68ab9018cf011019a3e4f562  org/eclipse/sisu/org.eclipse.sisu.plexus/0.9.0.M4/org.eclipse.sisu.plexus-0.9.0.M4.pom
 90ea531731508eea75ff9295141c508d7f9a53d1a05f45b80f8f4999521426ef  net/bytebuddy/byte-buddy-parent/1.18.3/byte-buddy-parent-1.18.3.pom
+90f7beae8cd623e81bd5899958e9ce07d8d1b2987b6ef6a33efddab969323028  io/netty/netty-handler-proxy/4.2.21.Final/netty-handler-proxy-4.2.21.Final.pom
 91526ee66327c7f50fbb25bd41bfcb916e284414b868e31d50a23004bd7deea7  org/codehaus/plexus/plexus/17/plexus-17.pom
 916e9bbf43fc0994292f3fde2d385764bd21060c60dffe9c695c091978087d00  com/fasterxml/jackson/jackson-parent/2.18.4/jackson-parent-2.18.4.pom
 91c77044a50c481636c32d916fd89c9118a72195390452c81065080f957de7ff  javax/inject/javax.inject/1/javax.inject-1.jar
@@ -603,7 +665,9 @@
 9206b7dd67fb138036576c3dfca947a2a8f3e2c4d2d9c1f2d1dea519b3a4dae1  com/fasterxml/oss-parent/79/oss-parent-79.pom
 923302b55ea55254a9494e14e82cacf13f6347c21cc74532b39db4b1b1fe4d45  io/opentelemetry/instrumentation/opentelemetry-grpc-1.6/2.6.0-alpha/opentelemetry-grpc-1.6-2.6.0-alpha.jar
 9239fb97101db27070e4983d10d33a0e91cf676cad91bf53815422c3561ef9b1  org/apache/commons/commons-parent/84/commons-parent-84.pom
+924271bbcb617aba8c02249f113a1e54249caff2babfb49ae5cadd59a69cc312  io/projectreactor/netty/reactor-netty-http/1.4.0/reactor-netty-http-1.4.0.pom
 9259bc98bcc4ee8d404ca0a8e3c1f278334638cf013981a87971c69d6e6243ba  io/vertx/vertx-sql-client/5.2.3/vertx-sql-client-5.2.3.jar
+92b9865e79cd54d6f2370bf49623ed3bacf0db1d3dbb96c00b8c48d99986b004  org/codehaus/plexus/plexus-io/3.8.1/plexus-io-3.8.1.pom
 92d9c735808eda632a214c7f2c1640266cfc7269c3a63fd2346e15c988aeb11e  commons-logging/commons-logging/1.4.0/commons-logging-1.4.0.pom
 931a77aa9dad6c91f10fcfafa70adc7608c004576b4924c74ecbffb27568a880  org/apache/maven/shared/maven-common-artifact-filters/3.4.0/maven-common-artifact-filters-3.4.0.jar
 934171640fbd3d2495c50b79b0d9adb11e2c83e65bad157df8fe34bcac0ff798  org/sonatype/plexus/plexus-build-api/0.0.7/plexus-build-api-0.0.7.jar
@@ -621,8 +685,10 @@
 95a10dcfb3ba9aad4d0b5e9c523a8d583377bee5ecd4ba37e19e55a34667f079  org/assertj/assertj-core/3.27.7/assertj-core-3.27.7.pom
 95c63c1a55b22dd6453890a419cc1a640f790bbf7d8ae82db1e30aefefb08888  org/tukaani/xz/1.10/xz-1.10.jar
 965aeb2bedff369819bdde1bf7a0b3b89b8247dd69c88b86375d76163bb8c397  org/jetbrains/annotations/13.0/annotations-13.0.pom
+968c215d342d318272f979c6e7c046158a7b4115e97d0dfe81319b2bbe020b7a  io/projectreactor/reactor-test/3.9.0/reactor-test-3.9.0.jar
 96fa09d8efb7a4ca623184b92b73dab7f94bbc80cd6a276c69590c6a69770754  tools/jackson/jackson-base/3.3.0/jackson-base-3.3.0.pom
 972da60a83c46d0384950d87314282741f25591307eaedbb75e0891dc362caf3  com/fasterxml/jackson/jackson-bom/2.21.8/jackson-bom-2.21.8.pom
+9776fca62dfc84f312d5c1aff9791f6f3cf56d518a8eca4a3a8dca7a95ef8881  org/postgresql/postgresql/42.7.15/postgresql-42.7.15.jar
 97a1f835ad84075255aa37809e4379eff541273c02c6201cbad49bd5950932cd  org/mockito/mockito-core/5.24.0/mockito-core-5.24.0.jar
 980d665d83fed04665134f0578e507442a0e750691073784391b0a7988724a75  org/apache/commons/commons-lang3/3.11/commons-lang3-3.11.pom
 981d9587b308bbd02d183e82a8a3cfd5f4c17bc55fc5eeb37b347d69bf4d9793  org/apache/maven/surefire/surefire-junit-platform/3.6.1/surefire-junit-platform-3.6.1.pom
@@ -631,6 +697,7 @@
 98dc031f75f2c9b7efeef344e1c74bb3d009c584e36e82a0ec3d263d2bfef373  org/apache/maven/resolver/maven-resolver-api/1.9.27/maven-resolver-api-1.9.27.pom
 9946c3f0ef5f8f14d83f4c38fabd392a2ff51fe28a40bd8e674d0150e93b5399  org/wiremock/wiremock/3.13.2/wiremock-3.13.2.jar
 995c0792669a031c94d91960a5beb60e1516abcec17a104f9f47470b36e56e27  org/codehaus/plexus/plexus-i18n/1.1.0/plexus-i18n-1.1.0.jar
+99b6292e577bb5101f7325ba6dcfcf58d22b70bb86eebd789463e501bb3e43a1  org/hibernate/validator/hibernate-validator/9.2.0.Final/hibernate-validator-9.2.0.Final.pom
 99ec0c43fd9f644d618d34c44bb8ec98c43a035448a80d623c0205b89d593b3a  org/apache/maven/surefire/surefire-extensions-spi/3.6.1/surefire-extensions-spi-3.6.1.jar
 9a11dfe16230ed6531f872d4e8a9f59e111a7fb3464d90aeee0efb542e1d98b4  io/netty/netty-codec-http3/4.2.19.Final/netty-codec-http3-4.2.19.Final.pom
 9a1dc5abc7f146bf0ff0938dceb384f7c972dc052cd9cd2f367cb30a0718fa71  io/netty/netty-resolver-dns/4.2.20.Final/netty-resolver-dns-4.2.20.Final.jar
@@ -668,16 +735,19 @@ a2af247ec4db6eb8947e18e23e0433e4871a7c5d0a40e1f92e46ede54ae1defe  org/apache/com
 a2d14b6752e30a100a6cb03c040d0160b71b61928daf8ea97cabfb4a3335b213  org/codehaus/plexus/plexus-classworlds/2.2.3/plexus-classworlds-2.2.3.pom
 a3353f6a82feb950d5e7e64b0cd4ceadea7eb62112e447172e34974a510316f4  org/apache/maven/shared/maven-dependency-tree/3.3.0/maven-dependency-tree-3.3.0.jar
 a343e44ff5796aed0ea60be11454c935ce20ab1c5f164acc8da574482dcbc7e9  org/codehaus/plexus/plexus/5.1/plexus-5.1.pom
+a375cbba0bd779755f12e7f3adcb004bbc3fabcb520c125249b9b1975998c48c  io/netty/netty-codec-native-quic/4.2.21.Final/netty-codec-native-quic-4.2.21.Final-osx-x86_64.jar
 a39f79d9ba8bb2c99c9ff0c9b0e0051b865c9fa0bac976b44e5c16390c5f473e  org/eclipse/jetty/jetty-alpn-java-client/11.0.26/jetty-alpn-java-client-11.0.26.pom
 a413c74fe45c32b9ea7e8c418c84864aad8acb00776894abd66c96d372016fae  com/fasterxml/jackson/jackson-base/2.21.8/jackson-base-2.21.8.pom
 a47438b2bbbdcc6fcb6d4ac831cb27a5ea002de092551174692c5a53ec7c85f7  io/r2dbc/r2dbc-pool/1.0.2.RELEASE/r2dbc-pool-1.0.2.RELEASE.jar
 a4774ae923c109544034aeae7c762cf017fbcdd1342403ba90e0921984b608c3  org/junit/platform/junit-platform-commons/6.1.3/junit-platform-commons-6.1.3.jar
+a4b200ec57cfbe4653384e40c0c1ebeb14e063001aa8aeb751240d25c54554d1  io/netty/netty-codec-classes-quic/4.2.21.Final/netty-codec-classes-quic-4.2.21.Final.jar
 a56e782b5b50811ac204073a355a21d915a2107fce13ec711331ad036f660fcc  com/google/errorprone/error_prone_annotations/2.41.0/error_prone_annotations-2.41.0.jar
 a5846c59fea336431a4ae72ca14edbf5299b78486fa308eafb383f4ae0ea74e5  io/r2dbc/r2dbc-spi/1.0.0.RELEASE/r2dbc-spi-1.0.0.RELEASE.jar
 a58c932e967e85e7bcb8d4adaedd14a5221a1750a1d089c5086c4d73df505155  org/apache/maven/resolver/maven-resolver-util/1.4.1/maven-resolver-util-1.4.1.pom
 a5991ead85259ba9f8c985d194aace3b069e14bcd8cde68fce928223714d3968  org/sonatype/sisu/sisu-inject/1.4.2/sisu-inject-1.4.2.pom
 a5a205f3e4352714cb591d313b89bef2f73e83505209f7b62b83402bbeb8413b  io/opentelemetry/instrumentation/opentelemetry-grpc-1.6/2.6.0-alpha/opentelemetry-grpc-1.6-2.6.0-alpha.pom
 a5a3a1aec96113b1e953545c3d8c5117ff0220c56f7293c6fff7d35b1cd37c14  org/junit/platform/junit-platform-commons/6.1.3/junit-platform-commons-6.1.3.pom
+a5a41c4e05ba48f7c8605c14b44cc595d2fbb27b45c9cdb0a53143bc493d7564  io/projectreactor/reactor-test/3.9.0/reactor-test-3.9.0.pom
 a5e15c59ba58ceea74c607a5e1a18d8c366726ac6d61f0ab3f3c11671cdda296  org/eclipse/sisu/sisu-inject/1.1.1/sisu-inject-1.1.1.pom
 a632393a8ae5fa4fe5d3ff01cab7f14793e8192632ca7515ab2f1d9ca06838a1  com/pulumi/pulumi/1.39.0/pulumi-1.39.0.pom
 a655b6a5dc00d1bebc91fb2b15c0c7e8aeac9d6bdcf879595505370e27530287  org/junit/junit-bom/6.0.3/junit-bom-6.0.3.pom
@@ -696,6 +766,7 @@ a895d222283666a7320ddc76615e2e93a41fabd93ce9a6bf9ddee39272bb87b4  org/apache/mav
 a8ae59d4f9d38f0fe0584c4fd4d37a7791378d3c18db7f95006d2119a7c277f8  org/eclipse/jetty/jetty-alpn-java-server/11.0.26/jetty-alpn-java-server-11.0.26.pom
 a8e32e17575d0188c1f3e2e57bb95db09793883c8853fde828b63ecb1f99a63a  com/github/zafarkhaja/java-semver/0.10.2/java-semver-0.10.2.jar
 a9000043610a3e90c852e779a6b1a8eb724a9f312cf5f7ddd57862b010c65dc8  org/junit/junit-bom/6.1.3/junit-bom-6.1.3.pom
+a9177fb4a2b750a32a5f231d886159e3945d0906a8785e2fcf942e42d25221f1  io/netty/netty-codec-http3/4.2.21.Final/netty-codec-http3-4.2.21.Final.jar
 a941745d7faeb8dc9a75edc2c330c994b7440b9a44d21142716b6053967a41c1  org/apache/maven/shared/maven-shared-utils/3.4.2/maven-shared-utils-3.4.2.pom
 a9ba887dca252ad61b7d5153294f34e6f3bdf4b2736b04373d13615a695fc0ff  net/bytebuddy/byte-buddy-agent/1.17.7/byte-buddy-agent-1.17.7.jar
 a9d6347da0329bf118e9878617e50b5537eb9ec3c5fcd08852650713832d1ac1  org/junit/jupiter/junit-jupiter-api/6.1.3/junit-jupiter-api-6.1.3.pom
@@ -745,6 +816,7 @@ b372a037d4230aa57fbeffdef30fd6123f9c0c2db85d0aced00c91b974f33f99  com/google/gua
 b43b7f5c62e86b164fae70ae17d6911c5db60799af01057360afda82e4845be5  com/fasterxml/jackson/jackson-parent/2.20/jackson-parent-2.20.pom
 b43ee89c8890b9e5bc48d079fcb4c44f082b5139253356dc455806a33c3dd8fd  org/codehaus/plexus/plexus/18/plexus-18.pom
 b465db838dd482a994d32a088bea4bcbaa62cfb8b2853511a9f8c3e769402c74  org/apache/maven/doxia/doxia-sink-api/2.1.0/doxia-sink-api-2.1.0.jar
+b4a10752441147b08704359775a41db737178a70f0ef764a4672051dae9e04d6  org/codehaus/plexus/plexus-utils/4.2.0/plexus-utils-4.2.0.pom
 b509448ac506d607319f182537f0b35d71007582ec741832a1f111e5b5b70b38  org/apiguardian/apiguardian-api/1.1.2/apiguardian-api-1.1.2.jar
 b51ed952affd6caa9628e896ac8141f9e01197d6359adcbad72511452a7be608  io/netty/netty-codec-socks/4.2.20.Final/netty-codec-socks-4.2.20.Final.pom
 b51f8867c92b6a722499557fc3a1fdea77bdf9ef574722fe90ce436a29559454  org/sonatype/oss/oss-parent/7/oss-parent-7.pom
@@ -764,8 +836,11 @@ b7e3d46c87bad2eb409b0e704916bcd81206168e357312dfddd0e253679cd9e0  net/java/dev/j
 b7e66ccf3088cba04d68ec374da4e981686fafe426e4ca69d6d276427175dc63  org/postgresql/postgresql/42.7.14/postgresql-42.7.14.pom
 b826ddd92f9d7cc64371a02fa0830c154d67c98370ea54a2d196e72eb590ad28  commons-codec/commons-codec/1.16.1/commons-codec-1.16.1.pom
 b837044e8edbd977bafe4e643c13958a45cf0caefd1338b7e6660e716a769624  io/netty/netty-codec-socks/4.2.19.Final/netty-codec-socks-4.2.19.Final.jar
+b848807388e244b6e856102460208978d8c1909840af7e49e7f1d7cd93349b9e  org/codehaus/mojo/versions-maven-plugin/2.25.3/versions-maven-plugin-2.25.3.jar
+b8924ba9dca43f7823ea165815491f56b26b0590419ec1800024e1847350eb11  io/netty/netty-codec-http3/4.2.21.Final/netty-codec-http3-4.2.21.Final.pom
 b90579bc652eac7331436e0a25533fce14130b9c6e015f2dd3a3d4bb07e942b7  org/eclipse/sisu/org.eclipse.sisu.plexus/0.9.0.M4/org.eclipse.sisu.plexus-0.9.0.M4.jar
 b9761ffcabb120bbf5e2cb7273e38742f852944f359aaf379bd52a11350f94c2  org/xmlunit/xmlunit-placeholders/2.11.0/xmlunit-placeholders-2.11.0.pom
+b98ca51a097592d0a85c231b27a1c204d129fc2252610473e5951be09126283e  org/codehaus/plexus/plexus-xml/3.1.1/plexus-xml-3.1.1.pom
 b9c98ba9e29ea61b693d4c8c801968feaae220b2b2002364a7bcec524998384b  com/fasterxml/jackson/core/jackson-annotations/2.18.3/jackson-annotations-2.18.3.pom
 ba0c40da2669a048b6e24ef7066a471f0fbcbfcc509e6a3e856ca4ddfa614ad3  org/objenesis/objenesis/3.3/objenesis-3.3.pom
 ba734e1e84c09d615af6a09d33034b4f0442f8772dec120efb376d86a565ae15  com/google/android/annotations/4.1.1.4/annotations-4.1.1.4.jar
@@ -786,6 +861,7 @@ be5e3f8e59edce852a0fdaef8caedb32f364bf13db654d15f98e17930e456487  org/codehaus/p
 be92e25ed3f17ec6db5f5f08a63d00939e32df41d776c1f7febb69ca26f05c33  com/ongres/stringprep/saslprep/2.4/saslprep-2.4.jar
 bea12e747708d25e73410ca1c731ebdfa102e8bdb6ec7d81bd4522583b234bcc  org/codehaus/plexus/plexus/2.0.6/plexus-2.0.6.pom
 bed25293fabbf59e048f67f88e55140ebc1cfa4fa899e397545d0193e866a65c  net/javacrumbs/future-converter/future-converter-java8-common/1.2.0/future-converter-java8-common-1.2.0.jar
+bfaefc445e9451eb92877d8784c4d74a9290fcdda9b4625c7d103f12d1a84638  io/netty/netty-codec-dns/4.2.21.Final/netty-codec-dns-4.2.21.Final.pom
 c04539f472e9a6dd0c7685ea82d677282269ab8e7baca2e14500e381e0c6cec5  jakarta/xml/bind/jakarta.xml.bind-api/2.3.3/jakarta.xml.bind-api-2.3.3.jar
 c064c164429a10dde34b38eb0ec2b1fcf5d03d7b81e8e4c84bfe57be74d64776  org/codehaus/plexus/plexus-interactivity-api/1.6.0/plexus-interactivity-api-1.6.0.jar
 c0870a6e68e160851cc7c1108ffc77198edf90715520d1a87c50484e7281c06e  org/apache/maven/resolver/maven-resolver/1.9.25/maven-resolver-1.9.25.pom
@@ -815,11 +891,13 @@ c72124a9c9a79910c1858766b72c350e1a39244cbfb4b076348fbfe078281965  org/junit/juni
 c7df4551a64f0282a766e809514d4238450a7429055f9c7718881d16a310a026  io/grpc/grpc-api/1.57.2/grpc-api-1.57.2.pom
 c7fa67c7961320b89d85a3ca59a2e18c2c65850845595dcae4b46af6945edcd5  org/jetbrains/kotlin/kotlin-stdlib-jdk7/1.9.10/kotlin-stdlib-jdk7-1.9.10.pom
 c83db6059be3fec9a4a68a0e226caefaa944663008617c697e087444415181d5  org/apache/maven/plugins/maven-jar-plugin/3.5.1/maven-jar-plugin-3.5.1.jar
+c8d317625f68fd4694ff3ab27be9cd7fa7897844838c24a63e0c2f30854e8096  io/netty/netty-resolver-dns-classes-macos/4.2.21.Final/netty-resolver-dns-classes-macos-4.2.21.Final.jar
 c91557679a0eb9fde3175055628ceb7b8fd5ab6d308340770d236fb06265dc26  org/apache/maven/doxia/doxia-module-xhtml5/2.0.0/doxia-module-xhtml5-2.0.0.jar
 c91ab5aa570d86f6fd07cc158ec6bc2c50080402972ee9179fe24100739fbb20  commons-logging/commons-logging/1.2/commons-logging-1.2.pom
 c93581d69b337c1fcc0957c727c430180b6387276ef1d3c2976c175e93765eb1  org/apache/maven/shared/maven-common-artifact-filters/3.4.0/maven-common-artifact-filters-3.4.0.pom
 ca906201ee34de09e76632c5dec04a9b868ee38ce68c134b765fd1871d1d3eed  org/apache/maven/maven-parent/49/maven-parent-49.pom
 caa22bd4ff7bd2acf3794e2c40c2a3f90ab60298b27b0ed4763efbc4cce0bf6e  io/projectreactor/addons/reactor-pool/1.2.8/reactor-pool-1.2.8.pom
+caf50d0ade575ec506bb9e459f698ae0286d7a4008a53994889404a4b7e5b06e  io/netty/netty-resolver-dns-native-macos/4.2.21.Final/netty-resolver-dns-native-macos-4.2.21.Final.pom
 cb2cbde3c9c7288f7398a250dcf3c90cf92714cff301f22b298e1091b5def33c  org/apache/maven/reporting/maven-reporting-api/4.0.0/maven-reporting-api-4.0.0.jar
 cb69e6da161f7e51166876b6f5991fd135b46b1118c1b6514aaec8cb2426b7c7  com/nimbusds/content-type/2.3/content-type-2.3.pom
 cb7a6027e4f366fb28dcea7e1f7088ca16bd23c2cc38e8ddfdac77a77bd144dc  io/netty/netty-resolver/4.2.20.Final/netty-resolver-4.2.20.Final.jar
@@ -832,7 +910,9 @@ cced467175f4257833f6cb07510ff97b3c75a06e1a58d882a39d79853d51c602  org/reactivest
 ccf4a30346f5027b9496abd56290ac26d159abf2be64df1265611dc9400b9d68  commons-logging/commons-logging/1.3.5/commons-logging-1.3.5.pom
 cd14aaa869991f82021c585d570d31ff342bcba58bb44233b70193771b96487b  org/junit/junit-bom/5.7.2/junit-bom-5.7.2.pom
 cdab929a3b95211f43d2090c5e2d0dfe8465960e378bc32b35841dab324433a6  org/jspecify/jspecify/1.0.0/jspecify-1.0.0.pom
+cdd3530cbc99e930368fcc75a7dd8c76f31878afea87ebc1fda626a49d0ded12  org/hibernate/validator/hibernate-validator/9.2.0.Final/hibernate-validator-9.2.0.Final.jar
 cde3341ba18a2ba262b0b7cf6c55b20c90e8d434e42c9a13e6a3f770db965a88  org/jetbrains/kotlin/kotlin-stdlib-common/1.9.10/kotlin-stdlib-common-1.9.10.jar
+cde8f05df56e14f29b204480357fb456cb306cee4bb059b2b948563417921a27  org/codehaus/mojo/versions/versions-common/2.25.3/versions-common-2.25.3.jar
 ce0d5634297bb1e065dddfdc8a2a5675717c08e8f4783edcf581543711516938  org/codehaus/plexus/plexus-interpolation/1.29/plexus-interpolation-1.29.pom
 ce0ef76071e361d97f102e5cb48928b3cc66ac899d12be3ef0af8d06b4f768a1  org/eclipse/jetty/jetty-io/11.0.26/jetty-io-11.0.26.jar
 ce29aacb0b003aa47672a16a2809ebbecd495586550e5d269cd3b529e69df0c2  org/eclipse/sisu/org.eclipse.sisu.inject/1.1.1/org.eclipse.sisu.inject-1.1.1.jar
@@ -847,6 +927,7 @@ cfd28c001c726db7a4ff68c25c8cfe4cf85af067cb068fca539c33d492339ff6  org/hibernate/
 cfd872c0ec27f53ae68f43dbc0fecded8add773079a53afbd390e407b42ce72f  org/apache/apache/32/apache-32.pom
 cfe4820aa1d96ae51d1dc5b0e2a9dc582c42478c24c95ca8238f547e60bef721  org/apache/maven/maven-parent/39/maven-parent-39.pom
 cff9eab1d751264bd775b6e3ebed1650794cac9cd8be1c416b48e3a5c6139d93  commons-beanutils/commons-beanutils/1.11.0/commons-beanutils-1.11.0.pom
+cffe7da3bf0b95eb1a1c9d732db70d813994c4b9dd39a8d3bc1f3112eeed3788  io/netty/netty-codec-http/4.2.21.Final/netty-codec-http-4.2.21.Final.pom
 d06b432851e5b4d4b698d31192e2f9528f2fadb263f6d37e94724c7e8898a64f  io/projectreactor/netty/reactor-netty/1.3.8/reactor-netty-1.3.8.jar
 d0822fac1a0226844b8ad445c920c49a4f619169d09b1010a7dfeed19910998c  com/fasterxml/jackson/jackson-parent/2.18.1/jackson-parent-2.18.1.pom
 d08b0d473c48c61ebb2bc4d145111fa1777832aee4d2be1024891e904e36eaf5  io/netty/netty-codec-http/4.2.20.Final/netty-codec-http-4.2.20.Final.jar
@@ -873,6 +954,7 @@ d54fbcbc4399e352322874a4128b9d28fe9fe1583f89ec361de242ea38d33f9b  org/codehaus/p
 d5bbfd3c8445230e498b6092de809afd65cf504d013932dab7b3dfd6e9f3a4fd  com/fasterxml/jackson/jackson-base/2.18.3/jackson-base-2.18.3.pom
 d5d81fcc288c0d8c711c302007cada4aa9a226ed1a112d4baa64cb1d6322170b  commons-collections/commons-collections/3.2.2/commons-collections-3.2.2.pom
 d5f8544d3a54f8fb2d1aa6dfc80e743e967f4113c3a145b139548949c393433a  net/javacrumbs/future-converter/future-converter/1.2.0/future-converter-1.2.0.pom
+d6b2e512b86e95cf79aaacb8bce48ee60bb485bd844f34c9734aa9d374be3205  io/netty/netty-codec-http2/4.2.21.Final/netty-codec-http2-4.2.21.Final.pom
 d6cbc951c2b560d01d8bee345a394990d50629769b9cd7556f1a2b66a0e5d9ca  org/codehaus/plexus/plexus-interactivity/1.6.0/plexus-interactivity-1.6.0.pom
 d76a8ea1b84a07ec38cad9a7f040984535e5cda96c78143c4b572a181e7d8862  com/fasterxml/jackson/jackson-parent/2.23/jackson-parent-2.23.pom
 d77be81708cf9836db7a09908e6d9e4d94c527e090bd594cc4af06711b9d853d  org/junit/platform/junit-platform-commons/1.14.4/junit-platform-commons-1.14.4.pom
@@ -894,6 +976,8 @@ dacc58b2c3d2fa8d4bddc1acb881e78d6cf7c137dd78bc1d67f6aca732436a8d  com/google/pro
 daddea1ea0be0f56978ab3006b8ac92834afeefbd9b7e4e6316fca57df0fa636  commons-logging/commons-logging/1.2/commons-logging-1.2.jar
 db227c92abbfc75b9fee6159ae4a20095a21662716d5f6fae44c2340b28cc2be  org/codehaus/mojo/versions/versions/2.25.2/versions-2.25.2.pom
 dbc7d80d79d3760fed777bea9e41b1c0a370442ea8ecf930d04a6a5620d36b6e  org/codehaus/plexus/plexus/27/plexus-27.pom
+dbe9a5d4ead9ddccd7fb36b785a48662d3cf4a8f04779d02308eaaabb640aceb  com/pulumi/pulumi/1.40.3/pulumi-1.40.3.jar
+dc1cf3063224ab6d5468f51ec3a064839e993eb47e324c2de546c79052e5b051  io/netty/netty-handler/4.2.21.Final/netty-handler-4.2.21.Final.jar
 dcaf432287975423c9f96fece387a29ce85e360fc4fa843d8da1b7d28c4fdf24  io/netty/netty-transport-native-unix-common/4.2.20.Final/netty-transport-native-unix-common-4.2.20.Final.pom
 dcb15b89c6df6ba4053e13c2af32e7c2816a11075e1594784da8098beb5a352b  com/fasterxml/jackson/module/jackson-modules-java8/2.23.0/jackson-modules-java8-2.23.0.pom
 dcf193612b315713771e267b42de2d44de090be5945b2577345ed5ab8de2d271  org/codehaus/plexus/plexus-component-annotations/2.0.0/plexus-component-annotations-2.0.0.pom
@@ -941,6 +1025,7 @@ e673490683b352b79e85c22df13b396e4b39e5f25cfef9c1b9e835ed123c0ca4  org/jboss/logg
 e67459d4882424ac6374f40db1c8f4a2e88946b340ba072c80be932a2be4644d  org/junit/junit-bom/5.11.0/junit-bom-5.11.0.pom
 e752032157a7a39be9be3786684075452a46cd586b2865abd33e707568a4c8af  com/google/protobuf/protobuf-java/3.25.5/protobuf-java-3.25.5.pom
 e758a3f1464627847d45e3b909fc6dd2f587c1471e0d0daa2975d6434458318d  org/codehaus/plexus/plexus-java/1.6.0/plexus-java-1.6.0.pom
+e83ed8a48b4d950a98aa762ce794c7017ae9c393fe738d3225742399e54cd458  io/netty/netty-resolver-dns-classes-macos/4.2.21.Final/netty-resolver-dns-classes-macos-4.2.21.Final.pom
 e84e45b37ad3030cf802e7be18a687d209eca55733a5679b1f1f1a515f7f70dd  net/sourceforge/plantuml/plantuml-mit/1.2026.9/plantuml-mit-1.2026.9.jar
 e8c1c594e2425bdbea2d860de55c69b69fc5d59454452449a0f0913c2a5b8a31  com/nimbusds/lang-tag/1.7/lang-tag-1.7.jar
 e8c1c832a5164b7347022a279e56e1b6939adda7e963b91613e8904dcfc14098  io/netty/netty-handler/4.2.19.Final/netty-handler-4.2.19.Final.pom
@@ -970,15 +1055,19 @@ f02a95fa1a5e95edb3ed859fd0fb7df709d121a35290eff8b74dce2ab7f4d6ed  com/google/j2o
 f0ce086cb5d55436258ea1c34683b29ccd0392865bc7a8e9e25fc6725d90035c  io/netty/netty-resolver-dns/4.2.19.Final/netty-resolver-dns-4.2.19.Final.pom
 f0eee932bfb246b0dfbebc089261364c603dbadead18fc55fd6342c17c56f34c  org/bouncycastle/bc-jdk18on-bom/1.84/bc-jdk18on-bom-1.84.pom
 f109fb70888e5ec9b42ffd42d2324004a35f9b0eb64ec89092134f0dee3128cc  eu/maveniverse/maven/domtrip/domtrip/1.5.1/domtrip-1.5.1.pom
+f128b31e02a89ee4889ae2ad37ecd9b7f31ee3208aaba7ee2bbf6740280de341  io/netty/netty-resolver/4.2.21.Final/netty-resolver-4.2.21.Final.pom
 f15fd62eb24476b00ab1ff7720f00b166b6973e6286d14708bb86612ebf923d4  com/fasterxml/jackson/datatype/jackson-datatype-jsr310/2.20.1/jackson-datatype-jsr310-2.20.1.pom
 f1d4c6aeb32118650c805fe9bbc5ee940fa8f2cd7d0f04fa4360551e9a27b290  com/fasterxml/jackson/jackson-bom/2.18.3/jackson-bom-2.18.3.pom
 f21d19eb49b4a66cd85354a9ee7335439ea92a368173760a202766008cc19924  org/apache/maven/shared/maven-shared-incremental/1.1/maven-shared-incremental-1.1.pom
 f25a08df2ae9e6770a2aa494eba72640e928764b790b2ef42308b9e1c0613c1d  org/apache/maven/doxia/doxia/2.2.0/doxia-2.2.0.pom
 f2a6a4668dd833cfe559dd345929196e7b61ed13f6c03f8e087ffba3d85be807  org/apache/maven/plugins/maven-compiler-plugin/3.16.0/maven-compiler-plugin-3.16.0.jar
+f2f3b68edefc3de9ec38da201fea88e8ca202e944b4da7f3fa6c12b1b5bc96c6  org/codehaus/mojo/versions/versions-api/2.25.3/versions-api-2.25.3.jar
+f2fa0a9258a5e6540ad9305d404b57393ab710bbe14463cb56668fad7550329c  io/netty/netty-codec-native-quic/4.2.21.Final/netty-codec-native-quic-4.2.21.Final-linux-x86_64.jar
 f323e39c6e37a14ae8dee7277c8b2cc237828e3f80f1c1b521892b853e0637d9  org/apache/maven/surefire/surefire-logger-api/3.6.1/surefire-logger-api-3.6.1.pom
 f348f4de49644afa0ccbff6b018709a5f0f1468c76852e4217051890a0b8528c  com/fasterxml/jackson/datatype/jackson-datatype-jsr310/2.23.0/jackson-datatype-jsr310-2.23.0.jar
 f3614aea9f3a30287a846ee6262a9636e0eb9874244271b47df1517a149b43e6  org/apache/maven/enforcer/enforcer/3.7.0/enforcer-3.7.0.pom
 f361b4076d7d28d92e04b1d922eb7280aae9221d7ddc4047bf06a314f9cc9178  org/codehaus/mojo/versions/versions-model-report/2.25.0/versions-model-report-2.25.0.jar
+f37c82f49d75d488e6813d7c7f2840756a1cf87df7df950376f72d327048dace  io/netty/netty-codec-native-quic/4.2.21.Final/netty-codec-native-quic-4.2.21.Final-windows-x86_64.jar
 f381d1bde581bb36992f14674a9ac88f7362b3e35c48a99805bc56e1df931647  org/apache/httpcomponents/client5/httpclient5/5.5.1/httpclient5-5.5.1.pom
 f398912575d4ebb00d7b9f6c166a720fc72561edd942343f64928e5b0e3b0e1b  io/opentelemetry/opentelemetry-sdk/1.40.0/opentelemetry-sdk-1.40.0.jar
 f3d69715435a0abb72b0b99c3434bd33a34aaf9007732a216f0cb14971bbaa2a  net/javacrumbs/future-converter/future-converter-java8-common/1.2.0/future-converter-java8-common-1.2.0.pom
@@ -1000,6 +1089,8 @@ f71f5e4ba68a9a0726b3a8235878a2194586d253cd8281edd7cfddb4b2a327b8  com/fasterxml/
 f7213462d87dcc5eae0dd0f622887a355bab236244af047f7b0ac638a8c1ef84  org/wiremock/wiremock/3.13.2/wiremock-3.13.2.pom
 f7357e8f1f560835452f4a4896c0f93f4dcac72217ee8b613d6072de2e0555b4  io/r2dbc/r2dbc-spi-parent/1.0.0.RELEASE/r2dbc-spi-parent-1.0.0.RELEASE.pom
 f75ca597789b3dac58f61857b9ac2e1034a68fa672db35055a8fb4509e325f28  org/reactivestreams/reactive-streams/1.0.4/reactive-streams-1.0.4.jar
+f76994afc13b2fd817aaccaac38c4c971f667a6fb41e8bdfac5459636993d41a  io/projectreactor/addons/reactor-pool/1.3.0/reactor-pool-1.3.0.jar
+f785e3d5ce16880f51e96113f045138842ededb2b8bccd83352022e0b083f4de  io/netty/netty-codec-native-quic/4.2.21.Final/netty-codec-native-quic-4.2.21.Final-linux-aarch_64.jar
 f7a76d3a3bbeb53f5f36e19ee57ddc2099f3be1d599039090254d1f0fdf0b854  org/codehaus/plexus/plexus-io/3.5.1/plexus-io-3.5.1.pom
 f7bfa23ef465eb490100e52a5be48ce3939934b9eb47ed6665f429d0bd8b34d6  tools/jackson/core/jackson-core/3.3.0/jackson-core-3.3.0.pom
 f7fde2fff5101a5fc3a39e28810b911c2da202ddc2bd50765f89e7c6ff8ce7dd  org/hamcrest/hamcrest-core/2.2/hamcrest-core-2.2.pom
@@ -1017,6 +1108,7 @@ fb10eb3a4328b745e6809cc747a186f15d17d54f783417747a92bb044f96cbec  io/netty/netty
 fb3b1eeeadc78c311a1258cbe6c35b038937339f1e6d05820518dc11884d0a1b  io/netty/netty-resolver-dns-classes-macos/4.2.20.Final/netty-resolver-dns-classes-macos-4.2.20.Final.jar
 fb40265f982548212ff82e362e59732b2187ec6f0d80182885c14ef1f982827a  org/sonatype/oss/oss-parent/9/oss-parent-9.pom
 fb53ac0b06c19116ca61ac344b4dfe8a7c29cc4f81b353ce889493a5039004fb  com/google/code/gson/gson-parent/2.10/gson-parent-2.10.pom
+fb61bba9877867424d20b188dd6cf77bed14e82e1622a19be05d45886f4124ce  io/netty/netty-codec-http/4.2.21.Final/netty-codec-http-4.2.21.Final.jar
 fb8c5e55e30a7addb4ff210858a0e8d2494ed6757bbe19012da99d51586c3cbb  org/apache/commons/commons-parent/22/commons-parent-22.pom
 fbfc23698e9fb149ee000002bad8a3f0cf427ef5ceed19dc6ce59a105139788f  io/netty/netty-tcnative-parent/2.0.85.Final/netty-tcnative-parent-2.0.85.Final.pom
 fc0f3effea7514e4f214df1afb672f54c982e78e5ca3b32b34196c7d056a1aa4  org/codehaus/plexus/plexus-io/3.6.0/plexus-io-3.6.0.jar
@@ -1038,5 +1130,6 @@ fed7c659aee0374e87ac2e8b012522ab0f95dc016af2a9cc7e761f49028729f9  org/apache/mav
 ff03675abbcf535cb49022026ebf866c7ac4d4d9a97dc4589a4ddd9a3247dbce  io/vertx/vertx-pg-client/5.2.3/vertx-pg-client-5.2.3.pom
 ff4f1f8158c714c1b485ef10cf2456fbd3c1b2930256b70287aeb7dc3ad94783  io/netty/netty-transport/4.2.20.Final/netty-transport-4.2.20.Final.jar
 ff513db0361fd41237bef4784968bc15aae478d4ec0a9496f811072ccaf3841d  org/apache/apache/13/apache-13.pom
+ff8144378f5a429a31c1637b7b4db6a9ccd092303ccbdae7a25de81b8dafb7f6  org/codehaus/mojo/versions/versions-model/2.25.3/versions-model-2.25.3.jar
 ffab4d957daa2796cf24cb66d0b78a7090f1bcbe17c3a4578f09affaaf137089  com/fasterxml/jackson/core/jackson-core/2.20.1/jackson-core-2.20.1.jar
 ffde352127bbf74d868d6c307791321f38911afd8458c56d89522cfe9793e11e  com/nimbusds/nimbus-jose-jwt/10.10/nimbus-jose-jwt-10.10.pom
