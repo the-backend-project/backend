@@ -95,20 +95,20 @@ sequenceDiagram
 ### What a later transaction sees
 
 A transaction of the session finds the entity of the session in any transaction before it, however many actions back,
-e.g. to answer the inbox request after a request to one system and then to another. The event log of a stored entity
+e.g. to answer the entity the session started on after one action and then another. The event log of a stored entity
 it triggers an event on is read from the database again, as events of other sessions may have been stored on it in
 the meantime, and with the output of [masked events](entities.md#events-and-entities-not-stored) masked. An entity
 of the session only, which is never stored, is found among the events of the session's transactions.
 
-A stored entity read again may also have been [rolled back](http-inbox.md#rollback) since an earlier transaction of
-the session, by a rollback in a session of its own, e.g. a `DELETE` arriving while the session waits for the response
-to an outbox request. The events rolled back stay in the event log but are no longer effective, also those the
-session stored itself, so the later transaction sees the entity in the state before the events rolled back, and takes
-its transitions from that state, or rejects the event if there is none. The entity of the session is still found, as
-it is identified by the steps of the earlier transaction, not by its events. An entity of the session only is never
+A stored entity read again may also have been rolled back since an earlier transaction of the session, by another
+session, e.g. one taking place while the session waits for the outcome of an action. A rollback is the built-in event
+`Events rolled back` on the entity, with the number of the event to roll back to, whose transition takes the reverse
+models of the events rolled back that have one. The events rolled back stay in the event log but are no longer effective, also those
+the session stored itself, so the later transaction sees the entity in the state before them, and takes its
+transitions from that state, or rejects the event if there is none. The entity of the session is still found, as it
+is identified by the steps of the earlier transaction, not by its events. An entity of the session only is never
 rolled back, as a rollback rolls back stored events only.
 
 The entity whose action gave the outcome is the exception: its outcome is calculated from the event log the action
-was triggered with, not one read again. If another session, e.g. the timeout of an outbox request or a rollback, has
-stored an event on it in the meantime, the outcome fails
-([#357](https://github.com/the-backend-project/backend/issues/357)).
+was triggered with, not one read again. If another session, e.g. a delayed trigger firing or a rollback, has stored an
+event on it in the meantime, the outcome fails ([#357](https://github.com/the-backend-project/backend/issues/357)).
