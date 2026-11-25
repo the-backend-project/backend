@@ -1,6 +1,7 @@
 package com.github.thxmasj.backend.http.inbox;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.github.thxmasj.backend.http.Headers;
 import com.github.thxmasj.backend.http.HttpResponse;
 import java.time.ZonedDateTime;
 import java.util.LinkedHashMap;
@@ -44,11 +45,11 @@ class HttpResponseCreator {
     return jsonWriter.writeValueAsBytes(object);
   }
 
-  protected Map<String, String> headers(String correlationId, String data) {
-    return Map.of(
-        "Content-Type", "application/json;charset=UTF-8",
-        "X-Correlation-Id", correlationId
-    );
+  protected Headers headers(String correlationId, String data) {
+    return Headers.builder()
+        .add("Content-Type", "application/json;charset=UTF-8")
+        .add("X-Correlation-Id", correlationId)
+        .build();
   }
 
   protected Map<String, Object> body(UUID entityId, String detail, ZonedDateTime timestamp) {

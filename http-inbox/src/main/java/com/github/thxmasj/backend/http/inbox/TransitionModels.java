@@ -60,6 +60,7 @@ import com.github.thxmasj.backend.core.StateMachine.ProcessResult;
 import com.github.thxmasj.backend.core.TransitionModel;
 import com.github.thxmasj.backend.core.Tuples.Tuple2;
 import com.github.thxmasj.backend.core.Validated;
+import com.github.thxmasj.backend.http.Headers;
 import com.github.thxmasj.backend.http.HttpRequest;
 import com.github.thxmasj.backend.http.HttpResponse;
 import com.github.thxmasj.backend.http.Masking;
@@ -725,12 +726,10 @@ interface TransitionModels {
     };
     var creator = new HttpResponseCreator(refused.statusCode(), reasonPhrase) {
       @Override
-      protected Map<String, String> headers(String correlationId, String data) {
+      protected Headers headers(String correlationId, String data) {
         if (refused.challenge() == null)
           return super.headers(correlationId, data);
-        var headers = new HashMap<>(super.headers(correlationId, data));
-        headers.put("WWW-Authenticate", refused.challenge());
-        return headers;
+        return super.headers(correlationId, data).plus("WWW-Authenticate", refused.challenge());
       }
     };
     return createResponseMessage(creator, null, correlationId, timestamp, refused.reason());

@@ -250,11 +250,13 @@ signed in, but never a secret, a code or a token. Secrets and codes are 256 rand
 enough: slow hashes only protect secrets that can be guessed.
 
 The requests answered at once are not stored: the health check, the public keys and the metadata, which don't change
-with the requests, a registration or a UserInfo request without an access token, an authorization request which can't
-be redirected to its client, and the requests of unknown paths or methods, which are answered with 404 and 405.
+with the requests, a registration or a UserInfo request without an access token, or with several `Authorization`
+headers, which is answered with 400 `invalid_request` (RFC 6750 section 3.1), an authorization request which can't be
+redirected to its client, and the requests of unknown paths or methods, which are answered with 404 and 405.
 Following the [strategy of not storing requests which aren't authenticated](http-inbox.md#requests-which-arent-authenticated),
-a request to the token endpoint without client authentication by HTTP Basic, or whose body isn't a form, is answered
-at once with the error response of RFC 6749, 401 `invalid_client` or 400 `invalid_request`, and not stored. A request
+a request to the token endpoint without client authentication by HTTP Basic, with several `Authorization` headers, or
+whose body isn't a form, is answered at once with the error response of RFC 6749, 401 `invalid_client` or 400
+`invalid_request`, and not stored. A request
 with Basic credentials which is refused, e.g. for a wrong secret, a grant type it may not use or a secret in its form
 too, is stored as a token request refused with `Token refused`, without its credentials, as is one with an access token
 which its authorizer refuses.

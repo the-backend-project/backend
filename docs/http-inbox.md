@@ -88,6 +88,10 @@ it triggers the response on `HttpInbox.Request`, the group of all inbox requests
 The response goes back to the `RequestRouting` entity, which the listener sends to the client, as the application gave
 it rather than as it is stored, which may be [masked](#masking).
 
+The request is stored as the listener received it, a header received several times as several, in the order received,
+and the listener sends every value of a header of the response, e.g. two `Set-Cookie` headers. A request with an
+invalid header or URI is answered with 400 Bad Request at once, and not stored. See [headers](http-outbox.md#headers).
+
 Requests carrying a message id are deduplicated through the `MessageIds` id entity model: a retried request gets the
 response of the first one, also if the application rejected it, without triggering anything again. A message id is
 the client's: the authorized subject and the id, or the id alone without an authorizer. All inbox requests share
@@ -268,9 +272,10 @@ The verifier accepts JWT access tokens as profiled by [RFC 9068](https://www.rfc
 with the claims `sub` and `client_id`. A refused request is answered as
 [RFC 6750](https://www.rfc-editor.org/rfc/rfc6750#section-3) says, with a `WWW-Authenticate` header: 401 and the
 challenge `Bearer` without a bearer token, 401 and the error `invalid_token` with a token that is invalid or expired,
-and 403 and the error `insufficient_scope` with a token lacking a scope. An authorizer returns an `Authorization`,
-either `Authorized` with the subject or `Refused` with the status code, challenge and reason of the response;
-`Authorization.refused(reason)` refuses with 400.
+403 and the error `insufficient_scope` with a token lacking a scope, and 400 and the error `invalid_request` with
+several `Authorization` headers, as a proxy in front may have checked another one than the first. An authorizer
+returns an `Authorization`, either `Authorized` with the subject or `Refused` with the status code, challenge and reason
+of the response; `Authorization.refused(reason)` refuses with 400.
 
 `HttpInbox.bearerToken(verify, realm, subject, scopes...)` does the same with a function verifying the token, e.g. with
 the keys of an issuer the application is itself, a realm for the challenge, and the subject the request is authorized

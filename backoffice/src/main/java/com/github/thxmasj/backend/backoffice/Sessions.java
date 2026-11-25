@@ -22,6 +22,7 @@ import com.github.thxmasj.backend.core.State;
 import com.github.thxmasj.backend.core.TransitionModel;
 import com.github.thxmasj.backend.core.Tuples.Tuple2;
 import com.github.thxmasj.backend.core.Validated;
+import com.github.thxmasj.backend.http.Headers;
 import com.github.thxmasj.backend.http.HttpClient;
 import com.github.thxmasj.backend.http.HttpRequest.Method;
 import com.github.thxmasj.backend.http.HttpRequest;
@@ -45,7 +46,6 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -184,7 +184,18 @@ final class Sessions {
   record ResourceRequest(String method, String path) {}
 
   /// A response of the backoffice
-  record Reply(int status, Map<String, String> headers, String body) {}
+  ///
+  /// @param headers the header fields, in order, where a name may repeat, e.g. `Set-Cookie` for each cookie set
+  record Reply(int status, List<Headers.Field> headers, String body) {
+
+    Reply {
+      headers = List.copyOf(headers);
+    }
+
+    Reply(int status, Headers headers, String body) {
+      this(status, headers.fields(), body);
+    }
+  }
 
   /// A page requested, which is viewed if there is a valid session, and otherwise starts a sign-in. It is never stored,
   /// as one of its outcomes always is.
@@ -294,11 +305,11 @@ final class Sessions {
       DataType.json(Reply.class)
   );
 
-  private static final Map<String, String> securityHeaders = Map.of(
-      "Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
-      "X-Content-Type-Options", "nosniff",
-      "Referrer-Policy", "same-origin"
-  );
+  private static final Headers securityHeaders = Headers.builder()
+      .add("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+      .add("X-Content-Type-Options", "nosniff")
+      .add("Referrer-Policy", "same-origin")
+      .build();
   private static final Map<String, String> staticFiles = Map.of(
       "htmx.min.js", "text/javascript;charset=UTF-8",
       "backoffice.css", "text/css;charset=UTF-8"
@@ -494,7 +505,7 @@ final class Sessions {
                         // The token of the session cookie, of which only the hash is the id of the session
                         .assemble(c -> tuple(c.input(), Secrets.generate(), c.entityId()))
                         .trigger(TokenClaimed).with(d -> Secrets.hash(d.t2())).on(Tokens).identifiedBy(d -> newEntityId(d.t3()))
-                        .trigger(ReplyCreated).with(d -> redirect(d.t1().t1().returnPath(), sessionCookie(d.t1().t2(), config.sessionLifetime()))).on(Request).identifiedBy(entityIdFromSession())
+                        .trigger(ReplyCreated).with(d -> withCookie(redirect(d.t1().t1().returnPath(), sessionCookie(d.t1().t2(), config.sessionLifetime())), signInCookieRemoved(d.t1().t3().toString()))).on(Request).identifiedBy(entityIdFromSession())
                         .output(d -> d.t1().t1().t1()),
                     d -> new SignedIn(user(d.t1().get()), d.t3() + config.sessionLifetime().toSeconds(), d.t2().returnPath())
                 ),
@@ -601,7 +612,7 @@ final class Sessions {
   /// The session of the cookie of a request, by the hash of its token, or a new one if it has no cookie or the cookie
   /// is of no session
   private static EntitySelector session(HttpRequest<byte[]> request) {
-    String token = Cookies.value(request.headerValue("Cookie"), sessionCookie);
+    String token = Cookies.value(request, sessionCookie);
     return token != null ? idEvent(TokenClaimed, Secrets.hash(token), EntitySelector.newEntity()) : EntitySelector.newEntity();
   }
 
@@ -621,7 +632,7 @@ final class Sessions {
     String state = query.get("state");
     if (Graph.uuid(state) == null)
       return invalid("The response of the identity provider is invalid");
-    return valid(new Callback(state, query.get("code"), query.get("error"), Cookies.value(request.headerValue("Cookie"), signInCookiePrefix + state)));
+    return valid(new Callback(state, query.get("code"), query.get("error"), Cookies.value(request, signInCookiePrefix + state)));
   }
 
   private static Map<String, String> query(String rawQuery) {
@@ -647,9 +658,7 @@ final class Sessions {
   }
 
   private static Reply reload() {
-    var headers = noStore();
-    headers.put("HX-Refresh", "true");
-    return new Reply(401, headers, "");
+    return new Reply(401, noStore().add("HX-Refresh", "true").build(), "");
   }
 
   private Reply failurePage(Failure failure) {
@@ -675,9 +684,11 @@ final class Sessions {
         return text(404, "Not Found\n");
       if (!get)
         return methodNotAllowed();
-      var headers = new HashMap<>(securityHeaders);
-      headers.put("Content-Type", staticFiles.get(name));
-      headers.put("Cache-Control", "public, max-age=3600");
+      var headers = Headers.builder()
+          .add(securityHeaders)
+          .add("Content-Type", staticFiles.get(name))
+          .add("Cache-Control", "public, max-age=3600")
+          .build();
       return new Reply(200, headers, content);
     }
     return text(404, "Not Found\n");
@@ -704,57 +715,54 @@ final class Sessions {
   }
 
   /// The cookie with the secret of a sign-in, only sent to the callback. It is sent with the redirect from the provider,
-  /// which is a top-level navigation, with SameSite=Lax. It expires, rather than being removed, as a response can't
-  /// both remove it and set the cookie of the session.
+  /// which is a top-level navigation, with SameSite=Lax. It is removed when the user has signed in, and otherwise
+  /// expires.
   private String signInCookie(String session, String secret) {
-    return signInCookiePrefix + session + "=" + secret + "; Path=" + Path + "/callback; Max-Age=" + signInLifetime.toSeconds() + "; HttpOnly; SameSite=Lax" + (config.secure() ? "; Secure" : "");
+    return signInCookie(session, secret, signInLifetime);
+  }
+
+  /// The cookie of the sign-in removed, by the response setting the cookie of the session
+  private String signInCookieRemoved(String session) {
+    return signInCookie(session, "", Duration.ZERO);
+  }
+
+  private String signInCookie(String session, String secret, Duration maxAge) {
+    return signInCookiePrefix + session + "=" + secret + "; Path=" + Path + "/callback; Max-Age=" + maxAge.toSeconds() + "; HttpOnly; SameSite=Lax" + (config.secure() ? "; Secure" : "");
   }
 
   private static Reply html(int status, String html) {
-    var headers = noStore();
-    headers.put("Content-Type", "text/html;charset=UTF-8");
-    return new Reply(status, headers, html);
+    return new Reply(status, noStore().add("Content-Type", "text/html;charset=UTF-8").build(), html);
   }
 
   private static Reply text(int status, String text) {
-    var headers = new HashMap<>(securityHeaders);
-    headers.put("Content-Type", "text/plain;charset=UTF-8");
-    return new Reply(status, headers, text);
+    return new Reply(status, securityHeaders.plus("Content-Type", "text/plain;charset=UTF-8"), text);
   }
 
   private static Reply redirect(String location, String cookie) {
-    var headers = noStore();
-    headers.put("Location", location);
+    var headers = noStore().add("Location", location);
     if (cookie != null)
-      headers.put("Set-Cookie", cookie);
-    return new Reply(303, headers, "");
+      headers.add("Set-Cookie", cookie);
+    return new Reply(303, headers.build(), "");
   }
 
   private static Reply methodNotAllowed() {
-    var headers = new HashMap<>(securityHeaders);
-    headers.put("Allow", "GET");
-    return new Reply(405, headers, "");
+    return new Reply(405, securityHeaders.plus("Allow", "GET"), "");
   }
 
+  /// The reply setting the cookie as well, after any cookies it sets already
   private static Reply withCookie(Reply reply, String cookie) {
-    var headers = new HashMap<>(reply.headers());
-    headers.put("Set-Cookie", cookie);
-    return new Reply(reply.status(), headers, reply.body());
+    return new Reply(reply.status(), Headers.of(reply.headers()).plus("Set-Cookie", cookie), reply.body());
   }
 
-  private static HashMap<String, String> noStore() {
-    var headers = new HashMap<>(securityHeaders);
-    headers.put("Cache-Control", "no-store");
-    return headers;
+  private static Headers.Builder noStore() {
+    return Headers.builder().add(securityHeaders).add("Cache-Control", "no-store");
   }
 
   private static HttpResponse<byte[]> response(Reply reply, String correlationId) {
-    var headers = new LinkedHashMap<>(reply.headers());
-    headers.put("X-Correlation-Id", correlationId);
     return new HttpResponse<>(
         reply.status(),
         reasonPhrase(reply.status()),
-        headers,
+        Headers.of(reply.headers()).plus("X-Correlation-Id", correlationId),
         reply.body().isEmpty() ? null : reply.body().getBytes(UTF_8)
     );
   }
