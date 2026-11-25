@@ -333,7 +333,7 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
                 .on(Index)
                 .identifiedBy(d -> newEntityId(d.t3()))
 
-                .trigger(shape.forward()).with(d -> toHttpRequest(d.t1().t1(), shape.requestPayloadType()))
+                .trigger(shape.forward()).with(d -> shape.forward().message(toHttpRequest(d.t1().t1(), shape.requestPayloadType())))
                 .trigger(TimeoutExpired).after(_ -> shape.inflightTimeout())
                 .output(d -> tuple(d.t1().t1(), d.t1().t2().entityId())).masked(d -> tuple(shape.maskedRequest(d.t1()), d.t2())),
             onEvent(shape.batchedRequestDispatched()).to(InFlight)
@@ -354,7 +354,7 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
                 .on(Index)
                 .identifiedBy(d -> entityId(d.t1().t3())) // NB: entity id created above
 
-                .trigger(shape.forward()).with(d -> toHttpRequest(d.t1().t1().t1(), shape.requestPayloadType()))
+                .trigger(shape.forward()).with(d -> shape.forward().message(toHttpRequest(d.t1().t1().t1(), shape.requestPayloadType())))
                 .trigger(TimeoutExpired).after(_ -> shape.inflightTimeout())
                 .output(d -> tuple(d.t1().t1().t1(), d.t1().t1().t2().entityId())).masked(d -> tuple(shape.maskedRequest(d.t1()), d.t2()))
         ),

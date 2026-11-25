@@ -19,7 +19,9 @@ import reactor.core.publisher.Mono;
 public final class JdkHttpClient implements HttpClient {
 
   private static final Duration timeout = Duration.ofSeconds(10);
-  /// The headers the HTTP client of the JDK sets itself
+  /// The headers the HTTP client of the JDK sets itself, from the URI and the body of the request, which are left out of
+  /// the message rather than refused, as e.g. a request forwarded from an inbox has them. The client has no
+  /// [#fixedHeaders()] of its own.
   private static final Set<String> restrictedHeaders = Set.of("connection", "content-length", "expect", "host", "upgrade");
 
   private final java.net.http.HttpClient client = java.net.http.HttpClient.newBuilder().connectTimeout(timeout).build();

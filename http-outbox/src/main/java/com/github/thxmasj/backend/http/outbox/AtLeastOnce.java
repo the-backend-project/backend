@@ -446,7 +446,7 @@ public final class AtLeastOnce<RQ> implements HttpOutboxRequest<RQ> {
   private TransitionModel<Void, HttpRequest<RQ>> redispatchTransition(Shape<RQ, ?, ?> shape) {
     return onEvent(shape.requestRedispatched()).to(InFlight)
         .assemble(c -> shape.repeatMessageCreator().apply(c, shape.dispatched(c.log()).t1()))
-        .trigger(shape.forward()).with(d -> toHttpRequest(d, shape.requestPayloadType()))
+        .trigger(shape.forward()).with(d -> shape.forward().message(toHttpRequest(d, shape.requestPayloadType())))
         .trigger(TimeoutExpired).after(_ -> shape.inflightTimeout())
         .output(d -> d);
   }
@@ -562,7 +562,7 @@ public final class AtLeastOnce<RQ> implements HttpOutboxRequest<RQ> {
                     .identifiedBy(d -> newEntityId(d.t3()))
 
                     .trigger(shape.forward)
-                    .with(d -> toHttpRequest(d.t1().t1(), shape.requestPayloadType))
+                    .with(d -> shape.forward().message(toHttpRequest(d.t1().t1(), shape.requestPayloadType)))
 
                     .trigger(TimeoutExpired)
                     .after(_ -> shape.inflightTimeout)
@@ -587,7 +587,7 @@ public final class AtLeastOnce<RQ> implements HttpOutboxRequest<RQ> {
                     .identifiedBy(d -> entityId(d.t1().t3()))
 
                     .trigger(shape.forward)
-                    .with(d -> toHttpRequest(d.t1().t1().t1(), shape.requestPayloadType))
+                    .with(d -> shape.forward().message(toHttpRequest(d.t1().t1().t1(), shape.requestPayloadType)))
 
                     .trigger(TimeoutExpired)
                     .after(_ -> shape.inflightTimeout)

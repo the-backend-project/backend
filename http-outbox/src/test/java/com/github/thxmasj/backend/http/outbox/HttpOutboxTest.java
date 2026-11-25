@@ -3,6 +3,7 @@ package com.github.thxmasj.backend.http.outbox;
 import static com.github.thxmasj.backend.core.BuiltinEventTypes.EventsRolledBack;
 import static com.github.thxmasj.backend.core.EntityModel.Begin;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static com.github.thxmasj.backend.core.EntitySelector.entityId;
 import static com.github.thxmasj.backend.core.EntitySelector.newEntityId;
 import static com.github.thxmasj.backend.core.EventTrigger.trigger;
@@ -857,6 +858,58 @@ public class HttpOutboxTest {
       }
     } while (System.currentTimeMillis() < deadline);
     return state;
+  }
+
+  /// A request message with a header the client of the outbox adds itself, e.g. Authorization of a client with an
+  /// access token, fails the transition dispatching it, so that it is neither stored nor sent with both
+  @Test
+  public void requestMessageWithAHeaderTheClientAddsFailsTheDispatch() {
+    var processTransitions = new AtomicReference<Map<State, List<TransitionModel<?, ?>>>>();
+    EntityModel process = EntityModel.of("Process", UUID.randomUUID(), processTransitions::get);
+    EventType<Void, Void> processStarted = BasicEventType.of("Process started", UUID.randomUUID());
+    EventType<Void, Void> processSucceeded = BasicEventType.of("Process succeeded", UUID.randomUUID());
+    String path = "/" + UUID.randomUUID();
+    List<String> received = new CopyOnWriteArrayList<>();
+    server.createContext(path, exchange -> {
+      received.add(exchange.getRequestHeaders().getFirst("Authorization"));
+      exchange.sendResponseHeaders(200, -1);
+      exchange.close();
+    });
+    AtLeastOnce<String> notification = HttpOutboxRequest.atLeastOnce()
+        .requestPayloadType(DataType.string())
+        .responsePayloadType(DataType.none())
+        .forwarder(new NettyHttpClient(new NettyHttpClientBuilder().build(), () -> "token"))
+        .inflightTimeout(Duration.ofSeconds(10))
+        .processModel(process)
+        .contentParser(_ -> valid(null))
+        .onSuccess(processSucceeded)
+        .isAccepted(r -> r.statusCode() == 200)
+        .isFailureTransient(_ -> true)
+        .isRejectedByInvalidResponse(_ -> false)
+        .isFailureByInvalidResponseTransient(_ -> false)
+        .isAttemptAvailable(_ -> true)
+        .backoffAlgorithm(_ -> Duration.ofSeconds(1))
+        .build("Notification", UUID.randomUUID());
+    var dispatcher = AtLeastOnceDispatcher.of(
+        notification,
+        (Void _) -> HttpRequest.create(POST, URI.create("http://localhost:" + server.getAddress().getPort() + path), Headers.of("Authorization", "Bearer other"), "payload")
+    );
+    processTransitions.set(Map.of(
+        Begin, List.of(
+            onEvent(processStarted).to(States.WaitingForResponse)
+                .assemble(DispatchContext::of)
+                .trigger(dispatcher.requestDispatched()).withReactive(d -> dispatcher.input(d, null)).on(dispatcher.outbox()).identifiedBy(newEntityId())
+                .output()
+        ),
+        States.WaitingForResponse, List.of(
+            onEvent(processSucceeded).to(States.Done).output()
+        )
+    ));
+    var machine = Init.stateMachine(UUID.randomUUID().toString(), List.of(process, dispatcher.outbox()));
+    assertThatThrownBy(() -> machine.onEvent(trigger(processStarted, process)).blockLast(Duration.ofSeconds(10)))
+        .hasStackTraceContaining("has the header Authorization, which the HTTP client of the outbox adds itself");
+    // The transition failed, so nothing was stored for the outbox to send
+    assertThat(received).isEmpty();
   }
 
   private record Redispatched(String messageId, List<List<String>> received, EventLog log) {}

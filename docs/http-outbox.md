@@ -377,10 +377,14 @@ client of the JDK, so it keeps the order of the values of a name, but not the or
 
 `singleHeaderValue(name)` is the value of a header a message may have only once, such as `Authorization`, or null if it
 has several, which the bearer token authorizer of an inbox refuses with 400 Bad Request and `invalid_request` (RFC 6750
-section 3.1), as a proxy in front may have checked another one than the first. The fixed `Authorization` of a
-`NettyHttpClient`, e.g. of its access token, replaces one of the message. A header masked in the event log, e.g.
-`Cookie`, is stored with one `***` for all its values, so a retry with the same cookies in another number of headers
-compares equal.
+section 3.1), as a proxy in front may have checked another one than the first. A request message must therefore not
+have a header the HTTP client of its outbox adds itself, its `fixedHeaders()`, e.g. `Authorization` of a
+`NettyHttpClient` with an access token or HTTP Basic credentials: the transition dispatching such a message fails, like
+one whose functions throw, so it is neither stored nor sent. `JdkHttpClient` has no fixed headers, and leaves out of a
+message the headers the JDK sets itself from the URI and the body, such as `Host` and `Content-Length`.
+
+A header masked in the event log, e.g. `Cookie`, is stored with one `***` for all its values, so a retry with the same
+cookies in another number of headers compares equal.
 
 ## Finding the requests of a process
 
