@@ -1,8 +1,7 @@
 package com.github.thxmasj.backend.http.inbox;
 
-import static java.util.stream.Collectors.toMap;
-
 import com.github.thxmasj.backend.core.StateMachine;
+import com.github.thxmasj.backend.http.Headers;
 import com.github.thxmasj.backend.http.HttpRequest;
 import com.github.thxmasj.backend.http.HttpRequest.Method;
 import com.github.thxmasj.backend.http.HttpResponse;
@@ -12,8 +11,6 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
@@ -115,10 +112,20 @@ public class HttpInboxListener {
     } catch (IllegalArgumentException e) {
       return response.status(HttpResponseStatus.METHOD_NOT_ALLOWED).send();
     }
+    // A request with an invalid header or URI is rejected rather than repaired (RFC 9110 section 5.5, RFC 9113 section
+    // 8.2.1)
+    Headers headers;
+    URI uri;
+    try {
+      headers = Headers.ofRequestEntries(request.requestHeaders().entries());
+      uri = URI.create(request.uri());
+    } catch (IllegalArgumentException e) {
+      return response.status(HttpResponseStatus.BAD_REQUEST).send();
+    }
     return request.receive().aggregate().asByteArray()
         .filter(body -> body.length > 0)
-        .map(body -> requestMessage(request, method, body))
-        .switchIfEmpty(Mono.fromSupplier(() -> requestMessage(request, method, null)))
+        .map(body -> new HttpRequest<>(method, uri, headers, body))
+        .switchIfEmpty(Mono.fromSupplier(() -> new HttpRequest<>(method, uri, headers, null)))
         .flatMap(exchange)
         .timeout(responseTimeout)
         .flatMap(message -> send(response, message))
@@ -143,15 +150,9 @@ public class HttpInboxListener {
     return correlationId;
   }
 
-  private static HttpRequest<byte[]> requestMessage(HttpServerRequest request, Method method, byte[] body) {
-    Map<String, String> headers = request.requestHeaders().entries().stream()
-        .collect(toMap(Entry::getKey, Entry::getValue, (a, b) -> a + ", " + b));
-    return new HttpRequest<>(method, URI.create(request.uri()), headers, body);
-  }
-
   private static Mono<Void> send(HttpServerResponse response, HttpResponse<byte[]> message) {
     response.status(HttpResponseStatus.valueOf(message.statusCode(), message.reasonPhrase()));
-    message.headers().forEach(response::header);
+    message.headers().forEach(response::addHeader);
     return message.body() == null
         ? response.send()
         : response.send(Mono.just(Unpooled.wrappedBuffer(message.body()))).then();

@@ -15,6 +15,7 @@ import com.github.thxmasj.backend.core.TransitionModel;
 import com.github.thxmasj.backend.http.inbox.HttpInbox;
 import com.github.thxmasj.backend.http.inbox.HttpInboxRequest;
 import com.github.thxmasj.backend.http.inbox.ResponseEventType;
+import com.github.thxmasj.backend.http.Headers;
 import com.github.thxmasj.backend.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -48,7 +49,7 @@ public interface Greetings {
           c -> new HttpResponse<>(
               200,
               "OK",
-              Map.of("Content-Type", "text/html;charset=UTF-8", "X-Correlation-Id", c.correlationId()),
+              Headers.of("Content-Type", "text/html;charset=UTF-8", "X-Correlation-Id", c.correlationId()),
               page(c.input(), c.correlationId()).getBytes(StandardCharsets.UTF_8)
           )
       )

@@ -3,6 +3,7 @@ package com.github.thxmasj.backend.http.outbox;
 import static com.github.thxmasj.backend.core.BuiltinEventTypes.EventsRolledBack;
 import static com.github.thxmasj.backend.core.EntityModel.Begin;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static com.github.thxmasj.backend.core.EntitySelector.entityId;
 import static com.github.thxmasj.backend.core.EntitySelector.newEntityId;
 import static com.github.thxmasj.backend.core.EventTrigger.trigger;
@@ -45,6 +46,7 @@ import com.github.thxmasj.backend.core.internal.TransitionStep.DelayedTriggerSte
 import com.github.thxmasj.backend.core.internal.TransitionStep.InputStep;
 import com.github.thxmasj.backend.core.internal.TransitionStep.TriggerStep;
 import com.github.thxmasj.backend.core.internal.database.Storage;
+import com.github.thxmasj.backend.http.Headers;
 import com.github.thxmasj.backend.http.HttpRequest;
 import com.github.thxmasj.backend.http.Masking;
 import com.github.thxmasj.backend.http.HttpResponse;
@@ -58,7 +60,6 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -97,7 +98,7 @@ public class HttpOutboxTest {
     return new HttpRequest<>(
         POST,
         URI.create("http://localhost:" + server.getAddress().getPort() + path),
-        Map.of(),
+        Headers.of(),
         null
     );
   }
@@ -346,7 +347,7 @@ public class HttpOutboxTest {
                 .with(_ -> HttpRequest.create(
                     POST,
                     URI.create("http://localhost:" + server.getAddress().getPort() + path),
-                    Map.of("Authorization", "Basic c2VjcmV0", "Content-Type", "application/x-www-form-urlencoded"),
+                    Headers.of("Authorization", "Basic c2VjcmV0", "Content-Type", "application/x-www-form-urlencoded"),
                     "grant_type=authorization_code&code=s3cret"
                 ))
                 .on(exchange).identifiedBy(newEntityId())
@@ -502,7 +503,7 @@ public class HttpOutboxTest {
         1,
         reqDispatchedType,
         Clock.systemUTC(),
-        tuple(new HttpRequest<>(POST, URI.create("http://localhost/test"), Map.of(), null), processEntityId)
+        tuple(new HttpRequest<>(POST, URI.create("http://localhost/test"), Headers.of(), null), processEntityId)
     );
     var log = new EventLog(model.exchange(), UUID.randomUUID(), List.of(reqDispatchedEvent));
     var initialContext = new InputStep<Void>(null, null, null, timeoutTransition, AtMostOnce.States.InFlight, 2, log, ZonedDateTime.now(), "corr-1", null, model.machine(), new Transaction());
@@ -580,10 +581,10 @@ public class HttpOutboxTest {
         1,
         reqDispatchedType,
         Clock.systemUTC(),
-        tuple(new HttpRequest<>(POST, URI.create("http://localhost/test"), Map.of(), null), processEntityId)
+        tuple(new HttpRequest<>(POST, URI.create("http://localhost/test"), Headers.of(), null), processEntityId)
     );
     var log = new EventLog(alo, UUID.randomUUID(), List.of(reqDispatchedEvent));
-    HttpResponse<byte[]> responseMessage = new HttpResponse<>(200, "OK", Map.of(), null);
+    HttpResponse<byte[]> responseMessage = new HttpResponse<>(200, "OK", Headers.of(), null);
     var initialContext = new InputStep<HttpResponse<byte[]>>(null, null, null, responseReceivedTransition, AtLeastOnce.States.InFlight, 2, log, ZonedDateTime.now(), "corr-1", responseMessage, machine, new Transaction());
     var occ = responseReceivedTransition.calculate(initialContext).block();
     assertNotNull(occ);
@@ -680,7 +681,7 @@ public class HttpOutboxTest {
         1,
         reqDispatchedType,
         Clock.systemUTC(),
-        tuple(new HttpRequest<>(POST, URI.create("http://localhost/test"), Map.of(), null), UUID.randomUUID())
+        tuple(new HttpRequest<>(POST, URI.create("http://localhost/test"), Headers.of(), null), UUID.randomUUID())
     );
     UUID requestId = UUID.randomUUID();
     var log = new EventLog(alo, requestId, List.of(reqDispatchedEvent));
@@ -722,7 +723,7 @@ public class HttpOutboxTest {
   @Test
   public void atLeastOnceAcceptedRequestRedispatched() {
     var redispatched = redispatchAcceptedRequest(
-        (_, r) -> HttpRequest.create(r.method(), r.uri(), Map.of("Message-Id", r.headers().get("Message-Id") + "-again"), r.body() + " again")
+        (_, r) -> HttpRequest.create(r.method(), r.uri(), Headers.of("Message-Id", r.headerValue("Message-Id") + "-again"), r.body() + " again")
     );
     List<String> sent = List.of(redispatched.messageId(), "fixed", "payload");
     List<String> again = List.of(redispatched.messageId() + "-again", "fixed", "payload again");
@@ -797,7 +798,7 @@ public class HttpOutboxTest {
         .build("Notification", UUID.randomUUID());
     var dispatcher = AtLeastOnceDispatcher.of(
         notification,
-        (Void _) -> HttpRequest.create(POST, URI.create("http://localhost:" + server.getAddress().getPort() + path), Map.of(), "payload")
+        (Void _) -> HttpRequest.create(POST, URI.create("http://localhost:" + server.getAddress().getPort() + path), Headers.of(), "payload")
     );
     processTransitions.set(Map.of(
         Begin, List.of(
@@ -859,6 +860,58 @@ public class HttpOutboxTest {
     return state;
   }
 
+  /// A request message with a header the client of the outbox adds itself, e.g. Authorization of a client with an
+  /// access token, fails the transition dispatching it, so that it is neither stored nor sent with both
+  @Test
+  public void requestMessageWithAHeaderTheClientAddsFailsTheDispatch() {
+    var processTransitions = new AtomicReference<Map<State, List<TransitionModel<?, ?>>>>();
+    EntityModel process = EntityModel.of("Process", UUID.randomUUID(), processTransitions::get);
+    EventType<Void, Void> processStarted = BasicEventType.of("Process started", UUID.randomUUID());
+    EventType<Void, Void> processSucceeded = BasicEventType.of("Process succeeded", UUID.randomUUID());
+    String path = "/" + UUID.randomUUID();
+    List<String> received = new CopyOnWriteArrayList<>();
+    server.createContext(path, exchange -> {
+      received.add(exchange.getRequestHeaders().getFirst("Authorization"));
+      exchange.sendResponseHeaders(200, -1);
+      exchange.close();
+    });
+    AtLeastOnce<String> notification = HttpOutboxRequest.atLeastOnce()
+        .requestPayloadType(DataType.string())
+        .responsePayloadType(DataType.none())
+        .forwarder(new NettyHttpClient(new NettyHttpClientBuilder().build(), () -> "token"))
+        .inflightTimeout(Duration.ofSeconds(10))
+        .processModel(process)
+        .contentParser(_ -> valid(null))
+        .onSuccess(processSucceeded)
+        .isAccepted(r -> r.statusCode() == 200)
+        .isFailureTransient(_ -> true)
+        .isRejectedByInvalidResponse(_ -> false)
+        .isFailureByInvalidResponseTransient(_ -> false)
+        .isAttemptAvailable(_ -> true)
+        .backoffAlgorithm(_ -> Duration.ofSeconds(1))
+        .build("Notification", UUID.randomUUID());
+    var dispatcher = AtLeastOnceDispatcher.of(
+        notification,
+        (Void _) -> HttpRequest.create(POST, URI.create("http://localhost:" + server.getAddress().getPort() + path), Headers.of("Authorization", "Bearer other"), "payload")
+    );
+    processTransitions.set(Map.of(
+        Begin, List.of(
+            onEvent(processStarted).to(States.WaitingForResponse)
+                .assemble(DispatchContext::of)
+                .trigger(dispatcher.requestDispatched()).withReactive(d -> dispatcher.input(d, null)).on(dispatcher.outbox()).identifiedBy(newEntityId())
+                .output()
+        ),
+        States.WaitingForResponse, List.of(
+            onEvent(processSucceeded).to(States.Done).output()
+        )
+    ));
+    var machine = Init.stateMachine(UUID.randomUUID().toString(), List.of(process, dispatcher.outbox()));
+    assertThatThrownBy(() -> machine.onEvent(trigger(processStarted, process)).blockLast(Duration.ofSeconds(10)))
+        .hasStackTraceContaining("has the header Authorization, which the HTTP client of the outbox adds itself");
+    // The transition failed, so nothing was stored for the outbox to send
+    assertThat(received).isEmpty();
+  }
+
   private record Redispatched(String messageId, List<List<String>> received, EventLog log) {}
 
   /// Dispatches a request, which is accepted, and then redispatches it twice by a transition of the process
@@ -890,9 +943,7 @@ public class HttpOutboxTest {
         .responsePayloadType(DataType.none());
     AtLeastOnce<String> notification = (repeatMessageCreator != null ? payloadTypes.repeatMessageCreator(repeatMessageCreator) : payloadTypes)
         .forwarder(r -> {
-          var headers = new HashMap<>(r.headers());
-          headers.put("Forwarder", "fixed");
-          return netty.exchange(new HttpRequest<>(r.method(), r.uri(), headers, r.body()));
+          return netty.exchange(new HttpRequest<>(r.method(), r.uri(), r.headers().with("Forwarder", "fixed"), r.body()));
         })
         .inflightTimeout(Duration.ofSeconds(10))
         .processModel(process)
@@ -908,7 +959,7 @@ public class HttpOutboxTest {
     String messageId = UUID.randomUUID().toString();
     var dispatcher = AtLeastOnceDispatcher.of(
         notification,
-        (Void _) -> HttpRequest.create(POST, URI.create("http://localhost:" + server.getAddress().getPort() + path), Map.of("Message-Id", messageId), "payload")
+        (Void _) -> HttpRequest.create(POST, URI.create("http://localhost:" + server.getAddress().getPort() + path), Headers.of("Message-Id", messageId), "payload")
     );
     processTransitions.set(Map.of(
         Begin, List.of(

@@ -7,6 +7,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.TransitionModelBuilder.TransitionContext;
 import com.github.thxmasj.backend.core.Validated;
+import com.github.thxmasj.backend.http.Headers;
 import com.github.thxmasj.backend.http.HttpRequest;
 import com.github.thxmasj.backend.http.HttpRequest.Method;
 import com.github.thxmasj.backend.http.HttpResponse;
@@ -22,7 +23,6 @@ import java.net.URI;
 import tools.jackson.databind.JsonNode;
 import java.time.Duration;
 import java.util.Base64;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -45,6 +45,8 @@ final class Endpoints {
   static final String cookiePrefix = "idp_authorization_";
   /// How long a user has to sign in with the upstream provider
   private static final Duration signInLifetime = Duration.ofMinutes(10);
+  /// The headers keeping a response out of caches, RFC 6749 section 5.1
+  private static final Headers noCache = Headers.builder().add("Cache-Control", "no-store").add("Pragma", "no-cache").build();
   /// The value of [Inbox#InternalHeader] of the registrations of the identity provider itself, which no other request
   /// knows, as it is generated for the process and masked in the event log
   private static final String internalKey = Secrets.generate();
@@ -129,14 +131,17 @@ final class Endpoints {
 
   }
 
-  /// The refusal of a request to the token endpoint which isn't authenticated, as it isn't a form or has no Basic
-  /// credentials, or null if it is. Such a request is answered at once and not stored, as anyone can send it. Its form
-  /// is only parsed here if it has no credentials, as RFC 6749 refuses a secret in the form as an invalid request
-  /// rather than as a failed client authentication.
+  /// The refusal of a request to the token endpoint which isn't authenticated, as it isn't a form, has no Basic
+  /// credentials or has several Authorization headers, or null if it is. Such a request is answered at once and not
+  /// stored, as anyone can send it. Its form is only parsed here if it has no credentials, as RFC 6749 refuses a secret
+  /// in the form as an invalid request rather than as a failed client authentication.
   private Tokens.Refusal unauthenticated(HttpRequest<byte[]> request) {
+    // Credentials sent more than once are an invalid request, RFC 6749 section 5.2
+    if (request.headerValues("Authorization").size() > 1)
+      return new Tokens.Refusal(null, "invalid_request", "Several Authorization headers");
     if (!Masking.isForm(request))
       return new Tokens.Refusal(null, "invalid_request", "Content-Type must be application/x-www-form-urlencoded");
-    if (basicCredentials(request.headerValue("Authorization")).isPresent())
+    if (basicCredentials(request.singleHeaderValue("Authorization")).isPresent())
       return null;
     Map<String, String> form;
     try {
@@ -156,9 +161,9 @@ final class Endpoints {
     if (refusal == null)
       return null;
     int status = Tokens.status(refusal);
-    var headers = noStore(Map.of());
+    var headers = noStore(Headers.none());
     if (status == 401)
-      headers.put("WWW-Authenticate", basicChallenge());
+      headers = headers.with("WWW-Authenticate", basicChallenge());
     byte[] body = Reply.error(status, refusal.error(), refusal.description()).body().getBytes(UTF_8);
     return new HttpResponse<>(status, status == 401 ? "Unauthorized" : "Bad Request", headers, body);
   }
@@ -166,7 +171,7 @@ final class Endpoints {
   /// The request to the token endpoint, which is always valid, as a refusal is answered by the token requests. One
   /// which isn't authenticated is answered at once, and doesn't get here.
   Validated<TokenEndpointRequest> tokenEndpointRequest(HttpRequest<byte[]> request) {
-    Optional<String[]> basic = basicCredentials(request.headerValue("Authorization"));
+    Optional<String[]> basic = basicCredentials(request.singleHeaderValue("Authorization"));
     if (!Masking.isForm(request) || basic.isEmpty())
       return valid(new TokenEndpointRequest(unauthenticated(request), null, null));
     String[] credentials = basic.get();
@@ -282,7 +287,7 @@ final class Endpoints {
   /// A registration by the identity provider itself, e.g. of the bootstrap client, with the hash of the secret of the
   /// client, as the registrar
   static HttpRequest<byte[]> internalRegistration(String registeredBy, String secretHash, byte[] body) {
-    var headers = Map.of(
+    var headers = Headers.of(
         "Content-Type", "application/json",
         Inbox.InternalHeader, internalKey,
         Inbox.RegisteredByHeader, registeredBy,
@@ -294,7 +299,7 @@ final class Endpoints {
   /// Whether the request is a registration of the identity provider itself
   static boolean isInternal(HttpRequest<byte[]> request) {
     // In constant time, so the time taken doesn't tell how much of the key is right
-    return Secrets.matches(request.headerValue(Inbox.InternalHeader), internalKey);
+    return Secrets.matches(request.singleHeaderValue(Inbox.InternalHeader), internalKey);
   }
 
   // Signing users in
@@ -314,10 +319,11 @@ final class Endpoints {
         URI url = upstream.authorizationUrl(authorization, secret).toFuture().getNow(null);
         if (url == null)
           throw new IllegalStateException("The upstream provider is not discovered");
-        var headers = noStore(Map.of());
-        headers.remove("Content-Type");
-        headers.put("Location", url.toString());
-        headers.put("Set-Cookie", cookie(authorization, secret, signInLifetime));
+        var headers = Headers.builder()
+            .add(noCache)
+            .add("Location", url.toString())
+            .add("Set-Cookie", cookie(authorization, secret, signInLifetime))
+            .build();
         yield new HttpResponse<>(302, "Found", headers, null);
       }
       case 302 -> redirect(response);
@@ -340,7 +346,7 @@ final class Endpoints {
     } catch (IllegalArgumentException e) {
       return errorPage("The response of the identity provider is invalid");
     }
-    if (Cookies.value(request.headerValue("Cookie"), cookiePrefix + authorization) == null)
+    if (Cookies.value(request, cookiePrefix + authorization) == null)
       return errorPage("The sign-in has expired, or was started in another browser. Please sign in again.");
     return null;
   }
@@ -353,7 +359,7 @@ final class Endpoints {
         UUID.fromString(authorization),
         query.get("code"),
         query.get("error"),
-        Cookies.value(request.headerValue("Cookie"), cookiePrefix + authorization)
+        Cookies.value(request, cookiePrefix + authorization)
     ));
   }
 
@@ -386,12 +392,15 @@ final class Endpoints {
   /// The refusal of RFC 6750 section 3 of a request without an access token, or null if it has one, which the
   /// authorizer of its inbox request verifies
   private HttpResponse<byte[]> withoutToken(HttpRequest<byte[]> request) {
+    // Several Authorization headers are an invalid request, RFC 6750 section 3.1
+    if (request.headerValues("Authorization").size() > 1)
+      return bearerError(400, "invalid_request", "Several Authorization headers", null);
     return bearerToken(request) == null ? bearerError(401, null, null, null) : null;
   }
 
   /// The bearer token of the request, or null if it has none
   private static String bearerToken(HttpRequest<byte[]> request) {
-    String authorization = request.headerValue("Authorization");
+    String authorization = request.singleHeaderValue("Authorization");
     if (authorization == null || !authorization.regionMatches(true, 0, "Bearer ", 0, 7))
       return null;
     return authorization.substring(7).trim();
@@ -439,9 +448,7 @@ final class Endpoints {
   private static HttpResponse<byte[]> redirect(HttpResponse<byte[]> response) {
     var redirect = DataType.objectMapper.readValue(response.body(), Inbox.Redirect.class);
     String uri = redirect.redirectUri();
-    var headers = noStore(Map.of());
-    headers.remove("Content-Type");
-    headers.put("Location", uri + (uri.contains("?") ? "&" : "?") + Form.encode(redirect.parameters()));
+    var headers = noCache.plus("Location", uri + (uri.contains("?") ? "&" : "?") + Form.encode(redirect.parameters()));
     return new HttpResponse<>(302, "Found", headers, null);
   }
 
@@ -459,8 +466,7 @@ final class Endpoints {
   }
 
   private static HttpResponse<byte[]> errorPage(String description) {
-    var headers = noStore(Map.of());
-    headers.put("Content-Type", "text/plain;charset=UTF-8");
+    var headers = noCache.plus("Content-Type", "text/plain;charset=UTF-8");
     return new HttpResponse<>(400, "Bad Request", headers, ("Sign-in failed: " + description + "\n").getBytes(UTF_8));
   }
 
@@ -473,7 +479,7 @@ final class Endpoints {
   }
 
   private static HttpResponse<byte[]> methodNotAllowed(String allowed) {
-    return new HttpResponse<>(405, "Method Not Allowed", Map.of("Allow", allowed), null);
+    return new HttpResponse<>(405, "Method Not Allowed", Headers.of("Allow", allowed), null);
   }
 
   private String basicChallenge() {
@@ -484,32 +490,34 @@ final class Endpoints {
   ///
   /// @param scope the scope required, for insufficient_scope
   private HttpResponse<byte[]> bearerError(int status, String error, String description, String scope) {
-    return new HttpResponse<>(status, status == 401 ? "Unauthorized" : "Forbidden", Map.of("WWW-Authenticate", bearerChallenge(error, description, scope)), null);
+    String reason = switch (status) {
+      case 400 -> "Bad Request";
+      case 401 -> "Unauthorized";
+      default -> "Forbidden";
+    };
+    return new HttpResponse<>(status, reason, Headers.of("WWW-Authenticate", bearerChallenge(error, description, scope)), null);
   }
 
   private String bearerChallenge(String error, String description, String scope) {
     return HttpInbox.bearerChallenge(realm(), error, description, scope);
   }
 
-  private static Map<String, String> noStore(Map<String, String> headers) {
-    var result = new HashMap<>(headers);
-    result.put("Content-Type", "application/json;charset=UTF-8");
-    result.put("Cache-Control", "no-store");
-    result.put("Pragma", "no-cache");
-    return result;
+  /// The headers with those of a JSON response kept out of caches
+  private static Headers noStore(Headers headers) {
+    var builder = Headers.builder().add(headers).set("Content-Type", "application/json;charset=UTF-8");
+    noCache.forEach(builder::set);
+    return builder.build();
   }
 
   private static HttpResponse<byte[]> withHeader(HttpResponse<byte[]> response, String name, String value) {
-    var headers = new HashMap<>(response.headers());
-    headers.put(name, value);
-    return new HttpResponse<>(response.statusCode(), response.reasonPhrase(), headers, response.body());
+    return new HttpResponse<>(response.statusCode(), response.reasonPhrase(), response.headers().with(name, value), response.body());
   }
 
   private static HttpResponse<byte[]> response(int status, String reason, String contentType, String body) {
     return new HttpResponse<>(
         status,
         reason,
-        contentType != null ? Map.of("Content-Type", contentType) : Map.of(),
+        contentType != null ? Headers.of("Content-Type", contentType) : Headers.of(),
         body != null ? body.getBytes(UTF_8) : null
     );
   }

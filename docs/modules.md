@@ -20,7 +20,7 @@ applications.
 
 Core exports only what applications use: the packages `com.github.thxmasj.backend.core` (the state machine and the
 building of entity models) and `core.database` (the databases, their clients and `DataSourceBuilder`). The http module
-exports `com.github.thxmasj.backend.http`: the HTTP messages (`HttpRequest`, `HttpResponse`), the HTTP clients
+exports `com.github.thxmasj.backend.http`: the HTTP messages (`HttpRequest`, `HttpResponse`, `Headers`), the HTTP clients
 (`HttpClient`, `NettyHttpClient`, `AccessTokenSupplier`) and the data types of HTTP messages (`HttpDataType`). The
 packages under `core.internal`, such as the queries and updates of the databases and the steps of a transition, are
 exported only to the other modules of the library, as is `http.internal` to http-inbox and http-outbox. A database
