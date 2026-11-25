@@ -138,7 +138,7 @@ final class Endpoints {
   private Tokens.Refusal unauthenticated(HttpRequest<byte[]> request) {
     if (!Masking.isForm(request))
       return new Tokens.Refusal(null, "invalid_request", "Content-Type must be application/x-www-form-urlencoded");
-    if (basicCredentials(request.headerValue("Authorization")).isPresent())
+    if (basicCredentials(request.singleHeaderValue("Authorization")).isPresent())
       return null;
     Map<String, String> form;
     try {
@@ -168,7 +168,7 @@ final class Endpoints {
   /// The request to the token endpoint, which is always valid, as a refusal is answered by the token requests. One
   /// which isn't authenticated is answered at once, and doesn't get here.
   Validated<TokenEndpointRequest> tokenEndpointRequest(HttpRequest<byte[]> request) {
-    Optional<String[]> basic = basicCredentials(request.headerValue("Authorization"));
+    Optional<String[]> basic = basicCredentials(request.singleHeaderValue("Authorization"));
     if (!Masking.isForm(request) || basic.isEmpty())
       return valid(new TokenEndpointRequest(unauthenticated(request), null, null));
     String[] credentials = basic.get();
@@ -296,7 +296,7 @@ final class Endpoints {
   /// Whether the request is a registration of the identity provider itself
   static boolean isInternal(HttpRequest<byte[]> request) {
     // In constant time, so the time taken doesn't tell how much of the key is right
-    return Secrets.matches(request.headerValue(Inbox.InternalHeader), internalKey);
+    return Secrets.matches(request.singleHeaderValue(Inbox.InternalHeader), internalKey);
   }
 
   // Signing users in
@@ -394,7 +394,7 @@ final class Endpoints {
 
   /// The bearer token of the request, or null if it has none
   private static String bearerToken(HttpRequest<byte[]> request) {
-    String authorization = request.headerValue("Authorization");
+    String authorization = request.singleHeaderValue("Authorization");
     if (authorization == null || !authorization.regionMatches(true, 0, "Bearer ", 0, 7))
       return null;
     return authorization.substring(7).trim();
@@ -493,10 +493,9 @@ final class Endpoints {
 
   /// The headers with those of a JSON response kept out of caches
   private static Headers noStore(Headers headers) {
-    return headers
-        .with("Content-Type", "application/json;charset=UTF-8")
-        .with("Cache-Control", "no-store")
-        .with("Pragma", "no-cache");
+    var builder = Headers.builder().add(headers).set("Content-Type", "application/json;charset=UTF-8");
+    noCache.forEach(builder::set);
+    return builder.build();
   }
 
   private static HttpResponse<byte[]> withHeader(HttpResponse<byte[]> response, String name, String value) {

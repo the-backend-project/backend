@@ -272,9 +272,10 @@ The verifier accepts JWT access tokens as profiled by [RFC 9068](https://www.rfc
 with the claims `sub` and `client_id`. A refused request is answered as
 [RFC 6750](https://www.rfc-editor.org/rfc/rfc6750#section-3) says, with a `WWW-Authenticate` header: 401 and the
 challenge `Bearer` without a bearer token, 401 and the error `invalid_token` with a token that is invalid or expired,
-and 403 and the error `insufficient_scope` with a token lacking a scope. An authorizer returns an `Authorization`,
-either `Authorized` with the subject or `Refused` with the status code, challenge and reason of the response;
-`Authorization.refused(reason)` refuses with 400.
+403 and the error `insufficient_scope` with a token lacking a scope, and 400 and the error `invalid_request` with
+several `Authorization` headers, as a proxy in front may have checked another one than the first. An authorizer
+returns an `Authorization`, either `Authorized` with the subject or `Refused` with the status code, challenge and reason
+of the response; `Authorization.refused(reason)` refuses with 400.
 
 `HttpInbox.bearerToken(verify, realm, subject, scopes...)` does the same with a function verifying the token, e.g. with
 the keys of an issuer the application is itself, a realm for the challenge, and the subject the request is authorized

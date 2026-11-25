@@ -33,11 +33,7 @@ public record HttpResponse<T>(int statusCode, String reasonPhrase, Headers heade
   }
 
   public static HttpResponse<Void> create(int statusCode, String reasonPhrase) {
-    return create(statusCode, reasonPhrase, Headers.none());
-  }
-
-  public static HttpResponse<Void> create(int statusCode, String reasonPhrase, Headers headers) {
-    return new HttpResponse<>(statusCode, reasonPhrase, headers, null);
+    return new HttpResponse<>(statusCode, reasonPhrase, Headers.none(), null);
   }
 
   public static HttpResponse<Void> create(int statusCode, String reasonPhrase, Map<String, String> headers) {
@@ -45,11 +41,7 @@ public record HttpResponse<T>(int statusCode, String reasonPhrase, Headers heade
   }
 
   public static <T> HttpResponse<T> create(int statusCode, String reasonPhrase, T body) {
-    return create(statusCode, reasonPhrase, Headers.none(), body);
-  }
-
-  public static <T> HttpResponse<T> create(int statusCode, String reasonPhrase, Headers headers, T body) {
-    return new HttpResponse<>(statusCode, reasonPhrase, headers, body);
+    return new HttpResponse<>(statusCode, reasonPhrase, Headers.none(), body);
   }
 
   public static <T> HttpResponse<T> create(int statusCode, String reasonPhrase, Map<String, String> headers, T body) {

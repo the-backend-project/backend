@@ -4,6 +4,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.github.thxmasj.backend.http.Headers;
 import com.github.thxmasj.backend.http.HttpRequest;
 import com.github.thxmasj.backend.http.HttpRequest.Method;
 import com.github.thxmasj.backend.http.inbox.AccessTokenVerifier.AccessToken;
@@ -151,6 +152,19 @@ public class AccessTokenVerifierTest {
     );
     assertThat(authorize(Map.of("Authorization", "Bearer " + token(otherKey, c -> c)))).isEqualTo(refused);
     assertThat(authorize(Map.of("Authorization", "Bearer " + token(key, c -> c.expirationTime(Date.from(now)))))).isEqualTo(refused);
+  }
+
+  /// A proxy in front may have checked another one of several Authorization headers than the first
+  @Test
+  public void whenAuthorizingWithSeveralAuthorizationHeadersThenBadRequest() {
+    String token = token(key, c -> c);
+    var headers = Headers.builder().add("Authorization", "Bearer " + token).add("authorization", "Bearer " + token).build();
+    assertThat(HttpInbox.<Void>bearerToken(verifier).apply(new HttpRequest<>(Method.POST, URI.create("/payments"), headers, null), null))
+        .isEqualTo(new Refused(
+            400,
+            "Bearer error=\"invalid_request\", error_description=\"Several Authorization headers\"",
+            "Several Authorization headers"
+        ));
   }
 
   @Test

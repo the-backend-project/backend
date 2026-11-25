@@ -74,7 +74,7 @@ public class HttpMessageTest {
 
   @Test
   public void messageWithoutHeadersHasNoneRatherThanNull() {
-    assertThrows(NullPointerException.class, () -> HttpResponse.create(204, "No Content", (Headers) null));
+    assertThrows(NullPointerException.class, () -> new HttpResponse<>(204, "No Content", (Headers) null));
     assertThrows(NullPointerException.class, () -> new HttpRequest<>(Method.GET, URI.create("/"), (Headers) null));
     assertThrows(NullPointerException.class, () -> new HttpRequest<>(Method.GET, URI.create("/"), (Map<String, String>) null));
   }

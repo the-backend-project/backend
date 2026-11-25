@@ -40,11 +40,7 @@ public record HttpRequest<T>(Method method, URI uri, Headers headers, T body) im
   }
 
   public static HttpRequest<Void> create(Method method, URI uri) {
-    return create(method, uri, Headers.none());
-  }
-
-  public static HttpRequest<Void> create(Method method, URI uri, Headers headers) {
-    return new HttpRequest<>(method, uri, headers, null);
+    return new HttpRequest<>(method, uri, Headers.none(), null);
   }
 
   public static HttpRequest<Void> create(Method method, URI uri, Map<String, String> headers) {
@@ -52,11 +48,7 @@ public record HttpRequest<T>(Method method, URI uri, Headers headers, T body) im
   }
 
   public static <T> HttpRequest<T> create(Method method, URI uri, T body) {
-    return create(method, uri, Headers.none(), body);
-  }
-
-  public static <T> HttpRequest<T> create(Method method, URI uri, Headers headers, T body) {
-    return new HttpRequest<>(method, uri, headers, body);
+    return new HttpRequest<>(method, uri, Headers.none(), body);
   }
 
   public static <T> HttpRequest<T> create(Method method, URI uri, Map<String, String> headers, T body) {

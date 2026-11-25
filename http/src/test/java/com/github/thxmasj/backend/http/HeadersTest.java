@@ -62,18 +62,34 @@ public class HeadersTest {
     assertEquals(Headers.none(), Headers.of(Map.of()));
   }
 
-  /// A line break would end the header in the stored message, and a name is a token of RFC 9110, which excludes e.g. a
-  /// colon, which would split the line elsewhere, and the pseudo-headers of HTTP/2
+  /// A line break would end the header in the stored message, a colon in a name would split the line elsewhere, as for
+  /// the pseudo-headers of HTTP/2, and whitespace around a name would be lost when it is read back
   @Test
-  public void fieldsWhichCantBeWrittenAsAHeaderLineAreRejected() {
+  public void fieldsWhichCantBeStoredAsALineAreRejected() {
     assertThrows(IllegalArgumentException.class, () -> Headers.of("X-A", "1\r\nX-B: 2"));
     assertThrows(IllegalArgumentException.class, () -> Headers.of("X-A:", "1"));
-    assertThrows(IllegalArgumentException.class, () -> Headers.of("", "1"));
     assertThrows(IllegalArgumentException.class, () -> Headers.of(":status", "200"));
-    assertThrows(IllegalArgumentException.class, () -> Headers.of("X A", "1"));
-    // Not ASCII, which names compared without case would otherwise hash differently from equal ones
-    assertThrows(IllegalArgumentException.class, () -> Headers.of("\u0130", "1"));
-    assertEquals("1", Headers.of("X-Custom_Header.v1~!", "1").firstValue("x-custom_header.V1~!").orElseThrow());
+    assertThrows(IllegalArgumentException.class, () -> Headers.of("", "1"));
+    assertThrows(IllegalArgumentException.class, () -> Headers.of(" X-A", "1"));
     assertThrows(NullPointerException.class, () -> Headers.of("X-A", null));
+  }
+
+  /// A name which isn't a token of RFC 9110, which an application may have made and an earlier version stored, can be
+  /// read back, and is compared and hashed consistently, also when it isn't ASCII
+  @Test
+  public void namesWhichArentTokensAreKeptAndComparedConsistently() {
+    assertEquals("1", Headers.of("X Trace", "1").firstValue("x trace").orElseThrow());
+    var dotted = Headers.of("\u0130", "1");
+    var plain = Headers.of("i", "1");
+    assertEquals(dotted, plain);
+    assertEquals(dotted.hashCode(), plain.hashCode());
+  }
+
+  /// A CR, LF or NUL in a value received is replaced by a space, as RFC 9110 section 5.5 lets a recipient do, rather
+  /// than failing the request or response
+  @Test
+  public void lineBreaksInValuesReceivedAreReplacedBySpaces() {
+    var received = Headers.ofEntries(List.of(Map.entry("X-A", "a\rb\nc\0d"), Map.entry("X-B", "e")));
+    assertEquals(List.of(new Field("X-A", "a b c d"), new Field("X-B", "e")), received.fields());
   }
 }

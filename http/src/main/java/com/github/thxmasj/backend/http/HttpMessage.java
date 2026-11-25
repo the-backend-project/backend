@@ -24,6 +24,14 @@ public sealed interface HttpMessage<T> permits HttpRequest, HttpResponse {
     return headers().firstValue(name).orElse(null);
   }
 
+  /// The value of a header a message may have only once, e.g. `Authorization`, whose name is compared without case, or
+  /// null if the message has none, or several, which a recipient can't choose between: a proxy in front may have
+  /// checked another one than the first
+  default String singleHeaderValue(String name) {
+    List<String> values = headers().allValues(name);
+    return values.size() == 1 ? values.getFirst() : null;
+  }
+
   /// The values of the header, whose name is compared without case, in order, or none if the message has none
   default List<String> headerValues(String name) {
     return headers().allValues(name);

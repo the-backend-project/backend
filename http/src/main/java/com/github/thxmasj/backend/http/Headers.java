@@ -5,7 +5,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -27,15 +26,17 @@ public final class Headers {
 
   private static final Headers none = new Headers(List.of());
 
-  /// A header field: a name and one of its values. The name is a token of RFC 9110 section 5.6.2, which excludes e.g.
-  /// the pseudo-headers of HTTP/2, such as `:status`, and the value has no line break, so that the field can be stored
-  /// as a line.
+  /// A header field: a name and one of its values, which can be stored as a line `name:value` and read back as they
+  /// were: the name is not blank, has no colon, which excludes e.g. the pseudo-headers of HTTP/2, such as `:status`, no
+  /// line break and no whitespace around it, and the value has no line break. The names of the headers received are
+  /// tokens of RFC 9110 section 5.6.2, which the HTTP servers and clients check, but a name made by an application or
+  /// stored by an earlier version need not be.
   public record Field(String name, String value) {
 
     public Field {
       Objects.requireNonNull(name, "name");
       Objects.requireNonNull(value, "value");
-      if (!isToken(name))
+      if (name.isEmpty() || !name.strip().equals(name) || name.chars().anyMatch(c -> c == ':' || c == '\r' || c == '\n'))
         throw new IllegalArgumentException("Invalid header name: <" + name + ">");
       if (value.chars().anyMatch(c -> c == '\r' || c == '\n'))
         throw new IllegalArgumentException("Invalid value of header " + name + ": line break");
@@ -45,16 +46,10 @@ public final class Headers {
     public boolean is(String name) {
       return this.name.equalsIgnoreCase(name);
     }
-
-    /// Whether the name is a token, of the characters `tchar` of RFC 9110 section 5.6.2, which are ASCII
-    public static boolean isToken(String name) {
-      return !name.isEmpty()
-          && name.chars().allMatch(c -> c < 128 && (Character.isLetterOrDigit(c) || "!#$%&'*+-.^_`|~".indexOf(c) >= 0));
-    }
   }
 
   private final List<Field> fields;
-  /// The values of each name, by the name in lower case, joined with `, `, which equality compares. Made when first
+  /// The values of each name, by the name [#folded(String)], joined with `, `, which equality compares. Made when first
   /// needed, and immutable, so made again at most when used by several threads at once.
   private Map<String, String> combined;
 
@@ -76,11 +71,18 @@ public final class Headers {
   }
 
   /// A header for each entry, in order, e.g. the header lines of a message as Netty received them, where a name may
-  /// appear several times
+  /// appear several times. A CR, LF or NUL in a value, which the server or client may have let through, is replaced
+  /// by a space, as RFC 9110 section 5.5 lets a recipient do, rather than failing the message.
   public static Headers ofEntries(List<? extends Map.Entry<String, String>> entries) {
     var builder = builder();
-    entries.forEach(e -> builder.add(e.getKey(), e.getValue()));
+    entries.forEach(e -> builder.add(e.getKey(), received(e.getValue())));
     return builder.build();
+  }
+
+  private static String received(String value) {
+    return value.indexOf('\r') < 0 && value.indexOf('\n') < 0 && value.indexOf('\0') < 0
+        ? value
+        : value.replace('\r', ' ').replace('\n', ' ').replace('\0', ' ');
   }
 
   /// The header with the value
@@ -174,14 +176,22 @@ public final class Headers {
   private Map<String, String> combined() {
     Map<String, String> result = combined;
     if (result == null) {
-      // Names are ASCII, so lower case is the same in every locale
       var map = new HashMap<String, String>();
       for (Field field : fields)
-        map.merge(field.name().toLowerCase(Locale.ROOT), field.value(), (a, b) -> a + ", " + b);
+        map.merge(folded(field.name()), field.value(), (a, b) -> a + ", " + b);
       result = Map.copyOf(map);
       combined = result;
     }
     return result;
+  }
+
+  /// The name with its case folded a character at a time, as [String#equalsIgnoreCase(String)] compares names, so
+  /// that names equal without case have the same folded name, also when they aren't ASCII
+  private static String folded(String name) {
+    var folded = new StringBuilder(name.length());
+    for (int i = 0; i < name.length(); i++)
+      folded.append(Character.toLowerCase(Character.toUpperCase(name.charAt(i))));
+    return folded.toString();
   }
 
   private static Builder builder(Headers headers) {

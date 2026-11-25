@@ -449,7 +449,7 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
                                     .assembleInput()
                                     .output(d -> d).masked(shape::maskedResponse)
                         ),
-                    d -> HttpResponse.create(
+                    d -> new HttpResponse<>(
                         d.t1().statusCode(),
                         d.t1().reasonPhrase(),
                         d.t1().headers(),

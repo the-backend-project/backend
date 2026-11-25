@@ -364,8 +364,14 @@ request.headers().without("Cookie")                         // removes every val
 A message is stored in the event log as its start line, a line per value of a header, and its body. Messages are equal
 if their headers have the same values for each name, compared without case, with the values of a name joined in order
 with `, `, as a recipient may join them (RFC 9110 section 5.3). A header sent once as `a, b` thereby equals one sent
-twice, as `a` and `b`, e.g. a request retried through a proxy which joins them. A name is a token of RFC 9110, which
-the pseudo-headers of HTTP/2, such as `:status`, are not.
+twice, as `a` and `b`, e.g. a request retried through a proxy which joins them. A header stored as a line, so a name
+has no colon, which excludes the pseudo-headers of HTTP/2, such as `:status`, and a value has no line break. A CR, LF or
+NUL in a value received is replaced by a space, as RFC 9110 section 5.5 allows.
+
+`singleHeaderValue(name)` is the value of a header a message may have only once, such as `Authorization`, or null if it
+has several, which the bearer token authorizer of an inbox refuses with 400 Bad Request, as a proxy in front may have
+checked another one than the first. A header masked in the event log, e.g. `Cookie`, is stored with one `***` for all
+its values, so a retry with the same cookies in another number of headers compares equal.
 
 ## Finding the requests of a process
 

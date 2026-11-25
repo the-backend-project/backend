@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test;
 public class CookiesTest {
 
   private static HttpRequest<Void> request(Headers headers) {
-    return HttpRequest.create(Method.GET, URI.create("/"), headers);
+    return new HttpRequest<>(Method.GET, URI.create("/"), headers);
   }
 
   @Test
@@ -30,6 +30,14 @@ public class CookiesTest {
     assertEquals("2", Cookies.value(request, "b"));
     assertEquals("T", Cookies.value(request, "backoffice_session"));
     assertNull(Cookies.value(request, "c"));
+  }
+
+  /// The values of several headers joined with `, `, e.g. by a proxy or by the inbox of an earlier version
+  @Test
+  public void theCookieIsFoundInTheJoinedValuesOfSeveralHeaders() {
+    var request = request(Headers.of("Cookie", "a=1, backoffice_session=T"));
+    assertEquals("T", Cookies.value(request, "backoffice_session"));
+    assertEquals("1", Cookies.value(request, "a"));
   }
 
 }

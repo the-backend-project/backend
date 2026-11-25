@@ -22,16 +22,19 @@ public class MaskingTest {
     assertEquals(Headers.of(Map.of("Set-Cookie", "***", "Location", "/")), Masking.CREDENTIALS.mask(response).headers());
   }
 
-  /// Every value of a header is masked, e.g. each cookie a response sets, and each Cookie header of a request
+  /// The values of a header are masked by one mask, e.g. of the cookies a response sets, so that a request equals a
+  /// retry of it with the same cookies in another number of Cookie headers, which can't be told apart once masked
   @Test
-  public void everyValueOfAHeaderIsMasked() {
+  public void theValuesOfAHeaderAreMaskedByOne() {
     var response = new HttpResponse<byte[]>(302, "Found", Headers.builder().add("Set-Cookie", "a=1").add("Location", "/").add("set-cookie", "b=2").build(), null);
     assertEquals(
-        Headers.builder().add("Set-Cookie", "***").add("Location", "/").add("set-cookie", "***").build().fields(),
+        Headers.builder().add("Set-Cookie", "***").add("Location", "/").build().fields(),
         Masking.CREDENTIALS.mask(response).headers().fields()
     );
-    var request = new HttpRequest<byte[]>(Method.GET, URI.create("/"), Headers.builder().add("Cookie", "a=1").add("Cookie", "b=2").build(), null);
-    assertEquals(List.of("***", "***"), Masking.CREDENTIALS.mask(request).headerValues("Cookie"));
+    var apart = new HttpRequest<byte[]>(Method.GET, URI.create("/"), Headers.builder().add("Cookie", "a=1").add("Cookie", "b=2").build(), null);
+    var joined = new HttpRequest<byte[]>(Method.GET, URI.create("/"), Headers.of("Cookie", "a=1; b=2"), null);
+    assertEquals(List.of("***"), Masking.CREDENTIALS.mask(apart).headerValues("Cookie"));
+    assertEquals(Masking.CREDENTIALS.mask(joined), Masking.CREDENTIALS.mask(apart));
   }
 
   @Test

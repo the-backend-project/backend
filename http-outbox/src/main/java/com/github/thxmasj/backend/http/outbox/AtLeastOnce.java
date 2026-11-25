@@ -382,7 +382,7 @@ public final class AtLeastOnce<RQ> implements HttpOutboxRequest<RQ> {
                 .when(d -> d.t2().isValid())
                 .then(
                     validResponseTransition(shape),
-                    d -> HttpResponse.create(
+                    d -> new HttpResponse<>(
                         d.t1().statusCode(),
                         d.t1().reasonPhrase(),
                         d.t1().headers(),

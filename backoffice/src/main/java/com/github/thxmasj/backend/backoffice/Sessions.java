@@ -11,6 +11,8 @@ import static com.github.thxmasj.backend.core.Validated.valid;
 import static com.github.thxmasj.backend.http.inbox.HttpInbox.Request;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.github.thxmasj.backend.core.BasicEventType;
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EntityModel;
@@ -44,7 +46,6 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.URI;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -186,17 +187,29 @@ final class Sessions {
 
   /// A response of the backoffice
   ///
-  /// @param headers the headers, but for those setting cookies
-  /// @param cookies the cookies set, each by a `Set-Cookie` header of its own, as they can't be joined in one. None in
-  ///                a reply stored without them.
-  record Reply(int status, Map<String, String> headers, List<String> cookies, String body) {
+  /// @param headers the header fields, in order, where a name may repeat, e.g. `Set-Cookie` for each cookie set
+  record Reply(int status, List<Headers.Field> headers, String body) {
 
     Reply {
-      cookies = cookies != null ? List.copyOf(cookies) : List.of();
+      headers = List.copyOf(headers);
     }
 
-    Reply(int status, Map<String, String> headers, String body) {
-      this(status, headers, List.of(), body);
+    Reply(int status, Headers headers, String body) {
+      this(status, headers.fields(), body);
+    }
+
+    /// The reply as stored: with its headers a list of fields, or, as stored before a header could have several
+    /// values, an object of a value per name
+    @JsonCreator
+    static Reply stored(@JsonProperty("status") int status, @JsonProperty("headers") Object headers, @JsonProperty("body") String body) {
+      var fields = Headers.builder();
+      if (headers instanceof Map<?, ?> byName)
+        byName.forEach((name, value) -> fields.add(String.valueOf(name), String.valueOf(value)));
+      else if (headers instanceof List<?> list)
+        for (Object field : list)
+          if (field instanceof Map<?, ?> f)
+            fields.add(String.valueOf(f.get("name")), String.valueOf(f.get("value")));
+      return new Reply(status, fields.build(), body);
     }
   }
 
@@ -308,11 +321,11 @@ final class Sessions {
       DataType.json(Reply.class)
   );
 
-  private static final Map<String, String> securityHeaders = Map.of(
-      "Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
-      "X-Content-Type-Options", "nosniff",
-      "Referrer-Policy", "same-origin"
-  );
+  private static final Headers securityHeaders = Headers.builder()
+      .add("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+      .add("X-Content-Type-Options", "nosniff")
+      .add("Referrer-Policy", "same-origin")
+      .build();
   private static final Map<String, String> staticFiles = Map.of(
       "htmx.min.js", "text/javascript;charset=UTF-8",
       "backoffice.css", "text/css;charset=UTF-8"
@@ -661,9 +674,7 @@ final class Sessions {
   }
 
   private static Reply reload() {
-    var headers = noStore();
-    headers.put("HX-Refresh", "true");
-    return new Reply(401, headers, "");
+    return new Reply(401, noStore().add("HX-Refresh", "true").build(), "");
   }
 
   private Reply failurePage(Failure failure) {
@@ -689,9 +700,11 @@ final class Sessions {
         return text(404, "Not Found\n");
       if (!get)
         return methodNotAllowed();
-      var headers = new HashMap<>(securityHeaders);
-      headers.put("Content-Type", staticFiles.get(name));
-      headers.put("Cache-Control", "public, max-age=3600");
+      var headers = Headers.builder()
+          .add(securityHeaders)
+          .add("Content-Type", staticFiles.get(name))
+          .add("Cache-Control", "public, max-age=3600")
+          .build();
       return new Reply(200, headers, content);
     }
     return text(404, "Not Found\n");
@@ -734,51 +747,38 @@ final class Sessions {
   }
 
   private static Reply html(int status, String html) {
-    var headers = noStore();
-    headers.put("Content-Type", "text/html;charset=UTF-8");
-    return new Reply(status, headers, html);
+    return new Reply(status, noStore().add("Content-Type", "text/html;charset=UTF-8").build(), html);
   }
 
   private static Reply text(int status, String text) {
-    var headers = new HashMap<>(securityHeaders);
-    headers.put("Content-Type", "text/plain;charset=UTF-8");
-    return new Reply(status, headers, text);
+    return new Reply(status, securityHeaders.plus("Content-Type", "text/plain;charset=UTF-8"), text);
   }
 
   private static Reply redirect(String location, String cookie) {
-    var headers = noStore();
-    headers.put("Location", location);
-    return new Reply(303, headers, cookie != null ? List.of(cookie) : List.of(), "");
+    var headers = noStore().add("Location", location);
+    if (cookie != null)
+      headers.add("Set-Cookie", cookie);
+    return new Reply(303, headers.build(), "");
   }
 
   private static Reply methodNotAllowed() {
-    var headers = new HashMap<>(securityHeaders);
-    headers.put("Allow", "GET");
-    return new Reply(405, headers, "");
+    return new Reply(405, securityHeaders.plus("Allow", "GET"), "");
   }
 
+  /// The reply setting the cookie as well, after any cookies it sets already
   private static Reply withCookie(Reply reply, String cookie) {
-    var cookies = new ArrayList<>(reply.cookies());
-    cookies.add(cookie);
-    return new Reply(reply.status(), reply.headers(), cookies, reply.body());
+    return new Reply(reply.status(), Headers.of(reply.headers()).plus("Set-Cookie", cookie), reply.body());
   }
 
-  private static HashMap<String, String> noStore() {
-    var headers = new HashMap<>(securityHeaders);
-    headers.put("Cache-Control", "no-store");
-    return headers;
+  private static Headers.Builder noStore() {
+    return Headers.builder().add(securityHeaders).add("Cache-Control", "no-store");
   }
 
-  /// The response of the reply. A reply stored before it had cookies of its own has a cookie in its headers.
   private static HttpResponse<byte[]> response(Reply reply, String correlationId) {
-    var headers = Headers.builder();
-    reply.headers().forEach(headers::add);
-    reply.cookies().forEach(cookie -> headers.add("Set-Cookie", cookie));
-    headers.add("X-Correlation-Id", correlationId);
     return new HttpResponse<>(
         reply.status(),
         reasonPhrase(reply.status()),
-        headers.build(),
+        Headers.of(reply.headers()).plus("X-Correlation-Id", correlationId),
         reply.body().isEmpty() ? null : reply.body().getBytes(UTF_8)
     );
   }

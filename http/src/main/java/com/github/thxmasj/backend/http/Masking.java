@@ -4,6 +4,8 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 import java.net.URI;
 import java.net.URLDecoder;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -169,13 +171,22 @@ public record Masking(
     return !names.isEmpty() && original.stream().anyMatch(field -> names.contains(field.name().toLowerCase(Locale.ROOT)));
   }
 
-  /// The headers with every value of the names masked, e.g. each cookie a response sets
+  /// The headers with the values of each of the names masked by one [#MASK], where its first value was, e.g. for the
+  /// cookies a response sets. How many values it had is not kept, so that a request compares equal to a retry of it
+  /// sending the same cookies in another number of `Cookie` headers, and to one stored with them joined in one.
   private static Headers maskHeaders(Headers original, Set<String> names) {
     if (!hasMaskedHeader(original, names))
       return original;
-    return Headers.of(original.stream()
-        .map(field -> names.contains(field.name().toLowerCase(Locale.ROOT)) ? new Headers.Field(field.name(), MASK) : field)
-        .toList());
+    var masked = new ArrayList<Headers.Field>();
+    var seen = new HashSet<String>();
+    for (Headers.Field field : original.fields()) {
+      String name = field.name().toLowerCase(Locale.ROOT);
+      if (!names.contains(name))
+        masked.add(field);
+      else if (seen.add(name))
+        masked.add(new Headers.Field(field.name(), MASK));
+    }
+    return Headers.of(masked);
   }
 
   /// The URI with the query masked. The query starts at the first `?`, which a path can't have, and ends at a
