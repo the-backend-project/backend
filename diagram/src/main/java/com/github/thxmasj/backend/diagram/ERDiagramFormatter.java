@@ -151,7 +151,7 @@ public class ERDiagramFormatter {
       Set<Relation> relations
   ) {
     for (EventTrigger<?, ?, ?> trigger : triggers) {
-      EventType<?, ?> triggered = trigger.eventSpec().eventType();
+      EventType<?, ?> triggered = trigger.eventType();
       String label = eventType.name() + " ↪ " + triggered.name();
       for (EntityModel target : targets(trigger.entityModel() != null ? trigger.entityModel() : entity)) {
         if (!shown(target)) continue;

@@ -21,7 +21,6 @@ import com.github.thxmasj.backend.core.EntitySelector;
 import com.github.thxmasj.backend.core.Event;
 import com.github.thxmasj.backend.core.EventLog;
 import com.github.thxmasj.backend.core.EventTrigger;
-import com.github.thxmasj.backend.core.EventTrigger.EventSpec;
 import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.GroupedDataType;
 import com.github.thxmasj.backend.core.IdEntityModel;
@@ -205,7 +204,7 @@ public class IdEventTest {
   }
 
   private static String read(StateMachine machine, EntitySelector selector) {
-    return (String) machine.onEvent(new EventTrigger<Void, Void, String>(new EventSpec<>(StatementLookedUp, d -> d), List.of(_ -> selector), Statement, false))
+    return (String) machine.onEvent(new EventTrigger.Immediate<Void, Void, String>(StatementLookedUp, d -> d, _ -> selector, Statement))
         .blockFirst()
         .getUnmarshalledData();
   }

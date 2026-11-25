@@ -17,7 +17,7 @@ final class InboxModels implements HttpInbox {
   private final List<HttpInboxRequest<?>> requests;
   private final Memoized<List<EntityModel>> entityModels;
   private final String correlationIdHeader;
-  private final EventTrigger<HttpRequest<byte[]>, HttpRequest<byte[]>, ?> trigger;
+  private final EventTrigger.Immediate<HttpRequest<byte[]>, HttpRequest<byte[]>, ?> trigger;
 
   private InboxModels(List<HttpInboxRequest<?>> requests) {
     this.requestRouting = new RequestRoutingModel(requests);
@@ -41,7 +41,7 @@ final class InboxModels implements HttpInbox {
     return new InboxModels(requests);
   }
 
-  private static EventTrigger<HttpRequest<byte[]>, HttpRequest<byte[]>, ?> trigger(
+  private static EventTrigger.Immediate<HttpRequest<byte[]>, HttpRequest<byte[]>, ?> trigger(
       EntityModel requestRouting,
       String correlationIdHeader
   ) {
@@ -78,7 +78,7 @@ final class InboxModels implements HttpInbox {
   }
 
   @Override
-  public EventTrigger<HttpRequest<byte[]>, HttpRequest<byte[]>, ?> trigger() {
+  public EventTrigger.Immediate<HttpRequest<byte[]>, HttpRequest<byte[]>, ?> trigger() {
     return trigger;
   }
 

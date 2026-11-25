@@ -492,7 +492,7 @@ public class HttpOutboxTest {
         .orElseThrow();
     assertEquals(1, timeoutTransition.triggers().size());
     var trigger = timeoutTransition.triggers().getFirst();
-    assertEquals(model.responseMissed(), trigger.eventSpec().eventType());
+    assertEquals(model.responseMissed(), trigger.eventType());
     assertEquals(model.process(), trigger.entityModel());
 
     UUID processEntityId = UUID.randomUUID();
@@ -512,7 +512,7 @@ public class HttpOutboxTest {
 
     var triggerContext = (TriggerStep<?, ?>) occ.previous();
     assertNotNull(triggerContext);
-    assertEquals(model.responseMissed(), triggerContext.eventTrigger().eventSpec().eventType());
+    assertEquals(model.responseMissed(), triggerContext.eventTrigger().eventType());
     assertEquals(model.process(), triggerContext.eventTrigger().entityModel());
   }
 
@@ -597,7 +597,7 @@ public class HttpOutboxTest {
       }
     }
     assertNotNull(triggerContext);
-    assertEquals(processSucceeded, triggerContext.eventTrigger().eventSpec().eventType());
+    assertEquals(processSucceeded, triggerContext.eventTrigger().eventType());
     assertEquals(process, triggerContext.eventTrigger().entityModel());
   }
 
@@ -714,7 +714,7 @@ public class HttpOutboxTest {
         .findFirst()
         .orElseThrow();
     assertEquals(1, timeoutTransition.triggers().size());
-    assertEquals(TimeoutExpired, timeoutTransition.triggers().getFirst().eventSpec().eventType());
+    assertEquals(TimeoutExpired, timeoutTransition.triggers().getFirst().eventType());
   }
 
   /// An accepted request is sent again on demand as a retry would send it, as the repeat message creator makes it of

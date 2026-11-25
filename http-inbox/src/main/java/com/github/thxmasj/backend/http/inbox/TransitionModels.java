@@ -662,7 +662,7 @@ interface TransitionModels {
       for (var transition : taken) {
         for (var trigger : immediateTriggers(transition)) {
           EntityModel target = trigger.entityModel() != null ? trigger.entityModel() : event.entityModel();
-          EventType<?, ?> triggered = trigger.eventSpec().eventType();
+          EventType<?, ?> triggered = trigger.eventType();
           if (target instanceof EntityModelGroup group && group.includes(request))
             given.add(new Given(event, triggered));
           else if (!(target instanceof EntityModelGroup) && !isInboxModel(target))
@@ -683,7 +683,7 @@ interface TransitionModels {
   private static List<EventTrigger<?, ?, ?>> immediateTriggers(TransitionModel<?, ?> transition) {
     var triggers = new ArrayList<EventTrigger<?, ?, ?>>();
     for (var trigger : transition.triggers()) {
-      if (trigger.condition() == null)
+      if (!(trigger instanceof EventTrigger.Conditional<?, ?, ?>))
         triggers.add(trigger);
     }
     for (var filter : transition.filters())

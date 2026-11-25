@@ -105,6 +105,14 @@ onEvent(StockReserved).toSelf()
     .output(remaining -> remaining)
 ```
 
+`identifiedBy` takes the entity selector of the entity the event is triggered on. An entity selected by an id event can
+have a fallback, which selects it if no entity has the id, e.g. the last settlement of the merchant for a batch number
+not claimed yet:
+
+```java
+.identifiedBy(d -> idEvent(BatchNumberClaimed, d.batchNumber(), lastIndexed(BatchIndexed, d.merchantId())))
+```
+
 ```mermaid
 flowchart TB
     subgraph order ["Order: OrderPlaced, EventType#lt;OrderLine, OrderLine#gt;"]

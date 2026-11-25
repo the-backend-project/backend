@@ -1161,24 +1161,12 @@ public class HttpInboxTest {
   }
 
   @Test
-  public void entityCanNotBeCreatedInGroup() {
-    var trigger = new EventTrigger<HttpRequest<byte[]>, HttpRequest<byte[]>, Void>(
-        new EventTrigger.EventSpec<>(HttpInbox.RequestReceived, d -> d),
-        List.of(newEntityId()),
-        Request,
-        true
-    );
-    assertThatThrownBy(() -> stateMachine.onEvent(trigger, new HttpRequest<>(PUT, URI.create("/x"), Headers.of(), null)).blockLast(Duration.ofSeconds(5)))
-        .hasMessageContaining("can't be created in the group Request");
-  }
-
-  @Test
   public void entityOfGroupCanOnlyBeIdentifiedBySession() {
-    var trigger = new EventTrigger<HttpRequest<byte[]>, HttpRequest<byte[]>, Void>(
-        new EventTrigger.EventSpec<>(HttpInbox.RequestReceived, d -> d),
-        List.of(_ -> EntitySelector.entityId(UUID.randomUUID())),
-        Request,
-        false
+    var trigger = new EventTrigger.Immediate<HttpRequest<byte[]>, HttpRequest<byte[]>, Void>(
+        HttpInbox.RequestReceived,
+        d -> d,
+        _ -> EntitySelector.entityId(UUID.randomUUID()),
+        Request
     );
     assertThatThrownBy(() -> stateMachine.onEvent(trigger, new HttpRequest<>(PUT, URI.create("/x"), Headers.of(), null)).blockLast(Duration.ofSeconds(5)))
         .hasMessageContaining("can only be identified by the session");
@@ -1537,7 +1525,7 @@ public class HttpInboxTest {
     )).data());
   }
 
-  private Event<?> onRequest(EventTrigger<HttpRequest<byte[]>, ?, ?> eventTrigger, HttpRequest<byte[]> requestMessage) {
+  private Event<?> onRequest(EventTrigger.Immediate<HttpRequest<byte[]>, ?, ?> eventTrigger, HttpRequest<byte[]> requestMessage) {
     System.out.println(getClass().getSimpleName() + ": onRequest(...) with " + requestMessage.requestLine());
     return stateMachine.onEvent(eventTrigger, requestMessage)
         .doOnNext(e -> System.out.println("Test got response: " + e.type().name()))
