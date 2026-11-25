@@ -4,6 +4,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.github.thxmasj.backend.http.Headers;
 import com.github.thxmasj.backend.http.HttpRequest;
 import com.github.thxmasj.backend.http.HttpRequest.Method;
 import com.github.thxmasj.backend.http.inbox.AccessTokenVerifier.AccessToken;
@@ -32,7 +33,6 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.Date;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.UnaryOperator;
@@ -126,15 +126,15 @@ public class AccessTokenVerifierTest {
 
   @Test
   public void whenAuthorizingValidTokenThenSubjectIsAuthorized() {
-    assertThat(authorize(Map.of("Authorization", "Bearer " + token(key, c -> c)), "payments", "refunds"))
+    assertThat(authorize(Headers.of("Authorization", "Bearer " + token(key, c -> c)), "payments", "refunds"))
         .isEqualTo(new Authorized("https://wallet.example.com"));
-    assertThat(authorize(Map.of("authorization", "bearer " + token(key, c -> c))))
+    assertThat(authorize(Headers.of("authorization", "bearer " + token(key, c -> c))))
         .isEqualTo(new Authorized("https://wallet.example.com"));
   }
 
   @Test
   public void whenAuthorizingTokenWithoutRequiredScopeThenForbiddenWithInsufficientScope() {
-    assertThat(authorize(Map.of("Authorization", "Bearer " + token(key, c -> c)), "payments", "admin"))
+    assertThat(authorize(Headers.of("Authorization", "Bearer " + token(key, c -> c)), "payments", "admin"))
         .isEqualTo(new Refused(
             403,
             "Bearer error=\"insufficient_scope\", error_description=\"Bearer token lacks the scope admin\", scope=\"payments admin\"",
@@ -149,14 +149,27 @@ public class AccessTokenVerifierTest {
         "Bearer error=\"invalid_token\", error_description=\"Bearer token is invalid or expired\"",
         "Bearer token is invalid or expired"
     );
-    assertThat(authorize(Map.of("Authorization", "Bearer " + token(otherKey, c -> c)))).isEqualTo(refused);
-    assertThat(authorize(Map.of("Authorization", "Bearer " + token(key, c -> c.expirationTime(Date.from(now)))))).isEqualTo(refused);
+    assertThat(authorize(Headers.of("Authorization", "Bearer " + token(otherKey, c -> c)))).isEqualTo(refused);
+    assertThat(authorize(Headers.of("Authorization", "Bearer " + token(key, c -> c.expirationTime(Date.from(now)))))).isEqualTo(refused);
+  }
+
+  /// A proxy in front may have checked another one of several Authorization headers than the first
+  @Test
+  public void whenAuthorizingWithSeveralAuthorizationHeadersThenBadRequest() {
+    String token = token(key, c -> c);
+    var headers = Headers.builder().add("Authorization", "Bearer " + token).add("authorization", "Bearer " + token).build();
+    assertThat(HttpInbox.<Void>bearerToken(verifier).apply(new HttpRequest<>(Method.POST, URI.create("/payments"), headers, null), null))
+        .isEqualTo(new Refused(
+            400,
+            "Bearer error=\"invalid_request\", error_description=\"Several Authorization headers\"",
+            "Several Authorization headers"
+        ));
   }
 
   @Test
   public void whenAuthorizingWithoutBearerTokenThenUnauthorizedWithoutError() {
-    assertThat(authorize(Map.of())).isEqualTo(new Refused(401, "Bearer", "Authorization header missing"));
-    assertThat(authorize(Map.of("Authorization", "Basic d2FsbGV0OnNlY3JldA==")))
+    assertThat(authorize(Headers.of())).isEqualTo(new Refused(401, "Bearer", "Authorization header missing"));
+    assertThat(authorize(Headers.of("Authorization", "Basic d2FsbGV0OnNlY3JldA==")))
         .isEqualTo(new Refused(401, "Bearer", "Authorization token is not of type Bearer"));
   }
 
@@ -211,7 +224,7 @@ public class AccessTokenVerifierTest {
         .hasMessageContaining("Failed to fetch the keys from http://localhost:1/jwks.json");
   }
 
-  private Authorization authorize(Map<String, String> headers, String... requiredScopes) {
+  private Authorization authorize(Headers headers, String... requiredScopes) {
     return HttpInbox.<Void>bearerToken(verifier, requiredScopes)
         .apply(new HttpRequest<>(Method.POST, URI.create("/payments"), headers, null), null);
   }

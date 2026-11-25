@@ -4,10 +4,10 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 import java.net.URI;
 import java.net.URLDecoder;
-import java.util.LinkedHashMap;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
@@ -167,16 +167,26 @@ public record Masking(
         || !other.formFields.containsAll(formFields);
   }
 
-  private static boolean hasMaskedHeader(Map<String, String> original, Set<String> names) {
-    return !names.isEmpty() && original.keySet().stream().anyMatch(name -> names.contains(name.toLowerCase(Locale.ROOT)));
+  private static boolean hasMaskedHeader(Headers original, Set<String> names) {
+    return !names.isEmpty() && original.stream().anyMatch(field -> names.contains(field.name().toLowerCase(Locale.ROOT)));
   }
 
-  private static Map<String, String> maskHeaders(Map<String, String> original, Set<String> names) {
+  /// The headers with the values of each of the names masked by one [#MASK], where its first value was, e.g. for the
+  /// cookies a response sets. How many values it had is not kept, so that a request compares equal to a retry of it
+  /// sending the same cookies in another number of `Cookie` headers, and to one stored with them joined in one.
+  private static Headers maskHeaders(Headers original, Set<String> names) {
     if (!hasMaskedHeader(original, names))
       return original;
-    var masked = new LinkedHashMap<String, String>();
-    original.forEach((name, value) -> masked.put(name, names.contains(name.toLowerCase(Locale.ROOT)) ? MASK : value));
-    return masked;
+    var masked = new ArrayList<Headers.Field>();
+    var seen = new HashSet<String>();
+    for (Headers.Field field : original.fields()) {
+      String name = field.name().toLowerCase(Locale.ROOT);
+      if (!names.contains(name))
+        masked.add(field);
+      else if (seen.add(name))
+        masked.add(new Headers.Field(field.name(), MASK));
+    }
+    return Headers.of(masked);
   }
 
   /// The URI with the query masked. The query starts at the first `?`, which a path can't have, and ends at a

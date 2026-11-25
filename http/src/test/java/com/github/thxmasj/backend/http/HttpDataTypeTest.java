@@ -7,7 +7,6 @@ import com.github.thxmasj.backend.core.Tuples;
 import com.github.thxmasj.backend.core.Tuples.Tuple2;
 import com.github.thxmasj.backend.http.HttpRequest.Method;
 import java.net.URI;
-import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
@@ -25,7 +24,7 @@ public class HttpDataTypeTest {
     HttpRequest<TestPayload> request = new HttpRequest<>(
         Method.POST,
         URI.create("/api/v1/resource"),
-        Map.of("Content-Type", "application/json", "X-Request-ID", "12345"),
+        Headers.of("Content-Type", "application/json", "X-Request-ID", "12345"),
         new TestPayload("Hello World", 42)
     );
     UUID uuid = UUID.randomUUID();
@@ -47,7 +46,7 @@ public class HttpDataTypeTest {
     HttpRequest<String> request = new HttpRequest<>(
         Method.PUT,
         URI.create("https://example.com/api/test"),
-        Map.of("Authorization", "Bearer token123"),
+        Headers.of("Authorization", "Bearer token123"),
         "payload-data"
     );
     UUID uuid = UUID.randomUUID();

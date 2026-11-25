@@ -135,7 +135,8 @@ with a client secret or public without one:
 3. The outbox tells the session the response of the provider. The session verifies the ID token with the keys of the
    provider and against the nonce, and decides by the claims:
    if the configured claim has one of the permitted values, e.g. the claim `roles` the value `backoffice`, the user is
-   signed in, with a new token in the session cookie, and sent back to the page first requested. Otherwise the session
+   signed in, with a new token in the session cookie, and sent back to the page first requested. The same response
+   removes the cookie of the sign-in. Otherwise the session
    records that the sign-in was refused, with the claims of the user. The browser's request at the callback waits for
    this answer.
 

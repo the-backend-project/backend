@@ -346,6 +346,46 @@ requests are built. If one transition triggers on the outbox request the dispatc
 its `outbox()`, the state machine finds two entity models with the same id when it is created, and fails. Trigger on
 the `outbox()`.
 
+### Headers
+
+The headers of a message are `Headers`: fields of a name and a value, in the order they were sent or received, where a
+name may have several values, e.g. a `Set-Cookie` for each cookie, which can't be joined in one header. Names are looked
+up without case. `headerValue(name)` of a message is the first value of a header, or null, and `headerValues(name)` all
+of them. `Headers.of(name, value, ...)` makes headers of names and values, where a name may repeat, e.g.
+`Headers.of("Content-Type", "text/plain")`, and `Headers.builder()` makes them a field at a time. Headers are
+immutable, so a header is added to or replaced in a copy, e.g. by a forwarder:
+
+```java
+request.headers().with("Authorization", "Bearer " + token)  // replaces any value of the header
+response.headers().plus("Set-Cookie", "b=2")                // adds a value after any the header has
+request.headers().without("Cookie")                         // removes every value of the header
+```
+
+A message is stored in the event log as its start line, a line per value of a header, and its body. Messages are equal
+if their headers have the same values for each name, compared without case, with the values of a name joined in order
+with `, `, as a recipient may join them (RFC 9110 section 5.3). A header sent once as `a, b` thereby equals one sent
+twice, as `a` and `b`, e.g. a request retried through a proxy which joins them. The values of `Set-Cookie`, which can't
+be joined, are compared apart.
+
+Each header is stored as a line `name:value`, so a name may not be empty, have a colon or a line break, or start or end
+with whitespace, and a value may not have a line break. The pseudo-headers of HTTP/2, such as `:status`, are thereby
+not headers. The inbox answers a request with a header that is invalid, e.g. whose name isn't a token or whose value
+has a CR, LF or NUL, with 400 Bad Request, as RFC 9110 section 5.5 and RFC 9113 section 8.2.1 allow, rather than
+repairing it. In a response, which the request may already have taken effect by, a CR, LF or NUL in a value is replaced
+by a space, as RFC 9110 section 5.5 allows. `JdkHttpClient` gets the headers of a response sorted by name from the HTTP
+client of the JDK, so it keeps the order of the values of a name, but not the order of the names.
+
+`singleHeaderValue(name)` is the value of a header a message may have only once, such as `Authorization`, or null if it
+has several, which the bearer token authorizer of an inbox refuses with 400 Bad Request and `invalid_request` (RFC 6750
+section 3.1), as a proxy in front may have checked another one than the first. A request message must therefore not
+have a header the HTTP client of its outbox adds itself, its `fixedHeaders()`, e.g. `Authorization` of a
+`NettyHttpClient` with an access token or HTTP Basic credentials: the transition dispatching such a message fails, like
+one whose functions throw, so it is neither stored nor sent. `JdkHttpClient` has no fixed headers, and leaves out of a
+message the headers the JDK sets itself from the URI and the body, such as `Host` and `Content-Length`.
+
+A header masked in the event log, e.g. `Cookie`, is stored with one `***` for all its values, so a retry with the same
+cookies in another number of headers compares equal.
+
 ## Finding the requests of a process
 
 Every request is indexed by the id of the entity which dispatched it, `ProcessReferenced`, and a batched request also

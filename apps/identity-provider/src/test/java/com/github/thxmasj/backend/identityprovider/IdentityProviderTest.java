@@ -955,6 +955,27 @@ public class IdentityProviderTest {
     return post("/token", Map.of("Content-Type", "application/x-www-form-urlencoded", "Authorization", basic(clientId, secret)), form);
   }
 
+  /// Credentials sent more than once are an invalid request: RFC 6749 section 5.2 at the token endpoint, and RFC 6750
+  /// section 3.1 with a bearer token
+  @Test
+  public void severalAuthorizationHeadersAreAnInvalidRequest() throws Exception {
+    var token = send(HttpRequest.newBuilder(uri("/token"))
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .header("Authorization", basic("a-client", "s3cr3t"))
+        .header("Authorization", basic("b-client", "s3cr3t"))
+        .POST(HttpRequest.BodyPublishers.ofString("grant_type=client_credentials"))
+        .build());
+    assertThat(token.statusCode()).isEqualTo(400);
+    assertThat(json(token).get("error").asString()).isEqualTo("invalid_request");
+    var userInfo = send(HttpRequest.newBuilder(uri("/userinfo"))
+        .header("Authorization", "Bearer a")
+        .header("Authorization", "Bearer b")
+        .GET()
+        .build());
+    assertThat(userInfo.statusCode()).isEqualTo(400);
+    assertThat(userInfo.headers().firstValue("WWW-Authenticate")).hasValueSatisfying(v -> assertThat(v).contains("error=\"invalid_request\""));
+  }
+
   private static String basic(String clientId, String secret) {
     String credentials = URLEncoder.encode(clientId, UTF_8) + ":" + URLEncoder.encode(secret, UTF_8);
     return "Basic " + Base64.getEncoder().encodeToString(credentials.getBytes(UTF_8));
