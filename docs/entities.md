@@ -100,7 +100,12 @@ A transition has four kinds of triggers:
 * **Conditional triggers** trigger an event when the last event of every referenced entity is one of the given types,
   e.g. when all the requests of a batch are completed. They are also fired by a worker.
 * **Actions** are side effects outside the database, such as sending an HTTP request. They are run after the
-  transaction is committed, and their outcome is fed back to the entity as a new event.
+  transaction is committed, and their outcome is fed back to the entity as a new event. The outcome is the next event
+  after the one which triggered the action, like a delayed trigger: if another event is stored on the entity first,
+  such as the timeout of an [outbox request](http-outbox.md), the outcome is dropped. It is not retried on the new event
+  log, where it could be taken for the outcome of a later action, e.g. the response of a retried request. It is only
+  retried if the transaction failed on the event number of another entity it triggers an event on, which may be the
+  id or index entity of its own entity, with the same entity id.
 
 Since side effects only happen after the events causing them are stored, an entity always knows what it has started.
 If the instance stops before an action completes, a delayed trigger stored with the action, such as the timeout of an
