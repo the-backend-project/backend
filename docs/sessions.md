@@ -3,11 +3,11 @@
 The state machine processes events in three units of work, each made of one or more of the one before it. A
 transaction stores one or more transitions, and a session is one or more transactions.
 
-| Unit        | What it is                                                                                            | What it guarantees                                                         |
-|-------------|-------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------|
-| Transition  | An entity going from one state to the next on an event                                                | It is only calculated, with no side effects                                |
-| Transaction | Everything one calculation produces: the new events of the entities involved and their triggers      | All of it is stored or none of it is                                       |
-| Session     | The transactions one event entering the state machine leads to through actions                        | Its transactions share the session's entities and caller, but not atomicity |
+| Unit        | What it is                                                                                                   | What it guarantees                                                          |
+|-------------|--------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------|
+| Transition  | An entity going from one state to the next on an event                                                       | It is only calculated, with no side effects                                 |
+| Transaction | The transitions one event leads to through event triggers, whose new events and triggers are stored together | All of it is stored or none of it is                                        |
+| Session     | The transactions one event entering the state machine leads to through actions                               | Its transactions share the session's entities and caller, but not atomicity |
 
 ## Transitions
 
@@ -17,22 +17,22 @@ log of the entity and the data of the event. Nothing is stored and nothing is se
 
 A transition triggering an event on another entity (an event trigger) continues with the transition of that entity,
 nested in its own, and that one may trigger events on yet other entities in turn. The transitions an event leads to
-this way form one calculation: a chain of steps, from the input step of the first transition to its output step,
-with the steps of the nested transitions in between (see [Steps](transition-models.md#steps)).
+this way form one chain of steps, from the input step of the first transition to its output step, with the steps of
+the nested transitions in between (see [Steps](transition-models.md#steps)). They are taken in one transaction.
 
 ## Transactions
 
-When the calculation is done, its changes are [collected](transition-models.md#collecting-the-changes) from the chain
-and stored in one database transaction:
+When the transitions of the event are calculated, their changes are
+[collected](transition-models.md#collecting-the-changes) from the chain and stored in one database transaction:
 
 * the new events of every entity involved,
 * the delayed triggers (`after(..)`), such as timeouts,
 * the conditional triggers.
 
 Either all of them are stored or none of them are. If another instance has appended an event to one of the
-entities in the meantime, the transaction fails on the event number, and the calculation is done again from the new
-event logs, up to three times (see [Processing an event](entities.md#processing-an-event)). The calculation is also
-done again if an id it claims is found to be taken (see [Existing ids](existing-ids.md)). The outcome of an action
+entities in the meantime, the transaction fails on the event number, and its transitions are calculated again from
+the new event logs, up to three times (see [Processing an event](entities.md#processing-an-event)). They are also
+calculated again if an id one of them claims is found to be taken (see [Existing ids](existing-ids.md)). The outcome of an action
 is the exception, see [What a later transaction sees](#what-a-later-transaction-sees).
 
 The actions of the transitions, such as sending an [outbox request](http-outbox.md), are run only after the
@@ -115,4 +115,4 @@ session has stored an event on the entity first, e.g. a delayed trigger firing o
 not calculated again from the new event log, where it could be taken for the outcome of a later action of the entity
 (see [Processing an event](entities.md#processing-an-event)). The transitions of the entity decide what follows, e.g.
 by a timeout stored with the action. If the transaction of the outcome failed on the event number of another entity
-it triggers an event on, it is calculated again, which reads that entity's event log again.
+it triggers an event on, its transitions are calculated again, which reads that entity's event log again.
