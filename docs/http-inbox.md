@@ -84,8 +84,8 @@ created with the models of the first.
 The application responds by triggering an event of a `ResponseEventType` on the inbox request, e.g. `RequestCompleted`,
 which responds 201 Created, `InvalidRequestCompleted` (400) or `FailedRequestCompleted` (500), or one the inbox request
 has a `response` for. It doesn't know which inbox request triggered it, since several can trigger the same event, so
-it triggers the response on `HttpInbox.Request`, the group of all inbox requests, identified by the session. The state
-machine takes it to the inbox request of the session:
+it triggers the response on `HttpInbox.Request`, the group of all inbox requests, identified by the
+[session](sessions.md). The state machine takes it to the inbox request of the session:
 
 ```java
 .trigger(RequestCompleted).with(d -> tuple("Order placed", d)).on(HttpInbox.Request).identifiedBy(entityIdFromSession())
@@ -426,7 +426,7 @@ HttpInboxRequest<Void> HealthCheck = HttpInboxRequest
     .build("HealthCheck", UUID.fromString("..."));
 ```
 
-A request not stored is found by the transactions of its [session](entities.md#sessions) only, so:
+A request not stored is found by the transactions of its [session](sessions.md#sessions) only, so:
 
 - it can't be deduplicated, as a retry is recognised by the first request stored, so `deduplicateOn` is refused, and
   without it there is no `rollback`;
