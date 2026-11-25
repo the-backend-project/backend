@@ -67,6 +67,13 @@ checksum; locally such artifacts are allowed, so IntelliJ IDEA can sync the proj
 `${maven.multiModuleProjectDirectory}` in `.mvn/maven.config` and therefore never finds the checksums file). To check
 for unpinned artifacts locally like CI does, add `-Daether.artifactResolver.postProcessor.trustedChecksums.failIfMissing=true`.
 
+To find newer versions of the dependencies and plugins than the poms use (leave out the last option to list the
+artifacts in the imported BOMs as well):
+
+```shell
+mvn versions:display-dependency-updates versions:display-plugin-updates -DprocessDependencyManagementTransitive=false
+```
+
 After adding or upgrading a dependency or plugin, record the new checksums and commit the updated file:
 
 ```shell
@@ -116,15 +123,23 @@ excluded so the worktrees aren't indexed with the main checkout.
 
 The skills are in [.agents/skills](.agents/skills), and both agents read the project's conventions from
 [AGENTS.md](AGENTS.md). The project's settings for each agent allow the common commands without asking: Maven (except
-deploying), the scripts in [bin](bin), and the `git` and `gh` commands that only read.
+deploying), the scripts in [bin](bin), the `git` and `gh` commands that only read, and those the `/fix` workflow
+uses to change things: `git worktree add`, `add`, `commit`, `rebase`, `merge` and `push` (but not a force push),
+`gh issue edit`, `gh project item-add` and `item-edit`, and `gh pr create`. Commands that can run any code or reach
+the network, such as `perl`, `python` or `curl`, still ask, so agents look up dependency updates with the
+[versions plugin](#dependency-checksums) instead.
 
 - **Claude Code** reads AGENTS.md through [CLAUDE.md](CLAUDE.md), finds the skills through the symbolic link
   `.claude/skills`, and takes its settings from [.claude/settings.json](.claude/settings.json). Put your own
   permissions and other settings in `.claude/settings.local.json`, which git ignores.
 - **Mistral Vibe** takes its settings from [.vibe/config.toml](.vibe/config.toml), which also lets commands run for
-  up to an hour, because builds with tests take longer than Vibe's default of five minutes. Vibe loads the project's
+  up to an hour, because builds with tests take longer than Vibe's default of five minutes, and lets Vibe edit and
+  create files in the working directory without asking, as its `accept-edits` profile does. Vibe loads the project's
   settings and skills only once you trust the folder. It matches commands by their beginning, so it refuses
-  `mvn deploy`, but not a deploy after other goals or options, e.g. `mvn clean deploy`. The file lists the migrations
-  Vibe has applied to it, so that Vibe doesn't rewrite it. Put your own settings in `~/.vibe/config.toml`, and your own
+  `mvn deploy` and `git push --force`, but not a deploy after other goals or options, e.g. `mvn clean deploy`, nor a
+  force push with the option after the remote, e.g. `git push origin --force`. Vibe checks each command of a chain
+  such as `a && b` against the list, but asks for any command that uses shell variables or command substitution
+  (`$(...)`), which is why the `/fix` skill passes values between commands literally. The file lists the migrations Vibe has
+  applied to it, so that Vibe doesn't rewrite it. Put your own settings in `~/.vibe/config.toml`, and your own
   instructions, such as how tools get on the PATH, in `~/.vibe/AGENTS.md`. Vibe can't keep the docs server running, so
   `/serve-docs` only does the strict build there; run `bin/serve-docs.sh` yourself for live reload.
