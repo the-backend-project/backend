@@ -1,7 +1,7 @@
-# Sessions, transactions and transitions
+# Transitions, transactions and sessions
 
-The state machine processes events in three units of work, each made of one or more of the next. A session is
-one or more transactions, and a transaction stores one or more transitions.
+The state machine processes events in three units of work, each made of one or more of the one before it. A
+transaction stores one or more transitions, and a session is one or more transactions.
 
 | Unit        | What it is                                                                                            | What it guarantees                                                         |
 |-------------|-------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------|

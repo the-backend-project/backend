@@ -420,7 +420,7 @@ HttpInboxRequest<Void> HealthCheck = HttpInboxRequest
     .build("HealthCheck", UUID.fromString("..."));
 ```
 
-A request not stored is found by the transactions of its [session](entities.md#sessions) only, so:
+A request not stored is found by the transactions of its [session](sessions.md#sessions) only, so:
 
 - it can't be deduplicated, as a retry is recognised by the first request stored, so `deduplicateOn` is refused, and
   without it there is no `rollback`;
