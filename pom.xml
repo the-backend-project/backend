@@ -251,7 +251,7 @@
                 <!-- BCrypt of Spring Security, without dependencies, for the identity provider's imported clients -->
                 <groupId>org.springframework.security</groupId>
                 <artifactId>spring-security-crypto</artifactId>
-                <version>7.1.2</version>
+                <version>7.2.0</version>
             </dependency>
             <dependency>
                 <!-- The logging of Spring Security's BCryptPasswordEncoder, which BCrypt itself does without -->
