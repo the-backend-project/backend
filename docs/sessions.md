@@ -109,6 +109,10 @@ transitions from that state, or rejects the event if there is none. The entity o
 is identified by the steps of the earlier transaction, not by its events. An entity of the session only is never
 rolled back, as a rollback rolls back stored events only.
 
-The entity whose action gave the outcome is the exception: its outcome is calculated from the event log the action
-was triggered with, not one read again. If another session, e.g. a delayed trigger firing or a rollback, has stored an
-event on it in the meantime, the outcome fails ([#357](https://github.com/the-backend-project/backend/issues/357)).
+The entity whose action gave the outcome is the exception: its outcome is the next event after the one which
+triggered the action, calculated from the event log the action was triggered with, as a delayed trigger is. If another
+session has stored an event on the entity first, e.g. a delayed trigger firing or a rollback, the outcome is dropped,
+not calculated again from the new event log, where it could be taken for the outcome of a later action of the entity
+(see [Processing an event](entities.md#processing-an-event)). The transitions of the entity decide what follows, e.g.
+by a timeout stored with the action. If the transaction of the outcome failed on the event number of another entity
+it triggers an event on, it is calculated again, which reads that entity's event log again.
