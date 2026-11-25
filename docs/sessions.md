@@ -3,11 +3,11 @@
 The state machine processes events in three units of work, each made of one or more of the next. A session is
 one or more transactions, and a transaction stores one or more transitions.
 
-| Unit       | What it is                                                                                       | What it guarantees                                    |
-|------------|--------------------------------------------------------------------------------------------------|-------------------------------------------------------|
-| Transition | An entity going from one state to the next on an event                                           | It is only calculated; it has no side effects         |
-| Transaction | Everything one event leads to, across all the entities involved, stored in the database          | All of it is stored or none of it is                  |
-| Session    | The transactions an event leads to through actions, such as a request to another system         | Its transactions share the session's entity and caller, but not atomicity |
+| Unit        | What it is                                                                                            | What it guarantees                                                         |
+|-------------|-------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------|
+| Transition  | An entity going from one state to the next on an event                                                | It is only calculated, with no side effects                                |
+| Transaction | Everything one calculation produces: the new events of the entities involved and their triggers      | All of it is stored or none of it is                                       |
+| Session     | The transactions one event entering the state machine leads to through actions                        | Its transactions share the session's entities and caller, but not atomicity |
 
 ## Transitions
 
@@ -30,13 +30,16 @@ and stored in one database transaction:
 * the conditional triggers.
 
 Either all of them are stored or none of them are. If another instance has appended an event to one of the
-entities in the meantime, the transaction fails on the event number, and the calculation is done again from the new
-event logs (see [Processing an event](entities.md#processing-an-event)). So is it if an id the calculation claims is
-found to be taken (see [Existing ids](existing-ids.md)).
+entities in the meantime, the transaction fails on the event number, and the calculation is done again, up to three
+times (see [Processing an event](entities.md#processing-an-event)). The event logs of the entities the transitions
+trigger events on are read again for it. The entity the event entered on keeps the event log it was read with, so a
+conflict on that entity fails every attempt
+([#356](https://github.com/the-backend-project/backend/issues/356)). The calculation is also done again if an id it
+claims is found to be taken (see [Existing ids](existing-ids.md)).
 
 The actions of the transitions, such as sending an [outbox request](http-outbox.md), are run only after the
-transaction is committed, and delayed and conditional triggers are fired by a worker once they are due. What happens
-then is processed as a new event, in a transaction of its own.
+transaction is committed. Delayed triggers are fired by a worker when they are due, and conditional triggers when
+their condition is met. What happens then is processed as a new event, in a transaction of its own.
 
 ## Sessions
 
@@ -47,14 +50,16 @@ new event, in a transaction of its own, on the entity whose transition ran the a
 session, and can:
 
 * **Find the entity of the session.** An event triggered on the entity identified by the session
-  (`entityIdFromSession()`) goes to the entity of the trigger's entity model that a transition of the session was
-  taken on. For an `EntityModelGroup`, such as `HttpInbox.Request`, it is the entity of the model in the group, and
-  the session is the only way to identify it. That is how an application responds to the
+  (`entityIdFromSession()`) goes to the entity of the trigger's entity model that the session last took a transition
+  on before the trigger: in the transaction of the trigger first, then in the transactions before it. For an
+  `EntityModelGroup`, such as `HttpInbox.Request`, it is the entity of a model in the group, and the session is the
+  only way to identify it. That is how an application responds to the
   [inbox request](http-inbox.md) it was called from, e.g. from the callback of an outbox request, without knowing
   which inbox request that is.
-* **Reach the caller.** `StateMachine.onEvent` returns the events of the entity it was called on, as they are stored.
-  The events of that entity stored by later transactions of the session are returned as well, which is how the
-  `HttpInboxListener` gets a response given after a request to another system.
+* **Reach the caller.** `StateMachine.onEvent` returns the new events with the entity id it was called on, of any
+  entity model, so also those of an id or index entity with the same id, and also events which are not stored. The
+  events of later transactions of the session are returned as well, which is how the `HttpInboxListener` gets a
+  response given after a request to another system.
 
 A session gives no atomicity across its transactions. Each one is committed on its own, and a failure in a later one
 doesn't undo the ones before it. That is why the entities involved record what they have started, and why an outbox
@@ -93,6 +98,11 @@ sequenceDiagram
 
 A transaction of the session finds the entity of the session in any transaction before it, however many actions back,
 e.g. to answer the inbox request after a request to one system and then to another. The event log of a stored entity
-is read from the database again, as events of other sessions may have been stored on it in the meantime, and with
-the output of [masked events](entities.md#events-and-entities-not-stored) masked. An entity of the session only, which
-is never stored, is found among the events of the session's transactions.
+it triggers an event on is read from the database again, as events of other sessions may have been stored on it in
+the meantime, and with the output of [masked events](entities.md#events-and-entities-not-stored) masked. An entity
+of the session only, which is never stored, is found among the events of the session's transactions.
+
+The entity whose action gave the outcome is the exception: its outcome is calculated from the event log the action
+was triggered with, not one read again. If another session, e.g. the timeout of an outbox request, has stored an
+event on it in the meantime, the outcome fails
+([#357](https://github.com/the-backend-project/backend/issues/357)).

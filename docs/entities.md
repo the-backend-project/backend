@@ -87,7 +87,8 @@ The state machine reads the event log of the selected entity, finds the transiti
 event's type, and follows the triggers of the transition from entity to entity. The new events of all the entities
 involved are stored in one transaction, together with the triggers to be fired later. If another instance has
 appended an event to one of the entities in the meantime, the transaction fails on the event number, and the event is
-retried on the new event log.
+retried on the new event logs, except that of the entity it entered on
+([#356](https://github.com/the-backend-project/backend/issues/356)).
 
 A transition has four kinds of triggers:
 
@@ -108,24 +109,12 @@ outbox request, moves the entity on.
 
 ## Sessions
 
-A session is all the state machine does for an event entering it through `StateMachine.onEvent`, e.g. a request to the
-[inbox](http-inbox.md). It is one or more transactions. A transaction is the transitions taken for one event, with the
-events they trigger on other entities, whose changes are stored together, in one database transaction. If it can't be
-stored, as another instance has stored an event on one of its entities in the meantime, or an id it claims is
-[taken](existing-ids.md), it is calculated again and stored in another.
-
-1. The event entering the state machine is the event of the first transaction.
-2. The actions of the changes stored run, e.g. sending an [outbox request](http-outbox.md). The event an action gives,
-   e.g. the response of the outbox request, is the event of a transaction of its own, which follows the one which ran
-   the action. Its actions continue the session in the same way.
-
-Every transaction of a session finds the entities of the earlier ones, e.g. `entityIdFromSession()` the entity the
-session started on, so an outbox request's response can answer the request to the inbox. The events of the entity
-the session started on, in all its transactions, go to the one who triggered the event, e.g. the listener of the
-inbox, which sends the response. A delayed or conditional trigger fires in a session of its own, after the session
-which stored it, even if that hasn't ended.
-
-[Sessions, transactions and transitions](sessions.md) describes how the three relate, with an example of a session.
+A session is the transactions an event entering the state machine through `StateMachine.onEvent` leads to: the
+transaction of the event, and those of the outcomes of its actions, e.g. the response of an
+[outbox request](http-outbox.md). A transaction of the session finds the entity of the session
+(`entityIdFromSession()`) and the entities of the session only in the transactions before it, and its events go to
+the one who triggered the event, e.g. the listener of the [inbox](http-inbox.md). A delayed or conditional trigger
+fires in a session of its own. [Sessions, transactions and transitions](sessions.md) describes them in full.
 
 ## Events and entities not stored
 

@@ -48,9 +48,10 @@ public sealed class EntitySelector permits ById, ByIdFromSession, ByIdEvent, ByL
     return new ById(entityId.value(), AlwaysCreate);
   }
 
-  /// The entity of the model that a transition of the session was taken on, e.g. the inbox request an application
-  /// responds to. The session is the transactions an event leads to through actions, and the entity is found in any of
-  /// them. See docs/sessions.md.
+  /// The entity of the model, or of a model in the group, that the session last took a transition on, e.g. the inbox
+  /// request an application responds to. The session is the transactions an event leads to through actions, and the
+  /// entity is found in any of them, see
+  /// [sessions](https://the-backend-project.github.io/backend/sessions/).
   public static <T> Function<T, ByIdFromSession> entityIdFromSession() {
     return _ -> new ByIdFromSession();
   }
