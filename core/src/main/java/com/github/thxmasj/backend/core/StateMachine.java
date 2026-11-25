@@ -243,14 +243,17 @@ public class StateMachine implements AutoCloseable {
 
   enum ResolverStatus {Ok, Empty, Error}
 
-  private <T> ByDelayed<T, ?> byDelayed(DelayedTrigger<T> delayedTrigger) {
-    return new ByDelayed<>(
+  /// Fires the delayed trigger on the entity of the event log. The trigger is deleted with the change of its event.
+  private <T> Mono<ProcessResult<?>> fire(DelayedTrigger<T> delayedTrigger, EventLog eventLog) {
+    var trigger = new ByDelayed<>(
         delayedTrigger.eventType(),
         delayedTrigger.data(),
         delayedTrigger.entityId(),
         delayedTrigger.entityModel(),
         delayedTrigger.correlationId()
     );
+    Debug.log("resolveState with: " + trigger.eventType().name());
+    return onEvent(trigger.correlationId(null), trigger.eventType(), trigger.data().apply(null), eventLog, null, TriggerType.DELAYED, null, null);
   }
 
   /**
@@ -277,9 +280,7 @@ public class StateMachine implements AutoCloseable {
           if (currentState == null)
             return Mono.error(new RuntimeException(
                 "Invalid event log: " + eventLog.events().stream().map(Event::typeName).collect(joining(","))));
-          ByDelayed<?, ?> trigger = byDelayed(delayedTrigger);
-          Debug.log("resolveState with: " + trigger.eventType().name());
-          return firedByDelayedTrigger(trigger, eventLog)
+          return fire(delayedTrigger, eventLog)
               .flatMap(processResult -> switch (processResult) {
                     // State is resolved and delayed trigger already deleted by the change triggered by this event.
                     case Accepted<?> _ -> Mono.just(ResolverStatus.Ok);
@@ -517,11 +518,6 @@ public class StateMachine implements AutoCloseable {
       TransitionStep<?> requestStep
   ) {
     return onEvent(correlationId, inputEvent.eventType(), inputEvent.data(), eventLog, requestStep, null, null, null);
-  }
-
-  /// The event of a delayed trigger, whose trigger is deleted with the change of the event
-  private <I> Mono<ProcessResult<?>> firedByDelayedTrigger(ByDelayed<I, ?> trigger, EventLog eventLog) {
-    return onEvent(trigger.correlationId(null), trigger.eventType(), trigger.data().apply(null), eventLog, null, TriggerType.DELAYED, null, null);
   }
 
   /// The changes to store, collected from the last step to the first. A delayed event is numbered after the event of
