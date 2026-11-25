@@ -679,10 +679,37 @@ public class HttpInboxTest {
   @Test
   public void whenCustomCorrelationIdHeaderOverHttpThenResponseHasSameCorrelationId() throws IOException {
     HttpResponse<byte[]> response = exchangeOverHttp(
-        new HttpInboxListener(stateMachine, inbox).correlationIdHeader("TID"),
+        new HttpInboxListener(stateMachine, inbox.correlationIdHeader("TID")),
         Headers.of("TID", "tid-123", "X-Correlation-Id", "ignored")
     );
     assertEquals("tid-123", response.headerValue("X-Correlation-Id"));
+  }
+
+  /// The inbox, not the listener, takes the correlation id from the request, so it is the same without the listener
+  @Test
+  public void whenCorrelationIdHeaderWithoutListenerThenResponseHasSameCorrelationId() {
+    var request = internalRequest(UUID.randomUUID().toString(), "t0ken");
+    var withHeader = new HttpRequest<>(request.method(), request.uri(), request.headers().plus("TID", "tid-456"), request.body());
+    HttpResponse<byte[]> response = HttpResponse.raw(
+        stateMachine.onEvent(inbox.correlationIdHeader("TID").trigger(), withHeader)
+            .skip(1)
+            .next()
+            .block(Duration.ofSeconds(5))
+            .getUnmarshalledData()
+    );
+    assertEquals("tid-456", response.headerValue("X-Correlation-Id"));
+  }
+
+  @Test
+  public void whenNoCorrelationIdHeaderWithoutListenerThenGeneratedCorrelationId() {
+    HttpResponse<byte[]> response = HttpResponse.raw(
+        stateMachine.onEvent(inbox.trigger(), internalRequest(UUID.randomUUID().toString(), "t0ken"))
+            .skip(1)
+            .next()
+            .block(Duration.ofSeconds(5))
+            .getUnmarshalledData()
+    );
+    assertThat(response.headerValue("X-Correlation-Id")).matches("SYS-\\d{19}");
   }
 
   @Test

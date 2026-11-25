@@ -30,6 +30,7 @@ public class EventTrigger<T, I, O> {
   private final EventCondition<T> condition;
   private final TriggerType triggerType;
   private final UUID triggerId;
+  private final Function<T, String> correlationId;
 
   public EventTrigger(
       EventSpec<T, I, O> eventSpec,
@@ -63,6 +64,19 @@ public class EventTrigger<T, I, O> {
       TriggerType triggerType,
       UUID triggerId
   ) {
+    this(eventSpec, entitySelectors, entityModel, createEntity, condition, triggerType, triggerId, null);
+  }
+
+  private EventTrigger(
+      EventSpec<T, I, O> eventSpec,
+      List<Function<T, ? extends EntitySelector>> entitySelectors,
+      EntityModel entityModel,
+      boolean createEntity,
+      EventCondition<T> condition,
+      TriggerType triggerType,
+      UUID triggerId,
+      Function<T, String> correlationId
+  ) {
     if ((triggerType == null) != (triggerId == null))
       throw new IllegalArgumentException("Trigger type and trigger id must be given together");
     this.eventSpec = eventSpec;
@@ -72,6 +86,7 @@ public class EventTrigger<T, I, O> {
     this.condition = condition;
     this.triggerType = triggerType;
     this.triggerId = triggerId;
+    this.correlationId = correlationId;
   }
 
   public static <I, O> EventTrigger<I, I, O> trigger(EventType<I, O> eventType, EntityModel entityModel, UUID entityId, I data) {
@@ -96,11 +111,19 @@ public class EventTrigger<T, I, O> {
 
   /// This trigger with the input of the event adapted by the given adapter.
   public EventTrigger<T, I, O> withInputAdapter(Function<T, I> inputAdapter) {
-    return new EventTrigger<>(new EventSpec<>(eventSpec.eventType(), inputAdapter), entitySelectors, entityModel, createEntity, condition, triggerType, triggerId);
+    return new EventTrigger<>(new EventSpec<>(eventSpec.eventType(), inputAdapter), entitySelectors, entityModel, createEntity, condition, triggerType, triggerId, correlationId);
   }
 
   public EventTrigger<T, I, O> withFallbackSelector() {
-    return new EventTrigger<>(eventSpec, replaceFallbackSelector(), entityModel(), createEntity(), condition, triggerType, triggerId);
+    return new EventTrigger<>(eventSpec, replaceFallbackSelector(), entityModel(), createEntity(), condition, triggerType, triggerId, correlationId);
+  }
+
+  /// This trigger with the correlation id of the events it triggers taken from its input, e.g. from a header of a
+  /// received request, when the trigger is given to [StateMachine#onEvent(EventTrigger, Object)] without a correlation
+  /// id. The function is applied once for each call, so a correlation id it generates, e.g. for a request without the
+  /// header, is the same in the attempts of the call. Without the function, such a call has a random UUID.
+  public EventTrigger<T, I, O> withCorrelationId(Function<T, String> correlationId) {
+    return new EventTrigger<>(eventSpec, entitySelectors, entityModel, createEntity, condition, triggerType, triggerId, correlationId);
   }
 
   private List<Function<T, ? extends EntitySelector>> replaceFallbackSelector() {
@@ -132,6 +155,12 @@ public class EventTrigger<T, I, O> {
 
   public UUID triggerId() {
     return triggerId;
+  }
+
+  /// The correlation id of the events triggered with the input, or a random UUID if the trigger has no function for
+  /// it (see [#withCorrelationId(Function)])
+  public String correlationId(T input) {
+    return correlationId == null ? UUID.randomUUID().toString() : correlationId.apply(input);
   }
 
 }

@@ -436,16 +436,19 @@ public class StateMachine implements AutoCloseable {
     return storage.eventsByEntityId().execute(entityModel, eventTypesByEntityModel.get(entityModel), entityId);
   }
 
+  /// Triggers the event with the correlation id of the trigger (see [EventTrigger#correlationId(Object)])
   public <O> Flux<Event<?>> onEvent(EventTrigger<Void, Void, O> eventTrigger) {
-    return onEvent(UUID.randomUUID().toString(), eventTrigger);
+    return Flux.defer(() -> onEvent(eventTrigger.correlationId(null), eventTrigger));
   }
 
   public <O> Flux<Event<?>> onEvent(String correlationId, EventTrigger<Void, Void, O> eventTrigger) {
     return onEvent(correlationId, eventTrigger, null);
   }
 
+  /// Triggers the event with the correlation id the trigger takes from the input (see
+  /// [EventTrigger#correlationId(Object)])
   public <I, O> Flux<Event<?>> onEvent(EventTrigger<I, I, O> eventTrigger, I input) {
-    return onEvent(UUID.randomUUID().toString(), eventTrigger, input);
+    return Flux.defer(() -> onEvent(eventTrigger.correlationId(input), eventTrigger, input));
   }
 
   /// Fails with an [IllegalArgumentException] if the state machine doesn't run the entity model triggered on, the

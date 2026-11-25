@@ -11,7 +11,6 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
 import reactor.core.publisher.Mono;
@@ -22,6 +21,9 @@ import reactor.netty.http.server.HttpServerResponse;
 
 /// Receives HTTP requests with reactor-netty and feeds them to the HTTP inbox of a state machine. The response is taken
 /// from the response event produced by the inbox' request routing.
+///
+/// The correlation id of a request is decided by the inbox' [HttpInbox#trigger()], e.g. from a header set with
+/// [HttpInbox#correlationIdHeader(String)].
 ///
 /// Filters can be added to e.g. authenticate, log, rewrite or short-circuit requests before they reach the inbox.
 public class HttpInboxListener {
@@ -38,7 +40,6 @@ public class HttpInboxListener {
   private final StateMachine stateMachine;
   private final HttpInbox inbox;
   private final Duration responseTimeout;
-  private final String correlationIdHeader;
   private final List<Filter> filters;
 
   /// @param stateMachine the state machine created with the entity models of the inbox, see [HttpInbox#entityModels()]
@@ -48,14 +49,13 @@ public class HttpInboxListener {
   }
 
   public HttpInboxListener(StateMachine stateMachine, HttpInbox inbox, Duration responseTimeout) {
-    this(stateMachine, inbox, responseTimeout, "X-Correlation-Id", List.of());
+    this(stateMachine, inbox, responseTimeout, List.of());
   }
 
   private HttpInboxListener(
       StateMachine stateMachine,
       HttpInbox inbox,
       Duration responseTimeout,
-      String correlationIdHeader,
       List<Filter> filters
   ) {
     if (!stateMachine.runs(inbox.requestRouting()))
@@ -66,7 +66,6 @@ public class HttpInboxListener {
     this.stateMachine = stateMachine;
     this.inbox = inbox;
     this.responseTimeout = responseTimeout;
-    this.correlationIdHeader = correlationIdHeader;
     this.filters = List.copyOf(filters);
   }
 
@@ -75,14 +74,7 @@ public class HttpInboxListener {
   public HttpInboxListener filter(Filter filter) {
     List<Filter> filters = new ArrayList<>(this.filters);
     filters.add(filter);
-    return new HttpInboxListener(stateMachine, inbox, responseTimeout, correlationIdHeader, filters);
-  }
-
-  /// Returns a listener which takes the correlation id of the triggered events from the given request header, e.g.
-  /// `TID`. The default header is `X-Correlation-Id`. Requests without the header get a generated correlation id
-  /// prefixed with `SYS-`.
-  public HttpInboxListener correlationIdHeader(String correlationIdHeader) {
-    return new HttpInboxListener(stateMachine, inbox, responseTimeout, correlationIdHeader, filters);
+    return new HttpInboxListener(stateMachine, inbox, responseTimeout, filters);
   }
 
   /// Starts listening on the given port. Use port 0 to bind to an ephemeral port.
@@ -134,20 +126,13 @@ public class HttpInboxListener {
   }
 
   private Mono<HttpResponse<byte[]>> exchange(HttpRequest<byte[]> requestMessage) {
-    return stateMachine.onEvent(correlationId(requestMessage), inbox.trigger(), requestMessage)
+    return stateMachine.onEvent(inbox.trigger(), requestMessage)
         // First event is the triggered event, second is the response event
         .skip(1)
         .next()
         // The response as given, which the event log may have masked
         .map(event -> HttpResponse.raw(event.getUnmarshalledData()))
         .switchIfEmpty(Mono.error(() -> new IllegalStateException("No response event for " + requestMessage.requestLine())));
-  }
-
-  private String correlationId(HttpRequest<byte[]> requestMessage) {
-    String correlationId = requestMessage.headerValue(correlationIdHeader);
-    if (correlationId == null || correlationId.isBlank())
-      return "SYS-" + ThreadLocalRandom.current().nextLong(1000000000000000000L, Long.MAX_VALUE);
-    return correlationId;
   }
 
   private static Mono<Void> send(HttpServerResponse response, HttpResponse<byte[]> message) {
