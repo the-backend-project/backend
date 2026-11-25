@@ -275,6 +275,7 @@ public abstract class ChangeState {
         try {
           UUID entityId = UUID.fromString(pkViolation.duplicateKey().trim());
           return new EventAlreadyExists(
+              "Entity",
               entityId,
               1,
               changes
@@ -287,6 +288,7 @@ public abstract class ChangeState {
           UUID entityId = UUID.fromString(pkViolation.duplicateKey().split(",")[0]);
           int eventNumber = Integer.parseInt(pkViolation.duplicateKey().split(",")[1].trim());
           return new EventAlreadyExists(
+              pkViolation.tableName(),
               entityId,
               eventNumber,
               changes
