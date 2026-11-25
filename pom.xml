@@ -169,7 +169,7 @@
                 <artifactId>azure-identity</artifactId>
                 <version>1.19.0</version>
                 <exclusions>
-                    <!-- Built for Netty 4.1, while the one Netty is that of reactor-netty -->
+                    <!-- Excluded in favour of azure-core-http-jdk-httpclient below, which brings no Netty HTTP client of its own -->
                     <exclusion>
                         <groupId>com.azure</groupId>
                         <artifactId>azure-core-http-netty</artifactId>
@@ -213,7 +213,7 @@
                 <version>1.4.0</version>
             </dependency>
             <dependency>
-                <!-- One version of Netty for everything, the latest, rather than the older 4.2.20.Final that both reactor-netty 1.4.0 and Vert.x 5.2.3 declare -->
+                <!-- One version of Netty for everything, the latest, rather than also the older one that reactor-netty and Vert.x declare -->
                 <groupId>io.netty</groupId>
                 <artifactId>netty-bom</artifactId>
                 <version>4.2.21.Final</version>

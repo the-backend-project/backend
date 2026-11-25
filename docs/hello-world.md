@@ -156,7 +156,8 @@ work around.
   ids, which the HTTP inbox stores with its events, use data types that need no reflection.
 - **Netty puts a direct buffer in the image heap.** Netty 4.2 initializes its classes at build time, but
   `CleartextHttp2ServerUpgradeHandler`, used by the reactor-netty HTTP server, holds a direct buffer, which fails the
-  build with GraalVM 25. The HTTP inbox therefore initializes that class at run time.
+  build with GraalVM 25. The HTTP inbox therefore initializes that class at run time. Whether a later Netty version
+  makes the setting unnecessary should be checked on each Netty upgrade.
 - **Runtime dependencies the server does not use.** The HTTP modules depend on Hibernate Validator, and reactor-netty
   brings QUIC and macOS DNS support. They end up on the runtime classpath of every application, lengthening native
   compilation. They could be optional, the way diagram generation with PlantUML is kept in the separate `diagram`
