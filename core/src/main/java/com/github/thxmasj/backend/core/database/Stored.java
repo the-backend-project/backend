@@ -1,12 +1,13 @@
-package com.github.thxmasj.backend.core.internal.database;
+package com.github.thxmasj.backend.core.database;
 
 import com.github.thxmasj.backend.core.EntityModel;
 import com.github.thxmasj.backend.core.IdEntityModel;
 import com.github.thxmasj.backend.core.IndexEntityModel;
 
 /// What the state machine stores of an entity, independent of how a database stores it. A database module maps the
-/// tables of its schema to these, so the state machine can tell from a conflict reported on a table which entity it is
-/// on: the id and index entities of an entity have its entity id.
+/// tables of its schema to these, and gives the one of a table in its constraint violations (see
+/// [DatabaseClient.DataIntegrityViolation#stored()]), so the state machine can tell which entity a conflict is on: the
+/// id and index entities of an entity have its entity id.
 ///
 /// The key a database reports for a conflict has the values listed for each, separated by commas.
 public enum Stored {

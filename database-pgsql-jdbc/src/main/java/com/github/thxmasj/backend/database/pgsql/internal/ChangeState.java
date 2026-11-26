@@ -9,10 +9,10 @@ import com.github.thxmasj.backend.core.IdEntityModel;
 import com.github.thxmasj.backend.core.IndexEntityModel;
 import com.github.thxmasj.backend.core.TriggerType;
 import com.github.thxmasj.backend.core.database.DatabaseClient;
+import com.github.thxmasj.backend.core.database.Stored;
 import com.github.thxmasj.backend.core.internal.DelayedEvent;
 import com.github.thxmasj.backend.core.internal.database.ChangeState.Change.FiredTrigger;
 import com.github.thxmasj.backend.core.internal.database.ConditionalTrigger;
-import com.github.thxmasj.backend.core.internal.database.Stored;
 import java.time.Clock;
 import java.util.HexFormat;
 import java.util.List;
@@ -47,11 +47,6 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
     return message != null && message.contains(TRIGGER_FIRED_ELSEWHERE);
   }
 
-  @Override
-  protected Stored stored(String table) {
-    return EventTable.stored(table);
-  }
-
   /// The duplicate key of an id event, as reported by PostgreSQL, e.g. "f721bf54-891b-41a0-aa63-5d3cbde52437, \x7b22..."
   @Override
   protected String duplicateKey(Event<?> idEvent) {
@@ -81,7 +76,7 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
             :entityId,
             :eventNumber,:type,:timestamp,:data
           );
-          """.replace("{table}", table(schema, EventTable.of(entityModel).name()));
+          """.replace("{table}", table(schema, Tables.table(Stored.of(entityModel))));
     } else if (event != null) {
       if (event.eventNumber() == 1) {
         sql +=

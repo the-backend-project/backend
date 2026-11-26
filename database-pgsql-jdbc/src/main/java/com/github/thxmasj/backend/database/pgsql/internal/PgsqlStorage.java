@@ -3,6 +3,7 @@ package com.github.thxmasj.backend.database.pgsql.internal;
 import com.github.thxmasj.backend.core.EntityModel;
 import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.database.DatabaseClient;
+import com.github.thxmasj.backend.core.database.Stored;
 import com.github.thxmasj.backend.core.internal.ResolvedModels;
 import com.github.thxmasj.backend.core.internal.database.ConditionalTriggers;
 import com.github.thxmasj.backend.core.internal.database.DeleteDelayedTrigger;
@@ -36,7 +37,7 @@ public class PgsqlStorage implements StorageProvider {
     Map<EntityModel, List<EventType<?, ?>>> eventTypesByEntityModel = models.eventTypesByEntityModel();
     return new Storage(
         new ChangeState(client, schemaName, clock),
-        new EventsByEntityId(client, entityModel -> Queries.eventsByEntityId(schemaName, EventTable.of(entityModel)), entityModels, clock),
+        new EventsByEntityId(client, entityModel -> Queries.eventsByEntityId(schemaName, Tables.table(Stored.of(entityModel))), entityModels, clock),
         new EventsByIdEvent(client, Queries.eventsByIdEvent(schemaName), eventTypesByEntityModel, clock),
         new EventsByLastIndexEvent(client, Queries.eventsByLastIndexEvent(schemaName), clock),
         new EntitiesByIndex(client, Queries.entitiesByIndex(schemaName), eventTypesByEntityModel, clock),

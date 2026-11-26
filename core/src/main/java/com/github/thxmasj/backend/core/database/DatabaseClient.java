@@ -245,24 +245,28 @@ public interface DatabaseClient extends AutoCloseable {
 
   class DataIntegrityViolation extends DatabaseException {
 
-    private final String tableName;
+    private final Stored stored;
 
-    public DataIntegrityViolation(String queryName, EntityModel model, String tableName, String message, Throwable t) {
+    public DataIntegrityViolation(String queryName, EntityModel model, Stored stored, String message, Throwable t) {
       super(queryName, model, message, t);
-      this.tableName = tableName;
+      this.stored = stored;
     }
 
-    public DataIntegrityViolation(String queryName, EntityModel model, String tableName, Throwable e) {
+    public DataIntegrityViolation(String queryName, EntityModel model, Stored stored, Throwable e) {
       super(queryName, model, e);
-      this.tableName = tableName;
+      this.stored = stored;
     }
 
-    public String tableName() {
-      return tableName;
+    /// What the state machine stores where the violation is, as the database module maps its tables to it, or null if
+    /// it is none of it
+    public Stored stored() {
+      return stored;
     }
 
   }
 
+  /// A primary key violation, whose duplicate key has the values of the key of what is stored (see [Stored]),
+  /// separated by commas
   class PrimaryKeyConstraintViolation extends DataIntegrityViolation {
 
     private final String constraintName;
@@ -272,17 +276,13 @@ public interface DatabaseClient extends AutoCloseable {
         String queryName,
         EntityModel model,
         String duplicateKey,
-        String tableName,
+        Stored stored,
         String constraintName,
         Throwable cause
     ) {
-      super(queryName, model, tableName, "Primary key constraint " + constraintName + " on table " + tableName + " violated ", cause);
+      super(queryName, model, stored, "Primary key constraint " + constraintName + " violated", cause);
       this.constraintName = constraintName;
       this.duplicateKey = duplicateKey;
-    }
-
-    public PrimaryKeyConstraintViolation(String queryName, EntityModel model, String tableName) {
-      this(queryName, model, null, tableName, null, null);
     }
 
     public String constraintName() {
@@ -294,6 +294,7 @@ public interface DatabaseClient extends AutoCloseable {
     }
   }
 
+  /// A unique index violation, whose duplicate key is as the database reports it
   class UniqueIndexConstraintViolation extends DataIntegrityViolation {
 
     private final String indexName;
@@ -303,11 +304,11 @@ public interface DatabaseClient extends AutoCloseable {
         String queryName,
         EntityModel model,
         String duplicateKey,
-        String tableName,
+        Stored stored,
         String indexName,
         Throwable cause
     ) {
-      super(queryName, model, tableName, cause);
+      super(queryName, model, stored, cause);
       this.duplicateKey = duplicateKey;
       this.indexName = indexName;
     }

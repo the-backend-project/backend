@@ -8,10 +8,10 @@ import com.github.thxmasj.backend.core.IdEntityModel;
 import com.github.thxmasj.backend.core.IndexEntityModel;
 import com.github.thxmasj.backend.core.TriggerType;
 import com.github.thxmasj.backend.core.database.DatabaseClient;
+import com.github.thxmasj.backend.core.database.Stored;
 import com.github.thxmasj.backend.core.internal.DelayedEvent;
 import com.github.thxmasj.backend.core.internal.database.ChangeState.Change.FiredTrigger;
 import com.github.thxmasj.backend.core.internal.database.ConditionalTrigger;
-import com.github.thxmasj.backend.core.internal.database.Stored;
 import java.time.Clock;
 import java.util.HexFormat;
 import java.util.List;
@@ -56,11 +56,6 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
             """;
   }
 
-  @Override
-  protected Stored stored(String table) {
-    return EventTable.stored(table);
-  }
-
   private String insertSql(
       int changeIndex,
       String parameterPrefix,
@@ -90,7 +85,7 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
             :eventNumber,:type,:timestamp,:data
           )
           """.replace("{schema}", schema)
-              .replace("{table}", EventTable.of(entityModel).name())
+              .replace("{table}", Tables.table(Stored.of(entityModel)))
               .replace("{changeIndex}", String.valueOf(changeIndex));
     } else if (event != null) {
       if (event.eventNumber() == 1) {

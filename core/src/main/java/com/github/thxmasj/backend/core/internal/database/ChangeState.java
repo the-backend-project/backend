@@ -13,6 +13,7 @@ import com.github.thxmasj.backend.core.database.DatabaseClient;
 import com.github.thxmasj.backend.core.database.DatabaseClient.PrimaryKeyConstraintViolation;
 import com.github.thxmasj.backend.core.database.DatabaseClient.Query.Builder;
 import com.github.thxmasj.backend.core.database.DatabaseClient.UniqueIndexConstraintViolation;
+import com.github.thxmasj.backend.core.database.Stored;
 import com.github.thxmasj.backend.core.internal.DelayedEvent;
 import java.time.Clock;
 import java.time.ZonedDateTime;
@@ -269,9 +270,6 @@ public abstract class ChangeState {
   /// the index of their change, as in "p0_". It selects the outbox elements to process, if any.
   protected abstract String sql(List<Change> changes);
 
-  /// What is stored in the table of the database, or null if it has no entities or events
-  protected abstract Stored stored(String table);
-
   /// The key of an id event in its unique index, as reported by the database, i.e. its type and data
   protected abstract String duplicateKey(Event<?> idEvent);
 
@@ -281,9 +279,9 @@ public abstract class ChangeState {
   /// id event whose id is taken.
   private Throwable conflict(Throwable failure, List<Change> changes) {
     return switch (failure) {
-      case PrimaryKeyConstraintViolation violation when stored(violation.tableName()) != null ->
-          eventAlreadyExists(violation, stored(violation.tableName()), changes);
-      case UniqueIndexConstraintViolation violation when stored(violation.tableName()) == Stored.IdEvent ->
+      case PrimaryKeyConstraintViolation violation when violation.stored() != null ->
+          eventAlreadyExists(violation, changes);
+      case UniqueIndexConstraintViolation violation when violation.stored() == Stored.IdEvent ->
           changes.stream()
               .filter(change -> change.entityModel() instanceof IdEntityModel && change.newEvent() != null)
               .map(Change::newEvent)
@@ -300,9 +298,9 @@ public abstract class ChangeState {
   /// so where it is tells them apart.
   private static EventAlreadyExists eventAlreadyExists(
       PrimaryKeyConstraintViolation violation,
-      Stored stored,
       List<Change> changes
   ) {
+    Stored stored = violation.stored();
     try {
       String[] key = violation.duplicateKey().split(",");
       UUID entityId = UUID.fromString(key[0].trim());
