@@ -108,7 +108,7 @@ public class SequenceDiagramFormatter {
   /// the steps it triggered nested in it
   private static void step(Step step, String from, Participants participants, StringBuilder messages) {
     String entity = participants.of(step.log());
-    String name = PlantUMLFormatter.eventName(step.event().type(), severity(step.transition()));
+    String name = StateDiagramFormatter.eventName(step.event().type(), severity(step.transition()));
     if (step.isRolledBack())
       name = "<s>" + name + "</s>";
     String arrival = from == null ? "[->" : participants.message(from, entity) + " ->";

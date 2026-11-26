@@ -1,31 +1,41 @@
 # Diagrams
 
-The diagram module draws two kinds of diagrams with PlantUML:
+The diagram module draws three kinds of diagrams with PlantUML:
 
 - [State diagrams](#state-diagrams-of-entity-models) of the state machines of the entity models: what can happen to
-  an entity. They are drawn from the transitions alone, so they are never out of date.
+  an entity.
+- [Entity relationship diagrams](#entity-relationship-diagrams-of-bounded-contexts) of the
+  [bounded contexts](principles.md#domain-driven-design), i.e. the complete models of the state machines: how their
+  entity models relate.
 - [Sequence diagrams](#sequence-diagrams-of-event-logs) of the event logs of actual entities: what did happen to an
   entity, and to the entities it triggered events on, transaction by transaction.
+
+The state and entity relationship diagrams are drawn from the transitions alone, so they are never out of date.
 
 The diagrams follow the colour scheme of the page. In dark mode, their arrows and the text on them are drawn in light
 colours. Events whose transitions have a [severity](monitoring.md#severity) above `Info` are named in bold, after a
 symbol and in a colour for their severity: ⚠ in amber for `Warning`, ✖ in orange for `Error` and ‼ in red for
-`Critical`.
+`Critical`. `format()` gives the PlantUML source of a diagram, and `formatToImage(..)` writes it as SVG.
 
 The diagrams in this documentation are generated when it is built, by the `doc-diagrams` module. It is the only module
-depending on the diagram module, so PlantUML is never a dependency of the libraries or the apps.
+depending on the diagram module, so PlantUML is never a dependency of the libraries or the apps. A code example in
+this documentation which creates an entity model has the state diagram of that model under it. The example is written
+out in `DocExamples` in `doc-diagrams`, as the documentation shows it, so the diagram is drawn from the model the
+example creates and the example is known to compile. A change to such an example is made in both places. The examples
+of the [getting started](getting-started.md) guide are taken from the hello world demo, and the diagrams of the
+[card payment template](cardpayments.md) and the [apps](apps.md) are drawn from the template and the apps themselves.
+A diagram of something else, such as how a [rollback](http-inbox.md#rollback) relates the event logs of several
+entities, is drawn by hand in the DOT language of Graphviz, in the resources of `doc-diagrams`, and rendered by
+`GraphvizFormatter` with `dot`.
 
 ## State diagrams of entity models
 
-`PlantUMLFormatter` draws the state diagram of an entity model, and `ERDiagramFormatter` an ER diagram of all the
-entity models of a state machine:
+`StateDiagramFormatter` draws the state diagram of an entity model, e.g. of the client registrations of the
+[identity provider](identity-provider.md):
 
 ```java
-new PlantUMLFormatter(ClientRegistration).formatToImage(new File("client-registration.svg"));
-new ERDiagramFormatter("identity-provider", inbox.entityModels()).formatToImage("diagrams");
+new StateDiagramFormatter(ClientRegistration).formatToImage(new File("client-registration.svg"));
 ```
-
-`format()` gives the PlantUML source of a diagram instead.
 
 <object data="../images/com.github.thxmasj.backend.identityprovider.ClientRegistration.svg" type="image/svg+xml"></object>
 
@@ -40,31 +50,26 @@ same states, are drawn as one choice. Several transitions leading to the same ch
 arrow: in the diagram of an [outbox request](http-outbox.md#atleastonce), a failed or dropped connection and a timeout
 lead to one choice between retrying the request and giving it up.
 
-### The entity models together
+## Entity relationship diagrams of bounded contexts
 
-The ER diagram relates the entity models through the triggers of their transitions: an arrow from one entity model to
-another tells that an event on the first triggers an event on the other. Each entity model lists the event types it
-accepts, unless the diagram is `compact()`, which only shows the event types on the relations. A trigger on a group,
-such as `HttpInbox.Request`, relates to each entity model of the group, and triggers of reversals are red. The ER
-diagram leaves out [id](data-model.md#idevent) and [index](data-model.md#indexevent) entities, with the triggers of
-events on them, as they take much space and tell little about how the entities relate.
+`EntityRelationshipDiagramFormatter` draws the entity relationship diagram of a bounded context, from the entity models
+given to its state machine and those their transitions trigger events on, e.g. of the
+[hello world demo](hello-world.md):
+
+```java
+new EntityRelationshipDiagramFormatter("hello-world", Inbox.entityModels()).formatToImage("diagrams");
+```
 
 <object data="../images/com.github.thxmasj.backend.helloworld.er.svg" type="image/svg+xml"></object>
 
-[Open the ER diagram of the hello world demo in full size](images/com.github.thxmasj.backend.helloworld.er.svg)
+[Open the entity relationship diagram of the hello world demo in full size](images/com.github.thxmasj.backend.helloworld.er.svg)
 
-### The models of this documentation
-
-A code example in this documentation which creates an entity model has the state diagram of that model under it. The
-example is written out in `DocExamples` in `doc-diagrams`, as the documentation shows it, so the diagram is drawn from
-the model the example creates and the example is known to compile. A change to such an example is made in both places.
-The examples of the [getting started](getting-started.md) guide are taken from the hello world demo, and the diagrams
-of the [card payment template](cardpayments.md) and the [apps](apps.md) are drawn from the template and the apps
-themselves.
-
-A diagram of something other than an entity model or an event log, such as how a [rollback](http-inbox.md#rollback)
-relates the event logs of several entities, is drawn by hand in the DOT language of Graphviz, in the resources of
-`doc-diagrams`, and rendered by `GraphvizFormatter` with `dot`.
+The entity models are related through the triggers of their transitions: an arrow from one entity model to another
+tells that an event on the first triggers an event on the other. Each entity model lists the event types it accepts,
+unless the diagram is `compact()`, which only shows the event types on the relations. A trigger on a group, such as
+`HttpInbox.Request`, relates to each entity model of the group, and triggers of reversals are red. The diagram leaves
+out [id](data-model.md#idevent) and [index](data-model.md#indexevent) entities, with the triggers of events on them, as
+they take much space and tell little about how the entities relate.
 
 ## Sequence diagrams of event logs
 
@@ -77,8 +82,6 @@ EventLog greeting = api.eventLog(Greeting, greetingId).block();
 EventLog request = api.eventLog(GreetingRequest, requestId).block();
 new SequenceDiagramFormatter(greeting, List.of(request), Inbox.entityModels()).formatToImage(new File("greeting.svg"));
 ```
-
-`format()` gives the PlantUML source of the diagram instead.
 
 ### How the logs are replayed
 
@@ -116,7 +119,7 @@ the next event may as well have been triggered by another entity, e.g. an applic
   transition, as the two are stored in the same transaction. The other events arrive from outside the diagram.
 - The other events a transition triggers are synchronous messages to the entity models they are triggered on. A
   conditional trigger, which is stored and fires later, is an asynchronous message. Events triggered on id and index
-  entities are left out, as in the ER diagram.
+  entities are left out, as in the entity relationship diagram.
 - An action, which is run after the transaction is committed, is an asynchronous message to a lifeline of its own, for
   each entity and action, from which its outcome comes back.
 - A rollback is followed by the triggers of the reverse transitions of the events it rolls back, in the colour of a

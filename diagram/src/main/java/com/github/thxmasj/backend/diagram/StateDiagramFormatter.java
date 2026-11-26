@@ -35,13 +35,16 @@ import net.sourceforge.plantuml.FileFormat;
 import net.sourceforge.plantuml.FileFormatOption;
 import net.sourceforge.plantuml.SourceStringReader;
 
-public class PlantUMLFormatter {
+/// A state diagram of the state machine of an entity model, drawn with PlantUML from its transitions: the lifecycle of
+/// its entities. The details of an event, its data and the events and actions it triggers, are shown when the mouse
+/// hovers over its name.
+public class StateDiagramFormatter {
 
   private final EntityModel model;
   Map<State, List<TransitionModel<?, ?>>> transitions;
 
   /// A state diagram of the transitions of the entity model
-  public PlantUMLFormatter(EntityModel model) {
+  public StateDiagramFormatter(EntityModel model) {
     this.model = model;
     this.transitions = Map.copyOf(model.transitions());
   }
@@ -126,7 +129,7 @@ public class PlantUMLFormatter {
             Locale.ROOT,
             "<foreignObject class=\"details\" id=\"%s-details\" x=\"%.1f\" y=\"%.1f\" width=\"1600\" height=\"400\">"
                 + "<div xmlns=\"http://www.w3.org/1999/xhtml\"><div>%s</div></div></foreignObject>",
-            id, x - 800, y, label.details().stream().map(PlantUMLFormatter::detailHtml).collect(joining("<br/>"))
+            id, x - 800, y, label.details().stream().map(StateDiagramFormatter::detailHtml).collect(joining("<br/>"))
         ));
         rules.append(String.format("svg:has(#%1$s:hover) #%1$s-details{visibility:visible}\n", id));
       }

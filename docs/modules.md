@@ -9,7 +9,7 @@
 | [http-outbox](http-outbox.md)                                         | Outboxes: entity models sending HTTP requests at least once or at most once                    |
 | [backoffice](backoffice.md)                                           | A web application for users signed in with OpenID Connect to look into the entities of an application |
 | [test-api](testing.md)                                                | An API for tests to look into and manipulate the database of a state machine                   |
-| [diagram](diagrams.md)                                                | State and ER diagrams of a state machine's model, and sequence diagrams of event logs          |
+| [diagram](diagrams.md)                                                | State diagrams of entity models, ER diagrams of bounded contexts, sequence diagrams of logs    |
 | [templates](cardpayments.md)                                          | Ready-made entity models of a domain, such as card payments                                    |
 
 An application depends on core, the database module of its database, and http-inbox and http-outbox if it receives or

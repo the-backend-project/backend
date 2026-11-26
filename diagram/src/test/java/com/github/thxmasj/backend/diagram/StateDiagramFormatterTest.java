@@ -20,7 +20,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-class PlantUMLFormatterTest {
+class StateDiagramFormatterTest {
 
   enum States implements State {Accepted, Refused, Waiting, Retrying, Failed}
 
@@ -30,8 +30,8 @@ class PlantUMLFormatterTest {
   static final EventType<Void, Void> Withdrawn = BasicEventType.of("Withdrawn", UUID.randomUUID());
 
   /// A formatter of a request model with the transitions
-  private static PlantUMLFormatter formatter(Map<State, List<TransitionModel<?, ?>>> transitions) {
-    return new PlantUMLFormatter(EntityModel.of("Request", UUID.randomUUID(), () -> transitions));
+  private static StateDiagramFormatter formatter(Map<State, List<TransitionModel<?, ?>>> transitions) {
+    return new StateDiagramFormatter(EntityModel.of("Request", UUID.randomUUID(), () -> transitions));
   }
 
   @Test

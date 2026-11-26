@@ -8,9 +8,9 @@ import static com.github.thxmasj.backend.templates.cardpayment.Identifiers.Ids;
 import com.github.thxmasj.backend.backoffice.Backoffice;
 import com.github.thxmasj.backend.core.EntityModel;
 import com.github.thxmasj.backend.core.EventLog;
-import com.github.thxmasj.backend.diagram.ERDiagramFormatter;
+import com.github.thxmasj.backend.diagram.EntityRelationshipDiagramFormatter;
 import com.github.thxmasj.backend.diagram.GraphvizFormatter;
-import com.github.thxmasj.backend.diagram.PlantUMLFormatter;
+import com.github.thxmasj.backend.diagram.StateDiagramFormatter;
 import com.github.thxmasj.backend.diagram.SequenceDiagramFormatter;
 import com.github.thxmasj.backend.helloworld.Greetings;
 import com.github.thxmasj.backend.http.inbox.HttpInbox;
@@ -137,13 +137,13 @@ public class Main {
   }
 
   private static void stateDiagram(EntityModel model) throws IOException {
-    System.out.println(new PlantUMLFormatter(model).formatToImage(directory));
+    System.out.println(new StateDiagramFormatter(model).formatToImage(directory));
   }
 
   /// For the entity models of the apps, which are created with `EntityModel.of` and so would be named after the
   /// package of the core library
   private static void stateDiagram(String fileName, EntityModel model) throws IOException {
-    System.out.println(new PlantUMLFormatter(model).formatToImage(new File(directory, fileName + ".svg")));
+    System.out.println(new StateDiagramFormatter(model).formatToImage(new File(directory, fileName + ".svg")));
   }
 
   /// A diagram drawn by hand in Graphviz, from a resource next to this class
@@ -157,7 +157,7 @@ public class Main {
   }
 
   private static void erDiagram(String name, List<EntityModel> entityModels) throws IOException {
-    System.out.println(new ERDiagramFormatter(name, entityModels).compact().formatToImage(directory));
+    System.out.println(new EntityRelationshipDiagramFormatter(name, entityModels).compact().formatToImage(directory));
   }
 
 }
