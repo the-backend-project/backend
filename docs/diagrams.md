@@ -2,11 +2,11 @@
 
 The diagram module draws three kinds of diagrams with PlantUML:
 
-- [State diagrams](#state-diagrams-of-entity-models) of the state machines of the entity models: what can happen to
-  an entity.
+- [State diagrams](#state-diagrams-of-entity-types) of the state machines of the entity types, the
+  [entity models](entities.md) in the code: what can happen to an entity.
 - [Entity relationship diagrams](#entity-relationship-diagrams-of-bounded-contexts) of the
   [bounded contexts](principles.md#domain-driven-design), i.e. the complete models of the state machines: how their
-  entity models relate.
+  entity types relate.
 - [Sequence diagrams](#sequence-diagrams-of-event-logs) of the event logs of actual entities: what did happen to an
   entity, and to the entities it triggered events on, transaction by transaction.
 
@@ -18,19 +18,19 @@ symbol and in a colour for their severity: ⚠ in amber for `Warning`, ✖ in or
 `Critical`. `format()` gives the PlantUML source of a diagram, and `formatToImage(..)` writes it as SVG.
 
 The diagrams in this documentation are generated when it is built, by the `doc-diagrams` module. It is the only module
-depending on the diagram module, so PlantUML is never a dependency of the libraries or the apps. A code example in
-this documentation which creates an entity model has the state diagram of that model under it. The example is written
+depending on the diagram module, so PlantUML is never a dependency of the libraries or the apps. A code example in this
+documentation which creates an entity type has the state diagram of that entity type under it. The example is written
 out in `DocExamples` in `doc-diagrams`, as the documentation shows it, so the diagram is drawn from the model the
-example creates and the example is known to compile. A change to such an example is made in both places. The examples
-of the [getting started](getting-started.md) guide are taken from the hello world demo, and the diagrams of the
-[card payment template](cardpayments.md) and the [apps](apps.md) are drawn from the template and the apps themselves.
-A diagram of something else, such as how a [rollback](http-inbox.md#rollback) relates the event logs of several
-entities, is drawn by hand in the DOT language of Graphviz, in the resources of `doc-diagrams`, and rendered by
+example creates and the example is known to compile. A change to such an example is made in both places. The examples of
+the [getting started](getting-started.md) guide are taken from the hello world demo, and the diagrams of the [card
+payment template](cardpayments.md) and the [apps](apps.md) are drawn from the template and the apps themselves. A
+diagram of something else, such as how a [rollback](http-inbox.md#rollback) relates the event logs of several entities,
+is drawn by hand in the DOT language of Graphviz, in the resources of `doc-diagrams`, and rendered by
 `GraphvizFormatter` with `dot`.
 
-## State diagrams of entity models
+## State diagrams of entity types
 
-`StateDiagramFormatter` draws the state diagram of an entity model, e.g. of the client registrations of the
+`StateDiagramFormatter` draws the state diagram of an entity type, e.g. of the client registrations of the
 [identity provider](identity-provider.md):
 
 ```java
@@ -52,7 +52,7 @@ lead to one choice between retrying the request and giving it up.
 
 ## Entity relationship diagrams of bounded contexts
 
-`EntityRelationshipDiagramFormatter` draws the entity relationship diagram of a bounded context, from the entity models
+`EntityRelationshipDiagramFormatter` draws the entity relationship diagram of a bounded context, from the entity types
 given to its state machine and those their transitions trigger events on, e.g. of the
 [hello world demo](hello-world.md):
 
@@ -64,10 +64,10 @@ new EntityRelationshipDiagramFormatter("hello-world", Inbox.entityModels()).form
 
 [Open the entity relationship diagram of the hello world demo in full size](images/com.github.thxmasj.backend.helloworld.er.svg)
 
-The entity models are related through the triggers of their transitions: an arrow from one entity model to another
-tells that an event on the first triggers an event on the other. Each entity model lists the event types it accepts,
+The entity types are related through the triggers of their transitions: an arrow from one entity type to another
+tells that an event on the first triggers an event on the other. Each entity type lists the event types it accepts,
 unless the diagram is `compact()`, which only shows the event types on the relations. A trigger on a group, such as
-`HttpInbox.Request`, relates to each entity model of the group, and triggers of reversals are red. The diagram leaves
+`HttpInbox.Request`, relates to each entity type of the group, and triggers of reversals are red. The diagram leaves
 out [id](data-model.md#idevent) and [index](data-model.md#indexevent) entities, with the triggers of events on them, as
 they take much space and tell little about how the entities relate.
 
@@ -75,7 +75,7 @@ they take much space and tell little about how the entities relate.
 
 `SequenceDiagramFormatter` draws the event log of an entity as a sequence diagram, with related logs, such as those of
 its [inbox](http-inbox.md) and [outbox](http-outbox.md) requests, e.g. read in a test with the [test API](testing.md),
-and the entity models of the state machine:
+and the entity types of the state machine:
 
 ```java
 EventLog greeting = api.eventLog(Greeting, greetingId).block();
@@ -85,17 +85,17 @@ new SequenceDiagramFormatter(greeting, List.of(request), Inbox.entityModels()).f
 
 ### How the logs are replayed
 
-An event doesn't record what caused it, so the logs are replayed through the transitions of their entity models, like
+An event doesn't record what caused it, so the logs are replayed through the transitions of their entity types, like
 the state machine does, to find the transition each event took. This is done by `Replay` in the core library, which
 doesn't depend on PlantUML. A transition with choices stores the event of the choice it took, so the transition of an
 event is the path from the event triggered to the one stored, e.g. from `Request received` to `Request accepted` of an
 inbox request, and has the triggers and actions of the whole path.
 
 The events of a transaction have its timestamp, which ties the logs together: an event is taken to be triggered by a
-trigger of the event starting its path, on its entity model or on a group of it such as `HttpInbox.Request`, in an
+trigger of the event starting its path, on its entity type or on a group of it such as `HttpInbox.Request`, in an
 event of the same transaction.
 
-That is all the logs tell. What they can't tell is deduced from the entity models, without assumptions from elsewhere:
+That is all the logs tell. What they can't tell is deduced from the entity types, without assumptions from elsewhere:
 
 - An entity of a model which is not stored, such as the `RequestRouting` of an inbox, never has a log. An event of the
   logs no trigger is found for is taken to be triggered by a transition of such a model, if that is the only
@@ -117,7 +117,7 @@ the next event may as well have been triggered by another entity, e.g. an applic
   as in its log. A deduced event has no number, as it is never stored, and is named in italics.
 - An event triggered by an event of the replay is a synchronous message from that event's lifeline, nested in its
   transition, as the two are stored in the same transaction. The other events arrive from outside the diagram.
-- The other events a transition triggers are synchronous messages to the entity models they are triggered on. A
+- The other events a transition triggers are synchronous messages to the entity types they are triggered on. A
   conditional trigger, which is stored and fires later, is an asynchronous message. Events triggered on id and index
   entities are left out, as in the entity relationship diagram.
 - An action, which is run after the transaction is committed, is an asynchronous message to a lifeline of its own, for

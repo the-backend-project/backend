@@ -16,14 +16,14 @@ The model is written in the language of the domain, and nothing else goes into i
   leads to, across all the entities involved, is stored in one transaction (see [All or nothing](#all-or-nothing)),
   with each entity still guarded by its event number. The library's own machinery, such as inbox and outbox requests
   and id and index entities, is modelled as entities too, which are not aggregates of the domain.
-* A state machine, with its entity models and its schema, is a bounded context: one model, in one language. It meets
+* A state machine, with its entity types and its schema, is a bounded context: one model, in one language. It meets
   other bounded contexts only through its [inboxes](http-inbox.md) and [outboxes](http-outbox.md). The
   [backoffice](backoffice.md) of an application is a bounded context of its own, in a schema of its own.
 * An event records something that has happened in the domain, and is named the way the domain experts would say it,
   in the past tense, such as `Merchant suspended` (see [Naming event types](entities.md#naming-event-types)).
 * Persistence, messaging and HTTP are not part of the model. The library stores the events, and sends and receives
   requests through [outboxes](http-outbox.md) and [inboxes](http-inbox.md) that are entity models of their own.
-* The [state diagrams](diagrams.md#state-diagrams-of-entity-models) and the
+* The [state diagrams](diagrams.md#state-diagrams-of-entity-types) and the
   [entity relationship diagrams](diagrams.md#entity-relationship-diagrams-of-bounded-contexts) are generated from the
   model, so developers and domain experts look at the same picture, and it is never out of date.
 
@@ -87,7 +87,7 @@ the data they assemble and the events they trigger (see [Transition models](tran
 the declarations rather than running them as opaque procedures, so a model can be:
 
 * reviewed as a whole, state by state,
-* drawn as [state diagrams](diagrams.md#state-diagrams-of-entity-models), and
+* drawn as [state diagrams](diagrams.md#state-diagrams-of-entity-types), and
 * tested through its behaviour, with the [test API](testing.md) instead of the tables.
 
 ## Observability built into the model

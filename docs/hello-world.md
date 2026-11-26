@@ -13,7 +13,7 @@ executable which boots in a few tens of milliseconds, and is packaged in a conta
 The request itself is an entity of the [HTTP inbox](http-inbox.md), of the inbox request `GreetingRequest`: the
 transition of the greeting triggers the response on the request, which the listener sends to the client.
 
-The [state diagram](diagrams.md#state-diagrams-of-entity-models) is generated from the model. Hover over the name of an event for its details.
+The [state diagram](diagrams.md#state-diagrams-of-entity-types) is generated from the model. Hover over the name of an event for its details.
 
 `Greeting`:
 
