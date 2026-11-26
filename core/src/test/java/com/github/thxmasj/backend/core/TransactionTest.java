@@ -67,12 +67,12 @@ public class TransactionTest {
                 .output(d -> executed("Output accepted", d)),
             d -> executed("Accepted data", d)
         )
-        .output(d -> executed("Output", d));
+        .otherwise(onEvent(OrderPlaced).to(States.Placed).assembleInput().output(d -> executed("Output", d)));
     var output = transition.calculate(order).block();
     assertEquals(
         List.of(
             "Assemble", "Delayed data", "Delay", "Action data", "Conditional data", "Index key", "Reject?",
-            "Accept?", "Accepted data", "Assemble accepted", "Output accepted", "Output"
+            "Accept?", "Accepted data", "Assemble accepted", "Output accepted"
         ),
         executed
     );

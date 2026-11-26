@@ -268,15 +268,10 @@ class Traverser {
         ));
   }
 
-  /// The states the transition may lead to: those of the transitions it may choose, and its own, as a choice without
-  /// `otherwise` falls through to it (see #315)
-  private static List<State> targets(TransitionModel<?, ?> transition) {
-    var targets = new ArrayList<State>();
-    if (transition.toState() != null)
-      targets.add(transition.toState());
-    for (var filter : transition.filters())
-      targets.addAll(targets(filter.alternative().model()));
-    return targets;
+  /// The states the transition may lead to: those of the transitions it may choose, as a transition with choices
+  /// always ends in one of them, or its own if it has none
+  private List<State> targets(TransitionModel<?, ?> transition) {
+    return leaves(transition).stream().map(TransitionModel::toState).filter(Objects::nonNull).toList();
   }
 
   /// The states an entity which is stored reaches: from `Begin` by the events stored, as one created by an event not
@@ -481,6 +476,9 @@ class Traverser {
             .collect(joining(", ")) + ")");
   }
 
+  /// The transitions whose events the transition may store: its own if it has no choices, or else those it may choose,
+  /// which are all its outcomes, as a transition with choices always ends in `otherwise`, and its own event is never
+  /// stored
   private List<TransitionModel<?, ?>> leaves(TransitionModel<?, ?> transition) {
     ArrayList<TransitionModel<?, ?>> leaves = new ArrayList<>();
     if (transition.filters().isEmpty()) {

@@ -43,7 +43,7 @@ public class EntityModelsTest {
       case "choice in reversal" -> onEvent(Started).toSelf()
           .assemble(TransitionContext::entityId)
           .reversible(assemble((_, _) -> (Void) null)
-              .when(_ -> true).then(onEvent(Chosen).toSelf().trigger(Undone).on(target).identifiedBy(newEntityId()).output()))
+              .otherwise(onEvent(Chosen).toSelf().trigger(Undone).on(target).identifiedBy(newEntityId()).output()))
           .output();
       case "choice" -> onEvent(Started).toSelf().assembleInput()
           .otherwise(onEvent(Chosen).toSelf().trigger(Ordered).on(target).identifiedBy(newEntityId()).output(), d -> d);

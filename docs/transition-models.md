@@ -162,6 +162,18 @@ transition follow, in the chain, up to its `OutputStep`. `otherwise(model, f)` e
 transition chosen if no other one was. The event of the chosen transition is then the event stored; the output of the
 transition itself is a `Completed` result referring to it.
 
+A transition with choices always ends in `otherwise`, and the compiler sees to it: after `when(...).then(...)`, the
+builder offers only another `when(...)`, `choice(...)` or `otherwise(...)`, not `output(...)`, `trigger(...)` or other
+steps. The same goes for `when(...)` on the result of a trigger, and for `when(Map)` and `choice(List)`. So every
+outcome of a choice is a transition the model names, and there is no last alternative left for the reader to infer,
+as there would be if the transition fell through to its own output when none of its predicates holds. If nothing
+should happen in that case, `otherwise` names it, usually with an event type of its own, e.g.
+`.otherwise(onEvent(RequestIgnored).toSelf().output(), _ -> null)`.
+
+The steps the transitions share go before the choice, and those of each outcome in the transition it chooses. A reverse
+model can make a choice too, and is then given to `reversible(...)` ending in `otherwise`, e.g.
+`reversible(assemble(...).when(p).then(m).otherwise(n))`.
+
 The identity provider registers a client by `RegistrationRequested`, whose output is `Void`, and the event stored is
 either `RegistrationRejected` or `RegistrationAccepted`, depending on whether the client id is taken:
 
@@ -190,8 +202,8 @@ flowchart LR
 
 ### The events stored for a choice
 
-Only the event of the chosen transition is stored in the entity's event log, not the one of the transition making the
-choice. The log of a client has `RegistrationAccepted` or `RegistrationRejected`, but never `RegistrationRequested`. A
+Only the event of the chosen transition is stored in the entity's event log, never the one of the transition making
+the choice, as a choice always ends in one of the transitions it names. The log of a client has `RegistrationAccepted` or `RegistrationRejected`, but never `RegistrationRequested`. A
 chosen transition can make a choice too, and then the event stored is the one of the last transition chosen. The
 changes of the steps before the choice are still stored, e.g. the `ClientIdClaimed` event triggered on another entity
 above.
@@ -217,16 +229,17 @@ transitions they can choose. That has these consequences:
   the choices. Reverse models are compared by identity, so transitions with a reverse model are only alike if they
   share it.
 * **The severity is the one of the chosen transition.** The [severity](monitoring.md#severity) declared on the
-  choosing transition is that of its own event, which is not stored when it chooses another transition.
+  choosing transition has no effect, as its own event is never stored.
 * **So is the mask.** An event is stored with the mask of the chosen transition, if it has one (see
   [masked events](entities.md#events-and-entities-not-stored)).
-* **Data the choosing transition calculates is kept only through the chosen transition.** The output of the choosing
-  transition is never stored, so anything it assembles, e.g. from another system, has to be passed on to the chosen
-  transition, by `f`, and be in that transition's output to be read from the log later.
-* **The result of the transition is the event of the choosing transition.** A transition triggering the event, and the
-  caller of `StateMachine.onEvent`, get the event of the choosing transition, with its output and the number of the
-  stored event, while the log has the chosen one. Its output is calculated, and must not be null, but it isn't masked
-  or marshalled, as it isn't stored.
+* **Data the choosing transition calculates is kept only through the chosen transition.** The choosing transition has
+  no output, so anything it assembles, e.g. from another system, has to be passed on to the chosen transition, by
+  `f`, and be in that transition's output to be read from the log later.
+* **The result of the transition is that of the chosen one.** The choosing transition has no output of its own: it
+  ends in a `Completed` result, which refers to the result of the chosen transition, and to the number of the event
+  stored. A transition triggering the event can act on it with `isCompleted()`, and finds the stored event by
+  `completed().entityId()` and `completed().eventNumber()`. The caller of `StateMachine.onEvent` gets the events
+  stored, so the chosen one.
 
 ## Collecting the changes
 
