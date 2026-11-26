@@ -32,7 +32,10 @@ EntityModel Greeting = EntityModel.of("Greeting", UUID.fromString("..."), Greeti
 ```
 
 They are first asked for when the state machine is created, by which time the constants are all created. A trigger
-on a model which isn't created yet, and so is null, fails as the transitions are created.
+on a model which isn't created yet, and so is null, fails as the transitions are created. The state machine reports
+the refusals of every model it runs together, each once and named after its model, so that the models are fixed in one
+go. A model whose transitions can't be created, e.g. as such a trigger fails, is reported with them, and doesn't hide
+the refusals of the other models.
 
 The state machine takes the transitions of each entity model from the model. It is given the entity models nothing
 triggers events on, e.g. those of an [inbox](http-inbox.md), and runs them with the models their transitions trigger

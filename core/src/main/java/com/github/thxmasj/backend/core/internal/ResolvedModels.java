@@ -26,7 +26,11 @@ public record ResolvedModels(
 ) {
 
   public static ResolvedModels of(List<? extends EntityModel> entityModels) {
-    List<EntityModel> resolved = EntityModels.resolve(entityModels);
+    return ofResolved(EntityModels.resolve(entityModels));
+  }
+
+  /// The models already resolved, e.g. by `EntityModelChecks`, which checks them too
+  public static ResolvedModels ofResolved(List<EntityModel> resolved) {
     return new ResolvedModels(
         resolved,
         Map.copyOf(resolved.stream().collect(toMap(EntityModel::id, identity()))),
