@@ -18,18 +18,27 @@ import java.util.stream.Stream;
 
 /// Event logs of the examples, for their sequence diagrams. The event types of the inbox and outbox models are created
 /// with the models, so a log is given by the names of its events, each one of an event the entity can store in the
-/// state the events before it took it to. The events have no data, which the diagram doesn't show.
+/// state the events before it took it to, and the number of the transaction storing it, as the events of a transaction
+/// have its timestamp. The events have no data, which the diagram doesn't show.
 final class ExampleLogs {
 
   private ExampleLogs() {}
 
   private static final ZonedDateTime time = ZonedDateTime.of(2026, 11, 26, 12, 0, 0, 0, ZoneOffset.UTC);
 
-  static EventLog log(EntityModel model, String... eventNames) {
+  /// An event of a log, by its name, stored by the transaction with the number
+  record Entry(int transaction, String name) {}
+
+  static Entry at(int transaction, String name) {
+    return new Entry(transaction, name);
+  }
+
+  static EventLog log(EntityModel model, Entry... entries) {
     UUID entityId = UUID.nameUUIDFromBytes(model.name().getBytes());
     List<Event<?>> events = new ArrayList<>();
     State state = Begin;
-    for (String name : eventNames) {
+    for (Entry entry : entries) {
+      String name = entry.name();
       State from = state;
       TransitionModel<?, ?> transition = model.transitions().getOrDefault(from, List.of()).stream()
           .flatMap(ExampleLogs::leaves)
@@ -46,15 +55,15 @@ final class ExampleLogs {
                   .distinct()
                   .collect(joining(", "))
           )));
-      events.add(event(entityId, events.size() + 1, transition.eventType()));
+      events.add(event(entityId, events.size() + 1, transition.eventType(), entry.transaction()));
       if (transition.toState() != null)
         state = transition.toState();
     }
     return new EventLog(model, entityId, List.copyOf(events));
   }
 
-  private static <T> Event<T> event(UUID entityId, int number, EventType<?, T> type) {
-    return new Event<>(entityId, number, type, time.plusSeconds(number));
+  private static <T> Event<T> event(UUID entityId, int number, EventType<?, T> type, int transaction) {
+    return new Event<>(entityId, number, type, time.plusSeconds(transaction));
   }
 
   private static Stream<TransitionModel<?, ?>> leaves(TransitionModel<?, ?> transition) {

@@ -37,48 +37,54 @@ colours.
 
 ## Sequence diagrams
 
-`SequenceDiagramFormatter` draws the event log of an entity as a sequence diagram, e.g. one read in a test with the
-[test API](testing.md):
+`SequenceDiagramFormatter` draws the event log of an entity as a sequence diagram, with related logs, such as those of
+its [inbox](http-inbox.md) and [outbox](http-outbox.md) requests, e.g. read in a test with the [test API](testing.md):
 
 ```java
-EventLog log = api.eventLog(PlaceOrder, requestId).block();
-new SequenceDiagramFormatter(log).formatToImage(new File("place-order.svg"));
+EventLog greeting = api.eventLog(Greeting, greetingId).block();
+EventLog request = api.eventLog(GreetingRequest, requestId).block();
+new SequenceDiagramFormatter(greeting, List.of(request)).formatToImage(new File("greeting.svg"));
 ```
 
 `format()` gives the PlantUML source of the diagram instead.
 
-An event doesn't record what caused it, so the diagram replays the log through the transitions of the entity's model,
-like the state machine does, to find the transition each event took. The transition's triggers are the messages of
-the diagram:
+An event doesn't record what caused it, so the logs are replayed through the transitions of their entity models, like
+the state machine does, to find the transition each event took. This is done by `Replay` in the core library, which
+doesn't depend on PlantUML. The transitions' triggers are the messages of the diagram:
 
-- Each event arrives at the entity from outside the diagram, numbered as in the log, as the log doesn't tell which
-  entity, if any, triggered it. An event triggered by the transition before it on the entity itself is drawn as a
-  message to itself instead, nested in that transition.
-- The events the transition triggers are synchronous messages to the entity models they are triggered on, as they are
-  stored in the same transaction. A conditional trigger, which is stored and fires later, is an asynchronous message.
-- The actions of the transition leave the diagram, as they are run after the transaction is committed.
-- An event of a transition with choices has the triggers and actions of the choices that led to it, as the inbox
-  request below, whose validation claims the message id and whose dispatch places the order.
+- Each entity whose log is drawn has a lifeline. The events of a transaction have its timestamp, so an event is drawn
+  as triggered by a trigger of its type on its entity model, or on a group of it such as `HttpInbox.Request`, in an
+  event of the same transaction, nested in that transition. The other events arrive from outside the diagram, as
+  nothing in the logs triggered them.
+- The other events a transition triggers are synchronous messages to the entity models they are triggered on, as
+  they are stored in the same transaction. A conditional trigger, which is stored and fires later, is an asynchronous
+  message.
+- The actions of a transition leave the diagram, as they are run after the transaction is committed.
+- An event of a transition with choices has the triggers and actions of the choices that led to it, like the inbox
+  request below, whose dispatch triggers the greeting.
 - A rollback is followed by the triggers of the reverse transitions of the events it rolls back, in the colour of a
   reversal, and the events rolled back are struck through.
+- The lifelines are in the order they are first drawn, so the diagram reads from left to right.
 
 Events are named with the symbols and colours of their [severity](monitoring.md#severity), as in the state diagrams.
 
-The log doesn't hold the data the choices of a transition depend on, so where several choices lead to the same event,
-it can't tell which was taken. The diagram then takes the first one that triggers no event on the entity itself, as the
-next event may as well have been triggered by another entity: the request below was completed by the application.
+The logs don't hold the data the choices of a transition depend on, so where several choices lead to the same event,
+the replay can't tell which was taken. It then takes the first one that triggers no event on the entity's own model, as
+the next event may as well have been triggered by another entity, e.g. an application completing its inbox request.
 
-The log of an [inbox request](http-inbox.md) placing an order, accepted and then completed by the application:
+A greeting of the [hello world demo](hello-world.md) with its inbox request, in one transaction: the request is accepted and
+dispatched to a new greeting, which responds to the request:
 
-<object data="../images/com.github.thxmasj.backend.diagram.sequence.PlaceOrder.svg" type="image/svg+xml"></object>
+<object data="../images/com.github.thxmasj.backend.diagram.sequence.Greeting.svg" type="image/svg+xml"></object>
 
-[Open the PlaceOrder sequence diagram in full size](images/com.github.thxmasj.backend.diagram.sequence.PlaceOrder.svg)
+[Open the Greeting sequence diagram in full size](images/com.github.thxmasj.backend.diagram.sequence.Greeting.svg)
 
-The log of an [`AtMostOnce` authorisation](http-outbox.md#atmostonce) whose response never came, which the payment
-rolls back by a reversal:
+The log of an [`AtMostOnce` authorisation](http-outbox.md#atmostonce) alone, in three transactions: its response
+never came, and the payment rolls it back by a reversal:
 
 <object data="../images/com.github.thxmasj.backend.diagram.sequence.Authorisation.svg" type="image/svg+xml"></object>
 
 [Open the Authorisation sequence diagram in full size](images/com.github.thxmasj.backend.diagram.sequence.Authorisation.svg)
 
-The logs of these examples are written out in `ExampleLogs` in `doc-diagrams`, by the names of their events.
+The logs of these examples are written out in `ExampleLogs` in `doc-diagrams`, by the names of their events and the
+transactions storing them.

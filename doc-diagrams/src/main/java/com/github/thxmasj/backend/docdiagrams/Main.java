@@ -1,6 +1,8 @@
 package com.github.thxmasj.backend.docdiagrams;
 
 import static com.github.thxmasj.backend.http.inbox.HttpInbox.MessageIds;
+import static com.github.thxmasj.backend.docdiagrams.ExampleLogs.at;
+import static com.github.thxmasj.backend.docdiagrams.ExampleLogs.log;
 import static com.github.thxmasj.backend.templates.cardpayment.Identifiers.Ids;
 
 import com.github.thxmasj.backend.backoffice.Backoffice;
@@ -64,20 +66,24 @@ public class Main {
     graphviz("http-inbox-rollback.dot", name + ".Rollback");
   }
 
-  /// The examples of sequence diagrams on the diagrams page, of event logs of the inbox and outbox examples: an order
-  /// placed by a request to the inbox, and an authorisation whose outcome is unknown, as its response never came, which
-  /// is rolled back by a reversal
+  /// The examples of sequence diagrams on the diagrams page: a greeting of the hello world demo with its inbox request,
+  /// in one transaction, and an authorisation of the outbox examples whose outcome is unknown, as its response never
+  /// came, which is rolled back by a reversal
   private static void sequenceDiagrams() throws IOException {
     var name = "com.github.thxmasj.backend.diagram.sequence.";
-    sequenceDiagram(name + "PlaceOrder", ExampleLogs.log(DocExamples.PlaceOrder, "Request accepted", "Request completed"));
+    sequenceDiagram(
+        name + "Greeting",
+        log(Greetings.Greeting, at(1, "Greeting requested")),
+        log(Greetings.GreetingRequest, at(1, "Request accepted"), at(1, "Greeting response created"))
+    );
     sequenceDiagram(
         name + "Authorisation",
-        ExampleLogs.log(DocExamples.Authorisation, "Request dispatched", "Timeout expired", "Rollback dispatched")
+        log(DocExamples.Authorisation, at(1, "Request dispatched"), at(2, "Timeout expired"), at(3, "Rollback dispatched"))
     );
   }
 
-  private static void sequenceDiagram(String fileName, EventLog log) throws IOException {
-    System.out.println(new SequenceDiagramFormatter(log).formatToImage(new File(directory, fileName + ".svg")));
+  private static void sequenceDiagram(String fileName, EventLog log, EventLog... related) throws IOException {
+    System.out.println(new SequenceDiagramFormatter(log, List.of(related)).formatToImage(new File(directory, fileName + ".svg")));
   }
 
   private static void cardPayments() throws IOException {
