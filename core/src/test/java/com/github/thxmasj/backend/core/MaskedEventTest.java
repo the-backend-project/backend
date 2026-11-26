@@ -44,7 +44,7 @@ public class MaskedEventTest {
         .assemble(c -> c.log().entityId())
         .trigger(Touched).when(PasswordSet, id -> id).is(Touched).with(_ -> null).on(Account).identifiedBy(EntitySelector::entityId)
         .output();
-    var e = assertThrows(IllegalArgumentException.class, () -> new Traverser(Map.of(Begin, List.of(opening), States.Open, List.of(conditional))));
+    var e = assertThrows(IllegalArgumentException.class, () -> EntityModelChecksTest.check(Map.of(Begin, List.of(opening), States.Open, List.of(conditional))));
     assertTrue(e.getMessage().startsWith("The transition on Viewed has a conditional trigger, which refers to its event"), e.getMessage());
   }
 
@@ -56,7 +56,7 @@ public class MaskedEventTest {
         .trigger(Touched).when(PasswordSet, id -> id).is(Touched).with(_ -> null).on(Account).identifiedBy(EntitySelector::entityId)
         .when(_ -> true).then(onEvent(Viewed).toSelf().output(), _ -> null)
         .otherwise(onEvent(Touched).toSelf().output(), _ -> null);
-    var e = assertThrows(IllegalArgumentException.class, () -> new Traverser(Map.of(Begin, List.of(opening), States.Open, List.of(choosing))));
+    var e = assertThrows(IllegalArgumentException.class, () -> EntityModelChecksTest.check(Map.of(Begin, List.of(opening), States.Open, List.of(choosing))));
     assertTrue(e.getMessage().contains("but the transition on Viewed, which it may choose, is not stored"), e.getMessage());
   }
 
@@ -65,9 +65,9 @@ public class MaskedEventTest {
   @Test
   public void aTransitionOfAnEntityOfTheSessionOnlyCantHaveADelayedTrigger() {
     var delaying = onEvent(Touched).to(States.Open).trigger(Touched).after(_ -> java.time.Duration.ofMinutes(1)).output();
-    var e = assertThrows(IllegalArgumentException.class, () -> new Traverser(Map.of(Begin, List.of(delaying), States.Open, List.of()), false));
+    var e = assertThrows(IllegalArgumentException.class, () -> EntityModelChecksTest.check(Map.of(Begin, List.of(delaying), States.Open, List.of()), false));
     assertTrue(e.getMessage().contains("can't have a delayed trigger"), e.getMessage());
-    assertDoesNotThrow(() -> new Traverser(Map.of(Begin, List.of(delaying), States.Open, List.of()), true));
+    assertDoesNotThrow(() -> EntityModelChecksTest.check(Map.of(Begin, List.of(delaying), States.Open, List.of()), true));
   }
 
   record Codes(List<String> values) {}
@@ -96,7 +96,7 @@ public class MaskedEventTest {
   /// An event of a type with data has data, so a transition on it can't end in output() without a data adapter
   @Test
   public void anEventTypeWithDataCantHaveATransitionWithoutData() {
-    var e = assertThrows(IllegalArgumentException.class, () -> new Traverser(Map.of(Begin, List.of(onEvent(PasswordSet).to(States.Open).output()), States.Open, List.of())));
+    var e = assertThrows(IllegalArgumentException.class, () -> EntityModelChecksTest.check(Map.of(Begin, List.of(onEvent(PasswordSet).to(States.Open).output()), States.Open, List.of())));
     assertTrue(e.getMessage().startsWith("The transition on Password set has no output, but its event type has data"), e.getMessage());
   }
 
@@ -140,8 +140,8 @@ public class MaskedEventTest {
         .assemble(c -> c.log().entityId())
         .trigger(PasswordSet).with(_ -> "id").on(AccountIds).identifiedBy(EntitySelector::entityId)
         .output();
-    var e = assertThrows(IllegalArgumentException.class, () -> new Traverser(Map.of(Begin, List.of(claiming), States.Open, List.of()), false));
+    var e = assertThrows(IllegalArgumentException.class, () -> EntityModelChecksTest.check(Map.of(Begin, List.of(claiming), States.Open, List.of()), false));
     assertTrue(e.getMessage().contains("can't trigger Password set on the id model Account ids"), e.getMessage());
-    assertDoesNotThrow(() -> new Traverser(Map.of(Begin, List.of(claiming), States.Open, List.of()), true));
+    assertDoesNotThrow(() -> EntityModelChecksTest.check(Map.of(Begin, List.of(claiming), States.Open, List.of()), true));
   }
 }

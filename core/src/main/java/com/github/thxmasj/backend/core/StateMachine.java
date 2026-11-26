@@ -145,8 +145,10 @@ public class StateMachine implements AutoCloseable {
   ///                     which nothing triggers events on, e.g. the entity models of an inbox (see
   ///                     `HttpInbox#entityModels()`). An [EntityModelGroup] is not one of them, since it has no entities
   ///                     of its own.
-  /// @throws IllegalArgumentException if one of the entity models given is an [EntityModelGroup], or if two of the
-  ///                                  models run have the same id
+  /// @throws IllegalArgumentException if one of the entity models given is an [EntityModelGroup], if two of the
+  ///                                  models run have the same id, or if the transitions of models are refused or
+  ///                                  can't be created, e.g. as their supplier fails, with the refusals and failures
+  ///                                  of every model, each named
   /// @throws NullPointerException if one of the entity models given is null, e.g. a constant not created yet
   /// @param client a client of the database, which is closed with the state machine
   /// @param schemaDataSource a data source of the database to create the schema with, or null if it is created
@@ -163,11 +165,11 @@ public class StateMachine implements AutoCloseable {
       Listener listener,
       boolean withResolving
   ) {
-    ResolvedModels resolved = ResolvedModels.of(entityModels);
-    List<EntityModel> models = resolved.entityModels();
+    List<EntityModel> models = EntityModelChecks.check(entityModels);
+    this.traversers = traversers(models);
+    ResolvedModels resolved = ResolvedModels.ofResolved(models);
     this.models = resolved;
     Debug.log("Supported entity models:\n" + models.stream().map(EntityModel::name).collect(joining("\n")));
-    this.traversers = checkedTraversers(models);
     this.eventTypesByEntityModel = resolved.eventTypesByEntityModel();
     this.delayer = delayer != null ? delayer : _ -> Mono.empty();
     if (schemaDataSource != null) {
@@ -215,20 +217,11 @@ public class StateMachine implements AutoCloseable {
     client.close();
   }
 
-  /// The traversers of the transitions of the models, which check them. Fails with the refusals of every model, each
-  /// named, so that the models are fixed in one go.
-  private static Map<EntityModel, Traverser> checkedTraversers(List<EntityModel> models) {
+  /// The traversers of the transitions of the models, which are checked
+  private static Map<EntityModel, Traverser> traversers(List<EntityModel> models) {
     var traversers = new HashMap<EntityModel, Traverser>();
-    var refusals = new ArrayList<String>();
-    for (var model : models) {
-      try {
-        traversers.put(model, new Traverser(model.transitions(), model.stored(), model));
-      } catch (IllegalArgumentException e) {
-        refusals.add("The transitions of entity model " + model.name() + " are refused: " + e.getMessage());
-      }
-    }
-    if (!refusals.isEmpty())
-      throw new IllegalArgumentException(String.join("\n", refusals));
+    for (var model : models)
+      traversers.put(model, new Traverser(model));
     return traversers;
   }
 

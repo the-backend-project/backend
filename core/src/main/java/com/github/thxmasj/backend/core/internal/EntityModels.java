@@ -3,6 +3,7 @@ package com.github.thxmasj.backend.core.internal;
 import com.github.thxmasj.backend.core.EntityModel;
 import com.github.thxmasj.backend.core.EntityModelGroup;
 import com.github.thxmasj.backend.core.EventTrigger;
+import com.github.thxmasj.backend.core.State;
 import com.github.thxmasj.backend.core.TransitionModel;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -10,6 +11,7 @@ import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -28,7 +30,24 @@ public final class EntityModels {
   /// @throws IllegalArgumentException if a model given is an [EntityModelGroup], which has no entities of its own, or
   ///                                  if two models have the same id
   /// @throws NullPointerException if a model given is null
+  /// @throws RuntimeException what the transitions of a model fail with, e.g. as its supplier does
   public static List<EntityModel> resolve(List<? extends EntityModel> entityModels) {
+    var failures = new LinkedHashMap<EntityModel, RuntimeException>();
+    var resolved = resolve(entityModels, failures);
+    if (!failures.isEmpty())
+      throw failures.values().iterator().next();
+    return resolved;
+  }
+
+  /// The entity models as [#resolve(List)], but a model whose transitions fail, e.g. as its supplier does, is put in
+  /// the failures, with what they fail with, and left out, so that the other models are resolved and checked too, and
+  /// the failures reported with their refusals. The models the failing one triggers events on are not found through
+  /// it, as its transitions aren't known.
+  ///
+  /// @param failures where the models whose transitions fail are put, in the order they are reached
+  /// @throws IllegalArgumentException as [#resolve(List)]
+  /// @throws NullPointerException if a model given is null
+  public static List<EntityModel> resolve(List<? extends EntityModel> entityModels, Map<EntityModel, RuntimeException> failures) {
     for (EntityModel model : entityModels)
       if (model == null)
         throw new NullPointerException(
@@ -50,10 +69,16 @@ public final class EntityModels {
         throw new IllegalArgumentException(
             "Entity models " + other.name() + " and " + model.name() + " have the same id " + model.id()
         );
+      Map<State, List<TransitionModel<?, ?>>> byState;
+      try {
+        byState = model.transitions();
+        if (byState == null)
+          throw new NullPointerException("Entity model " + model.name() + " has no transitions");
+      } catch (RuntimeException e) {
+        failures.put(model, e);
+        continue;
+      }
       resolved.add(model);
-      var byState = model.transitions();
-      if (byState == null)
-        throw new NullPointerException("Entity model " + model.name() + " has no transitions");
       for (List<TransitionModel<?, ?>> transitions : byState.values())
         for (TransitionModel<?, ?> transition : transitions)
           addTargets(transition, toVisit);
