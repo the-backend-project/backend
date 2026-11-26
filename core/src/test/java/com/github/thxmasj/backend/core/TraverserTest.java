@@ -4,6 +4,7 @@ import static com.github.thxmasj.backend.core.EntityModel.Begin;
 import static com.github.thxmasj.backend.core.TransitionModelBuilder.WithEvent.onEvent;
 import static com.github.thxmasj.backend.core.TransitionModelBuilder.assemble;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -117,6 +118,36 @@ public class TraverserTest {
     assertTrue(e.getMessage().startsWith("The transition on Retried triggers 2 delayed events"), e.getMessage());
   }
 
+  /// A choosing transition with two delayed triggers is refused once, by itself, and not again by each transition it
+  /// may choose
+  @Test
+  public void twoDelayedTriggersOfAChoosingTransitionAreRefusedOnce() {
+    var twiceChoosing = onEvent(Retried).toSelf()
+        .trigger(Accepted).after(_ -> Duration.ofMinutes(1))
+        .trigger(Rejected).after(_ -> Duration.ofMinutes(2))
+        .when(_ -> false).then(acceptance, _ -> null)
+        .when(_ -> false).then(reject(States.Rejected), _ -> null)
+        .otherwise(onEvent(Requested).to(States.Requested).output(), _ -> null);
+    var e = assertThrows(IllegalArgumentException.class, () -> new Traverser(Map.of(Begin, List.of(acceptance), States.Accepted, List.of(twiceChoosing))));
+    assertEquals(
+        "The transition on Retried triggers 2 delayed events, but an entity has at most one pending delayed trigger, so " +
+            "the second would replace the first",
+        e.getMessage()
+    );
+  }
+
+  /// A delayed trigger of a transition chosen, after one of the transition choosing it, is refused by the transition
+  /// chosen, which declares the second
+  @Test
+  public void aDelayedTriggerAfterOneOfTheChoosingTransitionIsRefusedByTheTransitionChosen() {
+    var delayedChoosing = onEvent(Retried).toSelf()
+        .trigger(Accepted).after(_ -> Duration.ofMinutes(1))
+        .when(_ -> false).then(acceptance, _ -> null)
+        .otherwise(onEvent(Rejected).to(States.Rejected).trigger(Requested).after(_ -> Duration.ofMinutes(2)).output(), _ -> null);
+    var e = assertThrows(IllegalArgumentException.class, () -> new Traverser(Map.of(Begin, List.of(acceptance), States.Accepted, List.of(delayedChoosing))));
+    assertTrue(e.getMessage().startsWith("The transition on Rejected triggers 2 delayed events, with the transitions choosing it, "), e.getMessage());
+  }
+
   static EventType<Void, Void> QuietlyRetried = BasicEventType.notStored("Quietly retried", UUID.fromString("6f8a0c2e-4b1d-4e7a-b9cb-dfe1f3a5c7e9"));
 
   /// A transition with a delayed trigger which triggers an event not stored of the model with a delayed trigger too is
@@ -129,7 +160,7 @@ public class TraverserTest {
         .output();
     var quiet = onEvent(QuietlyRetried).toSelf().trigger(Rejected).after(_ -> Duration.ofMinutes(2)).output();
     var e = assertThrows(IllegalArgumentException.class, () -> new Traverser(Map.of(Begin, List.of(acceptance), States.Accepted, List.of(delayedThenQuiet, quiet))));
-    assertTrue(e.getMessage().startsWith("The transition on Retried has a delayed trigger, and triggers Quietly retried"), e.getMessage());
+    assertTrue(e.getMessage().startsWith("The transition on Retried triggers Quietly retried, which isn't stored and has a delayed trigger"), e.getMessage());
     var quietWithoutDelay = onEvent(QuietlyRetried).toSelf().output();
     assertDoesNotThrow(() -> new Traverser(Map.of(Begin, List.of(acceptance), States.Accepted, List.of(delayedThenQuiet, quietWithoutDelay))));
     // On another model, the two delayed triggers are on different entities
@@ -155,6 +186,26 @@ public class TraverserTest {
     assertTrue(e.getMessage().startsWith("2 refusals of the transitions:"), e.getMessage());
     assertTrue(e.getMessage().contains("- The transition on Retried triggers 2 delayed events"), e.getMessage());
     assertTrue(e.getMessage().contains("- State Rejected is not reached from Begin"), e.getMessage());
+  }
+
+  /// A trigger numbered alike is refused once, by the transition it is declared on, and not again by each transition
+  /// it may choose
+  @Test
+  public void aDelayedTriggerNumberedAlikeOfAChoosingTransitionIsRefusedOnce() {
+    var delayedThenQuietChoosing = onEvent(Retried).toSelf()
+        .trigger(Accepted).after(_ -> Duration.ofMinutes(1))
+        .trigger(QuietlyRetried).on(EntityModel.of("Other", UUID.randomUUID(), Map::of)).identifiedBy(_ -> null)
+        .when(_ -> false).then(acceptance, _ -> null)
+        .when(_ -> false).then(reject(States.Rejected), _ -> null)
+        .otherwise(onEvent(Requested).to(States.Requested).output(), _ -> null);
+    var quiet = onEvent(QuietlyRetried).toSelf().trigger(Rejected).after(_ -> Duration.ofMinutes(2)).output();
+    var e = assertThrows(IllegalArgumentException.class, () -> new Traverser(Map.of(
+        Begin, List.of(acceptance),
+        States.Accepted, List.of(delayedThenQuietChoosing, quiet),
+        States.Rejected, List.of(quiet),
+        States.Requested, List.of(quiet)
+    )));
+    assertTrue(e.getMessage().startsWith("The transition on Retried triggers Quietly retried, which isn't stored"), e.getMessage());
   }
 
   /// A transition is judged by the transition it chooses, whose event is stored, or not, and numbers its delayed trigger

@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -25,8 +26,9 @@ class Traverser {
 
   private final Map<State, List<TransitionModel<?, ?>>> transitions;
   private final EntityModel model;
-  /// Why the transitions are refused, all of them, so that a model is fixed in one go rather than one refusal at a time
-  private final List<String> refusals = new ArrayList<>();
+  /// Why the transitions are refused, all of them, so that a model is fixed in one go rather than one refusal at a time.
+  /// Each is told once, by the transition it is declared on, also if the transition is reached by more than one path.
+  private final Set<String> refusals = new LinkedHashSet<>();
   /// Whether entities of the session only are of the model: all of them if it is not stored, and those an event not
   /// stored creates otherwise
   private final boolean hasEntitiesOfTheSessionOnly;
@@ -70,7 +72,7 @@ class Traverser {
       }
     });
     if (refusals.size() == 1)
-      throw new IllegalArgumentException(refusals.getFirst());
+      throw new IllegalArgumentException(refusals.iterator().next());
     if (!refusals.isEmpty())
       throw new IllegalArgumentException(refusals.size() + " refusals of the transitions:\n- " + String.join("\n- ", refusals));
   }
@@ -120,16 +122,20 @@ class Traverser {
   }
 
   /// An entity has at most one pending delayed trigger, which the next event stored on it replaces, so a transition,
-  /// with the one it chooses, can't trigger two delayed events, as the second would replace the first
+  /// with the one it chooses, can't trigger two delayed events, as the second would replace the first. The refusal is
+  /// told by the transition on which the second is declared, and not again by the transitions it may choose.
   private void requireAtMostOneDelayedTrigger(TransitionModel<?, ?> transition, int inherited) {
     int delayed = inherited + transition.delayedEventTypes().size();
-    if (delayed > 1)
+    if (delayed > 1) {
       refuse(String.format(
-          "The transition on %s triggers %d delayed events, but an entity has at most one pending delayed trigger, so " +
+          "The transition on %s triggers %d delayed events%s, but an entity has at most one pending delayed trigger, so " +
               "the second would replace the first",
           transition.eventType().name(),
-          delayed
+          delayed,
+          inherited > 0 ? ", with the transitions choosing it" : ""
       ));
+      return;
+    }
     for (var filter : transition.filters())
       requireAtMostOneDelayedTrigger(filter.alternative().model(), delayed);
   }
@@ -158,32 +164,39 @@ class Traverser {
   /// transition has a delayed trigger too, would have two delayed triggers on the entity with the same number, of which
   /// only one can be pending. The entity a trigger is on is only known when it is taken, so a trigger on this model of
   /// an event not stored with a delayed trigger is taken to be on the same entity, which is refused, as the transaction
-  /// would fail when stored. A trigger on another model is not.
+  /// would fail when stored. A trigger on another model is not. The refusal is told by the transition the trigger is
+  /// declared on, once, however many of the paths through it have a delayed trigger.
   private void requireNoDelayedTriggerNumberedAlike(
       TransitionModel<?, ?> transition,
       int inheritedDelayed,
-      List<EventTrigger<?, ?, ?>> inheritedTriggers,
+      List<DeclaredTrigger> inheritedTriggers,
       Set<EventType<?, ?>> delayingNotStored
   ) {
     int delayed = inheritedDelayed + transition.delayedEventTypes().size();
-    var triggers = new ArrayList<EventTrigger<?, ?, ?>>(inheritedTriggers);
-    triggers.addAll(transition.triggers());
+    var triggers = new ArrayList<>(inheritedTriggers);
+    for (var trigger : transition.triggers())
+      triggers.add(new DeclaredTrigger(transition, trigger));
     if (transition.filters().isEmpty()) {
       if (delayed == 0)
         return;
-      for (var trigger : triggers)
+      for (var declared : triggers) {
+        var trigger = declared.trigger();
         if (!(trigger instanceof EventTrigger.Conditional<?, ?, ?>) && delayingNotStored.contains(trigger.eventType()) && isOnTheModel(trigger))
           refuse(String.format(
-              "The transition on %s has a delayed trigger, and triggers %s, which isn't stored and has a delayed trigger " +
-                  "too. On the same entity, the two would have the same number, but an entity has at most one pending " +
-                  "delayed trigger",
-              transition.eventType().name(),
+              "The transition on %s triggers %s, which isn't stored and has a delayed trigger, and it, or a transition " +
+                  "it chooses or is chosen by, has a delayed trigger too. On the same entity, the two would have the " +
+                  "same number, but an entity has at most one pending delayed trigger",
+              declared.transition().eventType().name(),
               trigger.eventType().name()
           ));
+      }
     }
     for (var filter : transition.filters())
       requireNoDelayedTriggerNumberedAlike(filter.alternative().model(), delayed, triggers, delayingNotStored);
   }
+
+  /// A trigger with the transition it is declared on
+  private record DeclaredTrigger(TransitionModel<?, ?> transition, EventTrigger<?, ?, ?> trigger) {}
 
   /// An entity of the session only is never stored, so an id or index event, by which an entity is found later, would
   /// point to an entity which doesn't exist, and an id would be claimed for good. Its transitions, and those they may
