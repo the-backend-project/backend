@@ -161,6 +161,19 @@ class ReplayTest {
   }
 
   @Test
+  void theOutcomeOfAnActionIsInANewTransactionOfTheSameSession() {
+    Replay replay = Replay.of(outbox(Replied));
+    assertEquals(List.of(1, 2), replay.steps().stream().map(Step::transaction).toList());
+    assertEquals(List.of(1, 1), replay.steps().stream().map(Step::session).toList());
+  }
+
+  @Test
+  void aDelayedEventStartsASessionOfItsOwn() {
+    Replay replay = Replay.of(outbox(Expired));
+    assertEquals(List.of(1, 2), replay.steps().stream().map(Step::session).toList());
+  }
+
+  @Test
   void aDelayedEventIsNotTheOutcomeOfAnAction() {
     Replay replay = Replay.of(outbox(Expired));
     assertTrue(replay.steps().getLast().outcomeOf().isEmpty());

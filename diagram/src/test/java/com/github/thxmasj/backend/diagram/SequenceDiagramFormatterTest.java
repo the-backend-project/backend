@@ -330,6 +330,50 @@ class SequenceDiagramFormatterTest {
     assertThat(diagram.split("group Transaction")).hasSize(3);
   }
 
+  /// The outcome of the action continues the session of the transaction which ran it
+  @Test
+  void theTransactionsOfASessionOfSeveralAreDrawnInAGroupOfTheSession() {
+    event(Placed);
+    nextTransaction();
+    event(Accepted);
+    nextTransaction();
+    event(Notified);
+    String diagram = diagram();
+    assertThat(diagram).contains(
+        """
+        group Session 2
+        group Transaction 2, 2026-11-26T12:00:01Z
+        """,
+        """
+        A1 -> P1: 3. Notified
+        activate P1
+        deactivate P1
+        end
+        end
+        """
+    ).doesNotContain("Session 1", ", session ");
+  }
+
+  /// Groups must nest, so a session with a transaction of another between its own is told by the names of its
+  /// transactions
+  @Test
+  void theTransactionsOfAnInterleavedSessionAreNamedWithTheSession() {
+    event(Placed);
+    nextTransaction();
+    event(Accepted);
+    nextTransaction();
+    UUID otherId = UUID.randomUUID();
+    var other = new EventLog(Order, otherId, List.of(new Event<>(otherId, 1, Placed, transaction)));
+    nextTransaction();
+    event(Notified);
+    String diagram = new SequenceDiagramFormatter(log(), List.of(other)).format();
+    assertThat(diagram).contains(
+        "group Transaction 2, session 2, 2026-11-26T12:00:01Z\n",
+        "group Transaction 3, 2026-11-26T12:00:02Z\n",
+        "group Transaction 4, session 2, 2026-11-26T12:00:03Z\n"
+    ).doesNotContain("group Session");
+  }
+
   @Test
   void anEventIsNamedInTheColourOfTheSeverityOfItsTransition() {
     event(Placed);

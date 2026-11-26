@@ -20,6 +20,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -35,7 +36,10 @@ import net.sourceforge.plantuml.SourceStringReader;
 /// drawn with PlantUML from their [Replay].
 ///
 /// The steps of each transaction are drawn in a group, named with its number in the diagram and its timestamp, which
-/// all its events have. The actions of a transaction follow its group, as they are run after it is committed.
+/// all its events have. The actions of a transaction follow its group, as they are run after it is committed. The
+/// transactions of a session of several are drawn in a group of the session, with the actions between them, unless a
+/// transaction of another session comes between them, as groups must nest. They are then named with the number of
+/// their session instead.
 ///
 /// Each entity whose log is drawn has a lifeline, and so does each model of the deduced steps of entities which aren't
 /// stored. An event no step of the replay triggered arrives at its entity from outside the diagram. The events a
@@ -85,18 +89,38 @@ public class SequenceDiagramFormatter {
     Participants participants = new Participants(replay.logs(), replay.steps());
     StringBuilder messages = new StringBuilder();
     List<Step> roots = replay.roots();
-    int transaction = 0;
+    Map<Integer, List<Integer>> transactionsOfSessions = new LinkedHashMap<>();
+    for (Step step : replay.steps()) {
+      List<Integer> transactions = transactionsOfSessions.computeIfAbsent(step.session(), _ -> new ArrayList<>());
+      if (!transactions.contains(step.transaction()))
+        transactions.add(step.transaction());
+    }
     for (int i = 0; i < roots.size(); ) {
-      // The roots of a transaction, whose events all have its timestamp, with the actions run after it is committed
-      Instant time = roots.get(i).event().timestamp().toInstant();
-      messages.append(String.format("group Transaction %d, %s\n", ++transaction, time));
+      int transaction = roots.get(i).transaction();
+      int session = roots.get(i).session();
+      List<Integer> transactionsOfSession = transactionsOfSessions.get(session);
+      boolean several = transactionsOfSession.size() > 1;
+      // A session is boxed if no transaction of another session comes between its own, as boxes must nest
+      boolean boxed = several
+          && transactionsOfSession.getLast() - transactionsOfSession.getFirst() + 1 == transactionsOfSession.size();
+      if (boxed && transaction == transactionsOfSession.getFirst())
+        messages.append(String.format("group Session %d\n", session));
+      messages.append(String.format(
+          "group Transaction %d%s, %s\n",
+          transaction,
+          several && !boxed ? ", session " + session : "",
+          roots.get(i).event().timestamp().toInstant()
+      ));
+      // The roots of the transaction, with the actions run after it is committed
       StringBuilder actions = new StringBuilder();
-      for (; i < roots.size() && roots.get(i).event().timestamp().toInstant().equals(time); i++) {
+      for (; i < roots.size() && roots.get(i).transaction() == transaction; i++) {
         Step root = roots.get(i);
         String from = root.outcomeOf().map(step -> participants.action(step, actionOf(step, root))).orElse(null);
         step(root, from, participants, messages, actions);
       }
       messages.append("end\n").append(actions);
+      if (boxed && transaction == transactionsOfSession.getLast())
+        messages.append("end\n");
     }
     return String.format(
         """

@@ -77,6 +77,8 @@ public final class Replay {
     private Step cause;
     private Step outcomeOf;
     private boolean isRolledBack;
+    private int transaction;
+    private int session;
 
     private Step(EventLog log, Event<?> event, List<TransitionModel<?, ?>> path, List<Step> rolledBack, boolean deduced) {
       this.log = log;
@@ -150,6 +152,19 @@ public final class Replay {
       return Optional.ofNullable(outcomeOf);
     }
 
+    /// The number of the transaction which stored the event, from 1 in the order of the replay. The events of a
+    /// transaction have its timestamp.
+    public int transaction() {
+      return transaction;
+    }
+
+    /// The number of the session of the transaction, from 1 in the order of the replay. A session is the transactions
+    /// an event entering the state machine leads to through actions: a transaction starting with the outcome of an
+    /// action is of the session of the transaction which ran the action, and any other starts a session.
+    public int session() {
+      return session;
+    }
+
     /// The type of the event triggered to take the path
     private EventType<?, ?> triggeredType() {
       return path.getFirst().eventType();
@@ -215,6 +230,7 @@ public final class Replay {
       if (step.cause == null && !step.deduced && !triggeredTypes.contains(step.triggeredType()))
         matchOutcome(step, all.subList(0, i));
     }
+    numberTransactionsAndSessions(all);
     return new Replay(List.copyOf(allLogs), unmodifiableList(all));
   }
 
@@ -263,6 +279,28 @@ public final class Replay {
       }
     }
     return false;
+  }
+
+  /// Numbers the transactions of the steps, which are in the order of time, by their timestamps, and their sessions. The
+  /// first root of a transaction decides its session, as its other steps are triggered by its roots.
+  private static void numberTransactionsAndSessions(List<Step> steps) {
+    int transaction = 0;
+    int session = 0;
+    for (int first = 0; first < steps.size(); ) {
+      Instant time = steps.get(first).time();
+      int end = first;
+      while (end < steps.size() && steps.get(end).time().equals(time))
+        end++;
+      List<Step> ofTransaction = steps.subList(first, end);
+      Step root = ofTransaction.stream().filter(step -> step.cause == null).findFirst().orElse(ofTransaction.getFirst());
+      int sessionOfTransaction = root.outcomeOf != null && root.outcomeOf.session > 0 ? root.outcomeOf.session : ++session;
+      transaction++;
+      for (Step step : ofTransaction) {
+        step.transaction = transaction;
+        step.session = sessionOfTransaction;
+      }
+      first = end;
+    }
   }
 
   /// Takes the step to be the outcome of the first action of the latest step before it, of the same entity in an earlier
