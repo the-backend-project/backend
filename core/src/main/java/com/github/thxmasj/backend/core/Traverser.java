@@ -134,7 +134,6 @@ class Traverser {
       requireAtMostOneDelayedTrigger(filter.alternative().model(), delayed);
   }
 
-  /// The event types not stored on which a transition of the model, or one it chooses, has a delayed trigger
   /// The event types of transitions of the model which may end in an event not stored with a delayed trigger on the
   /// way to it. The event stored, and so the number of the delayed trigger, is that of the transition chosen, not of
   /// the one choosing, so each path from the transition to one it may choose is judged by the one it ends in.
