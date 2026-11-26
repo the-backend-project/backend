@@ -1,6 +1,6 @@
 package com.github.thxmasj.backend.backoffice;
 
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.database.DatabaseClient;
 import com.github.thxmasj.backend.http.HttpClient;
 import com.github.thxmasj.backend.http.JdkHttpClient;
@@ -24,11 +24,11 @@ import java.util.stream.Collectors;
 /// machine of its own, in a schema of its own, whose model this class gives: every request it receives is an inbox
 /// request, and every decision a transition, from signing users in with the provider to rendering the pages. Every
 /// sign-in is a `BackofficeSession`, whose event log tells who signed in and which pages they viewed. It reads the
-/// schema of the application, with the application's entity models, with a role which may only read it.
+/// schema of the application, with the application's entity types, with a role which may only read it.
 /// [BackofficeApp] runs it:
 ///
 /// ```java
-/// BackofficeApp.run("Orders", "orders", Orders.Inbox.entityModels(), args, System.getenv());
+/// BackofficeApp.run("Orders", "orders", Orders.Inbox.entityTypes(), args, System.getenv());
 /// ```
 public final class Backoffice {
 
@@ -39,15 +39,15 @@ public final class Backoffice {
   /// @param config                 how the users sign in
   /// @param client                 a client of the database, whose role may read the schema of the application
   /// @param applicationSchema      the schema of the application's state machine
-  /// @param applicationModels      the entity models given to the application's state machine, which with those their
-  ///                               transitions trigger events on give the entity models and
+  /// @param applicationModels      the entity types given to the application's state machine, which with those their
+  ///                               transitions trigger events on give the entity types and
   ///                               event types of the entities read
   public Backoffice(
       String service,
       Config config,
       DatabaseClient client,
       String applicationSchema,
-      List<? extends EntityModel> applicationModels
+      List<? extends EntityType> applicationModels
   ) {
     this(service, config, client, applicationSchema, applicationModels, new JdkHttpClient());
   }
@@ -58,7 +58,7 @@ public final class Backoffice {
       Config config,
       DatabaseClient client,
       String applicationSchema,
-      List<? extends EntityModel> applicationModels,
+      List<? extends EntityType> applicationModels,
       HttpClient forwarder
   ) {
     Objects.requireNonNull(config, "config");
@@ -77,14 +77,14 @@ public final class Backoffice {
     ));
   }
 
-  /// The inbox of the backoffice's state machine, whose entity models the state machine is created with. Its requests
+  /// The inbox of the backoffice's state machine, whose entity types the state machine is created with. Its requests
   /// trigger events on the sessions and the other requests, which the state machine thereby runs too.
   public HttpInbox inbox() {
     return sessions.inbox();
   }
 
-  /// The entity model of the sessions, e.g. to draw their state diagram
-  public EntityModel sessionModel() {
+  /// The entity type of the sessions, e.g. to draw their state diagram
+  public EntityType sessionModel() {
     return sessions.session();
   }
 

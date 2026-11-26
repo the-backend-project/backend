@@ -7,7 +7,7 @@ import static com.github.thxmasj.backend.http.inbox.HttpInboxRequest.parseMessag
 import static com.github.thxmasj.backend.http.inbox.HttpInboxRequest.when;
 
 import com.github.thxmasj.backend.core.DataType;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.http.HttpClient;
 import com.github.thxmasj.backend.http.HttpRequest;
@@ -46,7 +46,7 @@ final class DocExamples {
 
   record Order(String item) {}
 
-  static final EntityModel Orders = EntityModel.of("Orders", UUID.fromString("6f0a6c55-2a3e-4a0b-9d3c-1c4f6d2b7e10"), Map::of);
+  static final EntityType Orders = EntityType.of("Orders", UUID.fromString("6f0a6c55-2a3e-4a0b-9d3c-1c4f6d2b7e10"), Map::of);
 
   static final EventType<Order, Void> OrderPlaced = EventType.of(
       "Order placed",
@@ -80,7 +80,7 @@ final class DocExamples {
 
   record EnrolmentResult(String messageId, EnrolmentStatus status, UUID tokenReference) {}
 
-  static final EntityModel PaymentToken = EntityModel.of("PaymentToken", UUID.fromString("9a2e5c71-3b8d-4f04-a6e9-2d7c1b5f8e33"), Map::of);
+  static final EntityType PaymentToken = EntityType.of("PaymentToken", UUID.fromString("9a2e5c71-3b8d-4f04-a6e9-2d7c1b5f8e33"), Map::of);
 
   static final EventType<EnrolmentResult, Void> Activate = EventType.of(
       "Activate",
@@ -131,7 +131,7 @@ final class DocExamples {
 
   record ReversalRequest(String authorisation) {}
 
-  static final EntityModel Payment = EntityModel.of("Payment", UUID.fromString("c3a7e1f9-4b2d-4d68-a0e5-9b1f7c3d6a28"), Map::of);
+  static final EntityType Payment = EntityType.of("Payment", UUID.fromString("c3a7e1f9-4b2d-4d68-a0e5-9b1f7c3d6a28"), Map::of);
 
   static final EventType<Void, Void> AuthorisationUnknown = EventType.of(
       "Authorisation unknown",

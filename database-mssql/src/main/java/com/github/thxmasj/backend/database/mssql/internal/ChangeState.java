@@ -2,10 +2,10 @@ package com.github.thxmasj.backend.database.mssql.internal;
 
 import static java.util.stream.Collectors.joining;
 
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.Event;
-import com.github.thxmasj.backend.core.IdEntityModel;
-import com.github.thxmasj.backend.core.IndexEntityModel;
+import com.github.thxmasj.backend.core.IdEntityType;
+import com.github.thxmasj.backend.core.IndexEntityType;
 import com.github.thxmasj.backend.core.TriggerType;
 import com.github.thxmasj.backend.core.database.DatabaseClient;
 import com.github.thxmasj.backend.core.database.TableType;
@@ -61,7 +61,7 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
       String parameterPrefix,
       Change change
   ) {
-    EntityModel entityModel = change.entityModel();
+    EntityType entityType = change.entityType();
     Event<?> event = change.newEvent();
     DelayedEvent<?> delayedEvent = change.delayedEvent();
     ConditionalTrigger<?> conditionalTrigger = change.conditionalTrigger();
@@ -71,7 +71,7 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
         DECLARE @entityId{changeIndex} BINARY(16)
         SELECT @entityId{changeIndex}=:entityId
         """.replace("{changeIndex}", String.valueOf(changeIndex));
-    if (event != null && (entityModel instanceof IndexEntityModel || entityModel instanceof IdEntityModel)) {
+    if (event != null && (entityType instanceof IndexEntityType || entityType instanceof IdEntityType)) {
       sql +=
           """
           INSERT INTO [{schema}].[{table}] (
@@ -85,7 +85,7 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
             :eventNumber,:type,:timestamp,:data
           )
           """.replace("{schema}", schema)
-              .replace("{table}", Tables.table(TableType.of(entityModel)))
+              .replace("{table}", Tables.table(TableType.of(entityType)))
               .replace("{changeIndex}", String.valueOf(changeIndex));
     } else if (event != null) {
       if (event.eventNumber() == 1) {
@@ -93,10 +93,10 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
             """
             INSERT INTO [{schema}].[Entity] (
               EntityId,
-              EntityModelId
+              EntityTypeId
             ) VALUES (
               @entityId{changeIndex},
-              :entityModelId
+              :entityTypeId
             );
             """.replace("{schema}", schema)
                 .replace("{changeIndex}", String.valueOf(changeIndex));
@@ -147,7 +147,7 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
           INSERT INTO [{schema}].[ConditionalTrigger] (
             Id,
             EntityId,
-            EntityModelId,
+            EntityTypeId,
             TriggerEntityId,
             TriggerEventNumber,
             Type,
@@ -160,7 +160,7 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
           ) VALUES (
             :conditionalTriggerId,
             @entityId{changeIndex},
-            :conditionEntityModelId,
+            :conditionEntityTypeId,
             :triggerEntityId,
             :triggerEventNumber,
             :type,:data,:timestamp,:lastTypes,:referenceType,:indexKey,:correlationId
@@ -184,7 +184,7 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
           """
           INSERT INTO [{schema}].[DelayedTrigger] (
             EntityId,
-            EntityModelId,
+            EntityTypeId,
             EventNumber,
             Type,
             Data,
@@ -193,7 +193,7 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
             Attempt
           ) VALUES (
             @entityId{changeIndex},
-            :entityModelId,
+            :entityTypeId,
             :eventNumber,
             :type,
             :data,

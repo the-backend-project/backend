@@ -3,9 +3,9 @@ package com.github.thxmasj.backend.core.internal.database;
 import static java.util.Objects.requireNonNullElse;
 
 import com.github.thxmasj.backend.core.DataType;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.Event;
-import com.github.thxmasj.backend.core.IdEntityModel;
+import com.github.thxmasj.backend.core.IdEntityType;
 import com.github.thxmasj.backend.core.Severity;
 import com.github.thxmasj.backend.core.StateMachine.ProcessResult;
 import com.github.thxmasj.backend.core.TriggerType;
@@ -38,7 +38,7 @@ public abstract class ChangeState {
     Event<?> event = change.newEvent();
     if (change.entityId() != null)
       spec.bind("entityId", change.entityId());
-    spec.bind("entityModelId", change.entityModel().id());
+    spec.bind("entityTypeId", change.entityType().id());
     spec.bind("timestamp", timestamp.withZoneSameInstant(clock.getZone()).toLocalDateTime());
     if (event != null) {
       spec.bind("eventNumber", event.eventNumber())
@@ -59,7 +59,7 @@ public abstract class ChangeState {
           .bind("conditionalTriggerId", change.conditionalTrigger().id())
           .bind("type", change.conditionalTrigger().type().id())
           .bindNullable("data", byte[].class, marshal(change.conditionalTrigger()))
-          .bind("conditionEntityModelId", change.conditionalTrigger().entityModel().id())
+          .bind("conditionEntityTypeId", change.conditionalTrigger().entityType().id())
           .bind("triggerEntityId", change.conditionalTrigger().triggerEvent().entityId())
           .bind("triggerEventNumber", change.conditionalTrigger().triggerEvent().eventNumber())
           .bind("lastTypes", change.conditionalTrigger().lastTypes().stream()
@@ -90,7 +90,7 @@ public abstract class ChangeState {
 
   public interface Change {
 
-    EntityModel entityModel();
+    EntityType entityType();
     
     UUID entityId();
     
@@ -120,15 +120,15 @@ public abstract class ChangeState {
       return null;
     }
 
-    static Change fromFiredTrigger(EntityModel entityModel, UUID entityId, FiredTrigger firedTrigger) {
+    static Change fromFiredTrigger(EntityType entityType, UUID entityId, FiredTrigger firedTrigger) {
       return new Change() {
-        @Override public EntityModel entityModel() {return entityModel;}
+        @Override public EntityType entityType() {return entityType;}
         @Override public UUID entityId() {return entityId;}
         @Override public Event<?> newEvent() {return null;}
         @Override public DelayedEvent<?> delayedEvent() {return null;}
         @Override public FiredTrigger firedTrigger() {return firedTrigger;}
         @Override public String toString() {
-          return entityModel.name() + ":" + entityId + ":fired(" + firedTrigger.type() + "):" + firedTrigger.eventNumber();
+          return entityType.name() + ":" + entityId + ":fired(" + firedTrigger.type() + "):" + firedTrigger.eventNumber();
         }
       };
     }
@@ -136,8 +136,8 @@ public abstract class ChangeState {
     static Change fromConditionalTrigger(ConditionalTrigger<?> conditionalTrigger) {
       return new Change() {
         @Override
-        public EntityModel entityModel() {
-          return conditionalTrigger.entityModel();
+        public EntityType entityType() {
+          return conditionalTrigger.entityType();
         }
 
         @Override
@@ -162,7 +162,7 @@ public abstract class ChangeState {
 
         @Override
         public String toString() {
-          return entityModel().name() + ":" +
+          return entityType().name() + ":" +
               conditionalTrigger.entityId() + ":trigger(conditional):[" +
               conditionalTrigger.type().name() + "]";
         }
@@ -173,8 +173,8 @@ public abstract class ChangeState {
     static Change fromAcceptedEvent(ProcessResult.Accepted<?> acceptedEvent) {
       return new Change() {
         @Override
-        public EntityModel entityModel() {
-          return acceptedEvent.entityModel();
+        public EntityType entityType() {
+          return acceptedEvent.entityType();
         }
 
         @Override
@@ -200,7 +200,7 @@ public abstract class ChangeState {
 
         @Override
         public String toString() {
-          return entityModel().name() + ":" +
+          return entityType().name() + ":" +
               entityId() + ":ev:[" +
               newEvent().typeName() + "]:" +
               // Without the data, which may be a secret, and which would be marshalled just for the debug output
@@ -214,8 +214,8 @@ public abstract class ChangeState {
     static Change fromDelayedEvent(DelayedEvent<?> delayedEvent) {
       return new Change() {
         @Override
-        public EntityModel entityModel() {
-          return delayedEvent.entityModel();
+        public EntityType entityType() {
+          return delayedEvent.entityType();
         }
 
         @Override
@@ -235,7 +235,7 @@ public abstract class ChangeState {
 
         @Override
         public String toString() {
-          return entityModel().name() + ":" +
+          return entityType().name() + ":" +
               delayedEvent.entityId() + ":ev:[" +
               delayedEvent.type().name() + "]:" +
               delayedEvent.eventNumber() +
@@ -284,7 +284,7 @@ public abstract class ChangeState {
           eventAlreadyExists(violation, changes);
       case UniqueIndexConstraintViolation violation when violation.tableType() == TableType.IdEvent ->
           changes.stream()
-              .filter(change -> change.entityModel() instanceof IdEntityModel && change.newEvent() != null)
+              .filter(change -> change.entityType() instanceof IdEntityType && change.newEvent() != null)
               .map(Change::newEvent)
               .filter(event -> violation.duplicateKey().equalsIgnoreCase(duplicateKey(event)))
               .<Throwable>map(event -> new IdEventAlreadyExists(event, violation))
@@ -295,7 +295,7 @@ public abstract class ChangeState {
   }
 
   /// The event which exists, of the change storing the event of the entity id and number of the key, of an entity
-  /// model whose events are stored in a table of the type of the violation's. The id and index entities of an entity have its entity id,
+  /// type whose events are stored in a table of the type of the violation's. The id and index entities of an entity have its entity id,
   /// so where it is tells them apart.
   private static EventAlreadyExists eventAlreadyExists(
       PrimaryKeyConstraintViolation violation,
@@ -310,7 +310,7 @@ public abstract class ChangeState {
           .filter(change -> change.newEvent() != null
               && entityId.equals(change.entityId())
               && change.newEvent().eventNumber() == eventNumber
-              && tableType.stores(change.entityModel()))
+              && tableType.stores(change.entityType()))
           .findFirst()
           .map(change -> new EventAlreadyExists(change, changes, violation))
           .orElseGet(() -> new EventAlreadyExists(violation));

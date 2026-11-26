@@ -1,6 +1,6 @@
 package com.github.thxmasj.backend.identityprovider;
 
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static com.github.thxmasj.backend.core.EntitySelector.entityIdFromSession;
 import static com.github.thxmasj.backend.core.EntitySelector.newEntityId;
 import static com.github.thxmasj.backend.core.TransitionModelBuilder.WithEvent.onEvent;
@@ -9,9 +9,9 @@ import static com.github.thxmasj.backend.http.inbox.HttpInbox.Request;
 
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EntityId;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EventType;
-import com.github.thxmasj.backend.core.IdEntityModel;
+import com.github.thxmasj.backend.core.IdEntityType;
 import com.github.thxmasj.backend.core.State;
 import com.github.thxmasj.backend.core.TransitionModel;
 import com.github.thxmasj.backend.core.Tuples.Tuple2;
@@ -38,8 +38,8 @@ public interface Clients {
   /// The scope allowing a client to register clients
   String RegistrationScope = "client-registration";
 
-  EntityModel Client = EntityModel.of("Client", UUID.fromString("0f6d1c52-2b8e-4f3a-9d71-5a4c8e2b1f06"), Clients::clientTransitions);
-  EntityModel ClientRegistration = EntityModel.of("Client registration", UUID.fromString("7b3e9a14-6c0d-4e85-a2f9-1d8c5b7e3a40"), Clients::registrationTransitions);
+  EntityType Client = EntityType.of("Client", UUID.fromString("0f6d1c52-2b8e-4f3a-9d71-5a4c8e2b1f06"), Clients::clientTransitions);
+  EntityType ClientRegistration = EntityType.of("Client registration", UUID.fromString("7b3e9a14-6c0d-4e85-a2f9-1d8c5b7e3a40"), Clients::registrationTransitions);
 
   enum States implements State {
     Registered,
@@ -84,7 +84,7 @@ public interface Clients {
       UUID.fromString("c4a1e8f2-93b7-4d06-8e5a-2f7b1c9d4e63"),
       DataType.string()
   );
-  IdEntityModel ClientIds = IdEntityModel.of("ClientIds", UUID.fromString("5e8b2d7a-1f4c-4a93-b6e0-8c3d9f2a7b15"), ClientIdClaimed);
+  IdEntityType ClientIds = IdEntityType.of("ClientIds", UUID.fromString("5e8b2d7a-1f4c-4a93-b6e0-8c3d9f2a7b15"), ClientIdClaimed);
 
   EventType<Registration, Registration> ClientRegistered = EventType.of(
       "Client registered",

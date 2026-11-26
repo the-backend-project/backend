@@ -19,7 +19,7 @@ erDiagram
     }
     Entity {
         uuid EntityId PK
-        uuid EntityModelId
+        uuid EntityTypeId
     }
     Event {
         uuid EntityId PK, FK
@@ -44,7 +44,7 @@ erDiagram
     }
     DelayedTrigger {
         uuid EntityId FK "unique"
-        uuid EntityModelId
+        uuid EntityTypeId
         smallint EventNumber
         uuid Type
         bytes Data
@@ -55,7 +55,7 @@ erDiagram
     ConditionalTrigger {
         uuid Id PK
         uuid EntityId FK
-        uuid EntityModelId
+        uuid EntityTypeId
         uuid TriggerEntityId FK
         int TriggerEventNumber FK
         uuid Type
@@ -90,14 +90,14 @@ code's table definitions, and startup fails if they differ, as the schema is nev
 
 ### Entity
 
-One row per entity, inserted together with the entity's first event. `EntityModelId` is the id of the entity model the
+One row per entity, inserted together with the entity's first event. `EntityTypeId` is the id of the entity type the
 entity is an instance of, which determines its states and transitions. Id and index entities (see below) have no row
 here.
 
 | Column        | SQL Server         | PostgreSQL |
 |---------------|--------------------|------------|
 | EntityId      | `BINARY(16)`       | `UUID`     |
-| EntityModelId | `BINARY(16)`       | `UUID`     |
+| EntityTypeId | `BINARY(16)`       | `UUID`     |
 
 ### Event
 
@@ -119,7 +119,7 @@ if its transition masks it. Events which are not stored, and the events of entit
 
 ### IdEvent
 
-The event logs of id entities (`IdEntityModel`), which hold the ids of entities other than their entity ids, such as a
+The event logs of id entities (`IdEntityType`), which hold the ids of entities other than their entity ids, such as a
 merchant id. An id entity shares its entity id with the entity it identifies, and each of its events is an id: `Type`
 is the kind of id and `Data` its marshalled value. Id events are triggered from transitions like any other event.
 
@@ -140,7 +140,7 @@ PostgreSQL has no such limit in the schema, but its B-tree indexes take keys of 
 
 ### IndexEvent
 
-The event logs of index entities (`IndexEntityModel`). Like an id entity, an index entity shares its entity id with the
+The event logs of index entities (`IndexEntityType`). Like an id entity, an index entity shares its entity id with the
 entity it indexes, but its events need not be unique: `Data` is an index key, such as the id of the customer an order
 belongs to, which may index many entities. The index is used to:
 
@@ -175,7 +175,7 @@ event number no longer follows the entity's last event are deleted instead of fi
 | Column        | SQL Server         | PostgreSQL     |
 |---------------|--------------------|----------------|
 | EntityId      | `BINARY(16)`       | `UUID`         |
-| EntityModelId | `BINARY(16)`       | `UUID`         |
+| EntityTypeId | `BINARY(16)`       | `UUID`         |
 | EventNumber   | `SMALLINT`         | `SMALLINT`     |
 | Type          | `BINARY(16)`       | `UUID`         |
 | Data          | `VARBINARY(MAX)`   | `BYTEA`        |
@@ -197,7 +197,7 @@ condition is met (`ConditionalTriggers`). The row is deleted in the same transac
 |--------------------|--------------------|----------------|
 | Id                 | `BINARY(16)`       | `UUID`         |
 | EntityId           | `BINARY(16)`       | `UUID`         |
-| EntityModelId      | `BINARY(16)`       | `UUID`         |
+| EntityTypeId      | `BINARY(16)`       | `UUID`         |
 | TriggerEntityId    | `BINARY(16)`       | `UUID`         |
 | TriggerEventNumber | `INT`              | `INT`          |
 | Type               | `BINARY(16)`       | `UUID`         |

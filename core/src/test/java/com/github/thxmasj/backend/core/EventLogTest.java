@@ -47,14 +47,14 @@ public class EventLogTest {
   }
 
   @Test
-  public void eventLogPreservesEntityModel() {
-    EntityModel model = EntityModel.of("TestModel", randomUUID(), Map::of);
+  public void eventLogPreservesEntityType() {
+    EntityType model = EntityType.of("TestModel", randomUUID(), Map::of);
     UUID entityId = randomUUID();
     List<Event<?>> events = List.of(
         Event.of(entityId, 1, EventType.of("Test1", randomUUID()), ZonedDateTime.now(), null)
     );
     EventLog log = new EventLog(model, entityId, events);
-    assertEquals(model, log.entityModel());
+    assertEquals(model, log.entityType());
     assertEquals(entityId, log.entityId());
     assertEquals(events, log.events());
   }

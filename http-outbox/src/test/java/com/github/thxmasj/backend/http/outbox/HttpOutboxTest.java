@@ -1,7 +1,7 @@
 package com.github.thxmasj.backend.http.outbox;
 
 import static com.github.thxmasj.backend.core.BuiltinEventTypes.EventsRolledBack;
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static com.github.thxmasj.backend.core.EntitySelector.entityId;
@@ -26,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.github.thxmasj.backend.core.EventType.Rollback.Data;
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.DelaySpecification;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.Event;
 import com.github.thxmasj.backend.core.EventLog;
 import com.github.thxmasj.backend.core.EventReference;
@@ -86,10 +86,10 @@ public class HttpOutboxTest {
   }
 
   /// A state machine of the process with the outbox requests, which events are also triggered on directly by the tests
-  private static StateMachine stateMachine(EntityModel process, List<? extends EntityModel> outboxes) {
-    var entityModels = new ArrayList<EntityModel>(outboxes);
-    entityModels.add(process);
-    return Init.stateMachine(entityModels);
+  private static StateMachine stateMachine(EntityType process, List<? extends EntityType> outboxes) {
+    var entityTypes = new ArrayList<EntityType>(outboxes);
+    entityTypes.add(process);
+    return Init.stateMachine(entityTypes);
   }
 
   private static <T> HttpRequest<T> requestMessage(String path) {
@@ -184,11 +184,11 @@ public class HttpOutboxTest {
     var model = ProcessModel.create();
     var acceptedTransitions = model.exchange().transitions().get(AtMostOnce.States.Accepted);
     assertEquals(1, acceptedTransitions.size());
-    assertEquals(model.exchange().rollbackOnAcceptedModel(), acceptedTransitions.getFirst().triggers().getFirst().entityModel());
+    assertEquals(model.exchange().rollbackOnAcceptedModel(), acceptedTransitions.getFirst().triggers().getFirst().entityType());
 
     var unknownTransitions = model.exchange().transitions().get(AtMostOnce.States.Unknown);
     assertEquals(1, unknownTransitions.size());
-    assertEquals(model.exchange().rollbackOnUnknownModel(), unknownTransitions.getFirst().triggers().getFirst().entityModel());
+    assertEquals(model.exchange().rollbackOnUnknownModel(), unknownTransitions.getFirst().triggers().getFirst().entityType());
   }
 
   @Test
@@ -308,7 +308,7 @@ public class HttpOutboxTest {
   @Test
   public void atMostOnceRequestIsStoredMaskedAndSentWhole() {
     var processTransitions = new AtomicReference<Map<State, List<TransitionModel<?, ?>>>>();
-    EntityModel process = EntityModel.of("Process", UUID.randomUUID(), processTransitions::get);
+    EntityType process = EntityType.of("Process", UUID.randomUUID(), processTransitions::get);
     EventType<Void, Void> processStarted = EventType.of("Process started", UUID.randomUUID());
     EventType<String, String> processSucceeded = EventType.of("Process succeeded", UUID.randomUUID(), DataType.string(), DataType.string());
     EventType<Void, Void> processFailed = EventType.of("Process failed", UUID.randomUUID());
@@ -358,8 +358,8 @@ public class HttpOutboxTest {
         States.Done, List.of()
     ));
     String schema = UUID.randomUUID().toString();
-    var entityModels = new ArrayList<EntityModel>(List.of(exchange, process));
-    var machine = Init.stateMachine(schema, entityModels);
+    var entityTypes = new ArrayList<EntityType>(List.of(exchange, process));
+    var machine = Init.stateMachine(schema, entityTypes);
 
     StepVerifier.create(machine.onEvent(trigger(processStarted, process)))
         .assertNext(event -> assertEquals(processStarted, event.type()))
@@ -383,7 +383,7 @@ public class HttpOutboxTest {
   public void successfulExchangeWithRequestAwareContentParser() {
     // The transitions of the process are set after the outbox requests built with it, which they trigger on
     var processTransitions = new AtomicReference<Map<State, List<TransitionModel<?, ?>>>>();
-    EntityModel process = EntityModel.of("Process", UUID.randomUUID(), processTransitions::get);
+    EntityType process = EntityType.of("Process", UUID.randomUUID(), processTransitions::get);
     EventType<Void, Void> processStarted = EventType.of("Process started", UUID.randomUUID());
     EventType<String, String> processSucceeded = EventType.of("Process succeeded", UUID.randomUUID(), DataType.string(), DataType.string());
     EventType<Void, Void> processFailed = EventType.of("Process failed", UUID.randomUUID());
@@ -491,7 +491,7 @@ public class HttpOutboxTest {
     assertEquals(1, timeoutTransition.triggers().size());
     var trigger = timeoutTransition.triggers().getFirst();
     assertEquals(model.responseMissed(), trigger.eventType());
-    assertEquals(model.process(), trigger.entityModel());
+    assertEquals(model.process(), trigger.entityType());
 
     UUID processEntityId = UUID.randomUUID();
     @SuppressWarnings("unchecked")
@@ -511,7 +511,7 @@ public class HttpOutboxTest {
     var triggerContext = (TriggerStep<?, ?>) occ.previous();
     assertNotNull(triggerContext);
     assertEquals(model.responseMissed(), triggerContext.eventTrigger().eventType());
-    assertEquals(model.process(), triggerContext.eventTrigger().entityModel());
+    assertEquals(model.process(), triggerContext.eventTrigger().entityType());
   }
 
   @Test
@@ -543,7 +543,7 @@ public class HttpOutboxTest {
   public void atLeastOnceSuccessTransitionIdentifiesProcessEntity() {
     // The transitions of the process are set after the outbox requests built with it, which they trigger on
     var processTransitions = new AtomicReference<Map<State, List<TransitionModel<?, ?>>>>();
-    EntityModel process = EntityModel.of("Process", UUID.fromString("dda0cc10-3356-4522-8527-ca4f7006c566"), processTransitions::get);
+    EntityType process = EntityType.of("Process", UUID.fromString("dda0cc10-3356-4522-8527-ca4f7006c566"), processTransitions::get);
     EventType<Void, Void> processSucceeded = EventType.of("Process succeeded", UUID.fromString("433d18b2-8429-4615-aeb0-5de2240413ea"));
     AtLeastOnce<Void> alo = HttpOutboxRequest.atLeastOnce()
         .requestPayloadType(DataType.none())
@@ -596,14 +596,14 @@ public class HttpOutboxTest {
     }
     assertNotNull(triggerContext);
     assertEquals(processSucceeded, triggerContext.eventTrigger().eventType());
-    assertEquals(process, triggerContext.eventTrigger().entityModel());
+    assertEquals(process, triggerContext.eventTrigger().entityType());
   }
 
   @Test
   public void atLeastOnceBeginRequestDispatchedOutputsTriggerEntityId() {
     // The transitions of the process are set after the outbox requests built with it, which they trigger on
     var processTransitions = new AtomicReference<Map<State, List<TransitionModel<?, ?>>>>();
-    EntityModel process = EntityModel.of("Process", UUID.fromString("dda0cc10-3356-4522-8527-ca4f7006c566"), processTransitions::get);
+    EntityType process = EntityType.of("Process", UUID.fromString("dda0cc10-3356-4522-8527-ca4f7006c566"), processTransitions::get);
     AtLeastOnce<Void> alo = HttpOutboxRequest.atLeastOnce()
         .requestPayloadType(DataType.none())
         .responsePayloadType(DataType.none())
@@ -648,7 +648,7 @@ public class HttpOutboxTest {
   public void atLeastOnceRedispatchedRequestHasInflightTimeout() {
     // The transitions of the process are set after the outbox requests built with it, which they trigger on
     var processTransitions = new AtomicReference<Map<State, List<TransitionModel<?, ?>>>>();
-    EntityModel process = EntityModel.of("Process", UUID.fromString("dda0cc10-3356-4522-8527-ca4f7006c566"), processTransitions::get);
+    EntityType process = EntityType.of("Process", UUID.fromString("dda0cc10-3356-4522-8527-ca4f7006c566"), processTransitions::get);
     Duration inflightTimeout = Duration.ofSeconds(7);
     AtLeastOnce<Void> alo = HttpOutboxRequest.atLeastOnce()
         .requestPayloadType(DataType.none())
@@ -768,7 +768,7 @@ public class HttpOutboxTest {
   private List<String> redispatchDeadRequest(boolean acceptedBefore) {
     // The transitions of the process are set after the outbox requests built with it, which they trigger on
     var processTransitions = new AtomicReference<Map<State, List<TransitionModel<?, ?>>>>();
-    EntityModel process = EntityModel.of("Process", UUID.randomUUID(), processTransitions::get);
+    EntityType process = EntityType.of("Process", UUID.randomUUID(), processTransitions::get);
     EventType<Void, Void> processStarted = EventType.of("Process started", UUID.randomUUID());
     EventType<Void, Void> processSucceeded = EventType.of("Process succeeded", UUID.randomUUID());
     EventType<Void, Void> redispatchRequested = EventType.of("Redispatch requested", UUID.randomUUID());
@@ -814,9 +814,9 @@ public class HttpOutboxTest {
         )
     ));
     String schema = UUID.randomUUID().toString();
-    var entityModels = List.of(process, dispatcher.outbox());
-    var machine = Init.stateMachine(schema, entityModels);
-    var storage = Init.storage(schema, entityModels);
+    var entityTypes = List.of(process, dispatcher.outbox());
+    var machine = Init.stateMachine(schema, entityTypes);
+    var storage = Init.storage(schema, entityTypes);
 
     UUID processId = machine.onEvent(trigger(processStarted, process)).blockFirst(Duration.ofSeconds(10)).entityId();
     if (acceptedBefore) {
@@ -842,7 +842,7 @@ public class HttpOutboxTest {
   }
 
   /// The state of the process, once it is the expected one, or after a while
-  private static State awaitProcessState(StateMachine machine, EntityModel process, UUID processId, State expected) {
+  private static State awaitProcessState(StateMachine machine, EntityType process, UUID processId, State expected) {
     long deadline = System.currentTimeMillis() + 10_000;
     State state;
     do {
@@ -863,7 +863,7 @@ public class HttpOutboxTest {
   @Test
   public void requestMessageWithAHeaderTheClientAddsFailsTheDispatch() {
     var processTransitions = new AtomicReference<Map<State, List<TransitionModel<?, ?>>>>();
-    EntityModel process = EntityModel.of("Process", UUID.randomUUID(), processTransitions::get);
+    EntityType process = EntityType.of("Process", UUID.randomUUID(), processTransitions::get);
     EventType<Void, Void> processStarted = EventType.of("Process started", UUID.randomUUID());
     EventType<Void, Void> processSucceeded = EventType.of("Process succeeded", UUID.randomUUID());
     String path = "/" + UUID.randomUUID();
@@ -920,7 +920,7 @@ public class HttpOutboxTest {
   ) {
     // The transitions of the process are set after the outbox requests built with it, which they trigger on
     var processTransitions = new AtomicReference<Map<State, List<TransitionModel<?, ?>>>>();
-    EntityModel process = EntityModel.of("Process", UUID.randomUUID(), processTransitions::get);
+    EntityType process = EntityType.of("Process", UUID.randomUUID(), processTransitions::get);
     EventType<Void, Void> processStarted = EventType.of("Process started", UUID.randomUUID());
     EventType<Void, Void> processSucceeded = EventType.of("Process succeeded", UUID.randomUUID());
     EventType<Void, Void> redispatchRequested = EventType.of("Redispatch requested", UUID.randomUUID());
@@ -978,9 +978,9 @@ public class HttpOutboxTest {
         )
     ));
     String schema = UUID.randomUUID().toString();
-    var entityModels = List.of(process, dispatcher.outbox());
-    var machine = Init.stateMachine(schema, entityModels);
-    var storage = Init.storage(schema, entityModels);
+    var entityTypes = List.of(process, dispatcher.outbox());
+    var machine = Init.stateMachine(schema, entityTypes);
+    var storage = Init.storage(schema, entityTypes);
 
     UUID processId = machine.onEvent(trigger(processStarted, process))
         .takeUntil(e -> e.type().equals(processSucceeded))
@@ -1021,7 +1021,7 @@ public class HttpOutboxTest {
         .repeatMessageCreator((_, o) -> o)
         .forwarder(new NettyHttpClient(new NettyHttpClientBuilder().build()))
         .inflightTimeout(Duration.ofSeconds(7))
-        .processModel(EntityModel.of("Process", UUID.randomUUID(), Map::of))
+        .processModel(EntityType.of("Process", UUID.randomUUID(), Map::of))
         .contentParser(_ -> valid(null))
         .isAccepted(r -> r.statusCode() == 200)
         .isFailureTransient(_ -> true)
@@ -1065,7 +1065,7 @@ public class HttpOutboxTest {
   }
 
   record ProcessModel(
-      EntityModel process,
+      EntityType process,
       EventType<Void, UUID> processStarted,
       EventType<Void, Void> processSucceeded,
       EventType<Void, Void> processFailed,
@@ -1082,7 +1082,7 @@ public class HttpOutboxTest {
     static ProcessModel create(Duration inflightTimeout) {
       // The transitions of the process are set after the outbox requests built with it, which they trigger on
       var processTransitions = new AtomicReference<Map<State, List<TransitionModel<?, ?>>>>();
-      EntityModel process = EntityModel.of("Process", UUID.fromString("dda0cc10-3356-4522-8527-ca4f7006c566"), processTransitions::get);
+      EntityType process = EntityType.of("Process", UUID.fromString("dda0cc10-3356-4522-8527-ca4f7006c566"), processTransitions::get);
       EventType<Void, UUID> processStarted = EventType.of(
           "Process started", UUID.fromString("dbcf351c-b50e-4789-80e9-f52e2be789cd"),
           DataType.none(), DataType.uuid()
@@ -1170,7 +1170,7 @@ public class HttpOutboxTest {
   }
 
   record ProcessModelWithoutRollback(
-      EntityModel process,
+      EntityType process,
       EventType<Void, Void> processStarted,
       EventType<Void, Void> processSucceeded,
       EventType<Void, Void> processFailed,
@@ -1180,7 +1180,7 @@ public class HttpOutboxTest {
     static ProcessModelWithoutRollback create() {
       // The transitions of the process are set after the outbox requests built with it, which they trigger on
       var processTransitions = new AtomicReference<Map<State, List<TransitionModel<?, ?>>>>();
-      EntityModel process = EntityModel.of("Process", UUID.randomUUID(), processTransitions::get);
+      EntityType process = EntityType.of("Process", UUID.randomUUID(), processTransitions::get);
       EventType<Void, Void> processStarted = EventType.of("Process started", UUID.randomUUID());
       EventType<Void, Void> processSucceeded = EventType.of("Process succeeded", UUID.randomUUID());
       EventType<Void, Void> processFailed = EventType.of("Process failed", UUID.randomUUID());
@@ -1223,7 +1223,7 @@ public class HttpOutboxTest {
   }
 
   record ProcessModelWithDefaultInvalidResponseRejection(
-      EntityModel process,
+      EntityType process,
       EventType<Void, Void> processStarted,
       StateMachine machine,
       String path
@@ -1231,7 +1231,7 @@ public class HttpOutboxTest {
     static ProcessModelWithDefaultInvalidResponseRejection create() {
       // The transitions of the process are set after the outbox requests built with it, which they trigger on
       var processTransitions = new AtomicReference<Map<State, List<TransitionModel<?, ?>>>>();
-      EntityModel process = EntityModel.of("Process", UUID.randomUUID(), processTransitions::get);
+      EntityType process = EntityType.of("Process", UUID.randomUUID(), processTransitions::get);
       EventType<Void, Void> processStarted = EventType.of("Process started", UUID.randomUUID());
       String path = "/" + UUID.randomUUID();
       HttpOutboxRequest<Void> Exchange = HttpOutboxRequest.atMostOnce()
@@ -1266,7 +1266,7 @@ public class HttpOutboxTest {
   }
 
   record ProcessModelWithDefaultInvalidResponseUnknown(
-      EntityModel process,
+      EntityType process,
       EventType<Void, Void> processStarted,
       StateMachine machine,
       String path
@@ -1274,7 +1274,7 @@ public class HttpOutboxTest {
     static ProcessModelWithDefaultInvalidResponseUnknown create() {
       // The transitions of the process are set after the outbox requests built with it, which they trigger on
       var processTransitions = new AtomicReference<Map<State, List<TransitionModel<?, ?>>>>();
-      EntityModel process = EntityModel.of("Process", UUID.randomUUID(), processTransitions::get);
+      EntityType process = EntityType.of("Process", UUID.randomUUID(), processTransitions::get);
       EventType<Void, Void> processStarted = EventType.of("Process started", UUID.randomUUID());
       String path = "/" + UUID.randomUUID();
       HttpOutboxRequest<Void> Exchange = HttpOutboxRequest.atMostOnce()
@@ -1309,11 +1309,11 @@ public class HttpOutboxTest {
   }
 
   record ProcessModelWithDefaultMissingResponse(
-      EntityModel process,
+      EntityType process,
       HttpOutboxRequest<Void> exchange
   ) {
     static ProcessModelWithDefaultMissingResponse create() {
-      EntityModel process = EntityModel.of("Process", UUID.randomUUID(), Map::of);
+      EntityType process = EntityType.of("Process", UUID.randomUUID(), Map::of);
       String path = "/" + UUID.randomUUID();
       HttpOutboxRequest<Void> exchange = HttpOutboxRequest.atMostOnce()
           .requestPayloadType(DataType.<Void>unknown())
@@ -1351,7 +1351,7 @@ public class HttpOutboxTest {
         .requestPayloadType(DataType.none())
         .responsePayloadType(DataType.none())
         .forwarder(new NettyHttpClient(new NettyHttpClientBuilder().build()))
-        .processModel(EntityModel.of("Process", UUID.randomUUID(), Map::of))
+        .processModel(EntityType.of("Process", UUID.randomUUID(), Map::of))
         .contentParser(_ -> valid(null))
         .isAccepted(_ -> true)
         .isRejected(_ -> false)

@@ -1,6 +1,6 @@
 package com.github.thxmasj.backend.core.test;
 
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static com.github.thxmasj.backend.core.EntitySelector.lastReferencing;
 import static com.github.thxmasj.backend.core.EntitySelector.newEntityId;
 import static com.github.thxmasj.backend.core.EventTrigger.trigger;
@@ -11,10 +11,10 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.github.thxmasj.backend.core.DataType;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EventLog;
 import com.github.thxmasj.backend.core.EventType;
-import com.github.thxmasj.backend.core.IndexEntityModel;
+import com.github.thxmasj.backend.core.IndexEntityType;
 import com.github.thxmasj.backend.core.State;
 import com.github.thxmasj.backend.core.StateMachine;
 import com.github.thxmasj.backend.core.TransitionModel;
@@ -31,9 +31,9 @@ public class EntitiesByIndexTest {
 
   enum OrderStates implements State { Created, Shipped }
 
-  static EntityModel Order = EntityModel.of("Order", UUID.fromString("b837db51-40e1-456a-aee1-b0dbb958c281"), EntitiesByIndexTest::orderTransitions);
-  static EventType<UUID, UUID> customerReferenced = IndexEntityModel.referenceEventType("Customer referenced", UUID.fromString("56e950a0-369a-4bf9-b126-e5c762fdb6bc"));
-  static IndexEntityModel Index = IndexEntityModel.of("Index", UUID.fromString("6a0eb254-8e11-4f96-b4fe-c93d8b4e7232"), customerReferenced);
+  static EntityType Order = EntityType.of("Order", UUID.fromString("b837db51-40e1-456a-aee1-b0dbb958c281"), EntitiesByIndexTest::orderTransitions);
+  static EventType<UUID, UUID> customerReferenced = IndexEntityType.referenceEventType("Customer referenced", UUID.fromString("56e950a0-369a-4bf9-b126-e5c762fdb6bc"));
+  static IndexEntityType Index = IndexEntityType.of("Index", UUID.fromString("6a0eb254-8e11-4f96-b4fe-c93d8b4e7232"), customerReferenced);
 
   static EventType<UUID, UUID> OrderCreated = EventType.of("Order created", UUID.fromString("38d58c97-6a1e-450f-a399-52e185859dc1"), DataType.uuid());
   static EventType<Void, Void> OrderShipped = EventType.of("Order shipped", UUID.fromString("617fb006-eb86-455b-bf98-0c6efea8cba3"));
@@ -78,12 +78,12 @@ public class EntitiesByIndexTest {
   }
 
   @Test
-  public void testEntitiesByIndexResolvesCorrectEntityModelAndHandlesMultipleEvents() {
+  public void testEntitiesByIndexResolvesCorrectEntityTypeAndHandlesMultipleEvents() {
 
     String schema = UUID.randomUUID().toString();
-    var entityModels = List.of(Order, Index);
-    StateMachine machine = Init.stateMachine(schema, entityModels);
-    EntitiesByIndex entitiesByIndex = Init.storage(schema, entityModels).entitiesByIndex();
+    var entityTypes = List.of(Order, Index);
+    StateMachine machine = Init.stateMachine(schema, entityTypes);
+    EntitiesByIndex entitiesByIndex = Init.storage(schema, entityTypes).entitiesByIndex();
 
     UUID customerId = UUID.randomUUID();
 
@@ -98,7 +98,7 @@ public class EntitiesByIndexTest {
     assertEquals(1, logs1.size());
     EventLog orderLog1 = logs1.get(0);
     assertEquals(orderId, orderLog1.entityId());
-    assertEquals(Order, orderLog1.entityModel());
+    assertEquals(Order, orderLog1.entityType());
     assertEquals(1, orderLog1.events().size());
 
     // 2. Perform second transition on the same entity (eventNumber == 2)
@@ -112,7 +112,7 @@ public class EntitiesByIndexTest {
     assertEquals(1, logs2.size());
     EventLog orderLog2 = logs2.get(0);
     assertEquals(orderId, orderLog2.entityId());
-    assertEquals(Order, orderLog2.entityModel());
+    assertEquals(Order, orderLog2.entityType());
     assertEquals(2, orderLog2.events().size());
 
     // 3. Create a second order for the same customer
@@ -123,8 +123,8 @@ public class EntitiesByIndexTest {
     List<EventLog> logs3 = entitiesByIndex.execute(customerId, customerReferenced).collectList().block();
     assertNotNull(logs3);
     assertEquals(2, logs3.size());
-    assertEquals(Order, logs3.get(0).entityModel());
-    assertEquals(Order, logs3.get(1).entityModel());
+    assertEquals(Order, logs3.get(0).entityType());
+    assertEquals(Order, logs3.get(1).entityType());
     List<UUID> returnedIds = logs3.stream().map(l -> l.entityId()).toList();
     assertTrue(returnedIds.contains(orderId));
     assertTrue(returnedIds.contains(orderId2));
@@ -132,8 +132,8 @@ public class EntitiesByIndexTest {
 
   enum ShipperStates implements State { Requested }
 
-  static EntityModel Invoice = EntityModel.of("Invoice", UUID.fromString("0c0f4d0e-2a7b-4f53-9a43-b8f1e0b8d3a5"), EntitiesByIndexTest::invoiceTransitions);
-  static EntityModel Shipper = EntityModel.of("Shipper", UUID.fromString("8a0d6c5e-5a8f-4d1f-8f25-0a7d1d0c6f4b"), EntitiesByIndexTest::shipperTransitions);
+  static EntityType Invoice = EntityType.of("Invoice", UUID.fromString("0c0f4d0e-2a7b-4f53-9a43-b8f1e0b8d3a5"), EntitiesByIndexTest::invoiceTransitions);
+  static EntityType Shipper = EntityType.of("Shipper", UUID.fromString("8a0d6c5e-5a8f-4d1f-8f25-0a7d1d0c6f4b"), EntitiesByIndexTest::shipperTransitions);
   static EventType<UUID, UUID> InvoiceCreated = EventType.of("Invoice created", UUID.fromString("4b8e2f0a-6c1d-4e7b-9a3f-2d5c8b1e7f60"), DataType.uuid());
   static EventType<UUID, UUID> ShippingRequested = EventType.of("Shipping requested", UUID.fromString("c3a9e1d7-0f4b-4c8e-b2d6-7e1f5a9c3b80"), DataType.uuid());
 
@@ -141,10 +141,10 @@ public class EntitiesByIndexTest {
   /// another model referencing the same id
   @Test
   public void lastReferencingSelectsLastEntityOfModel() {
-    var entityModels = List.of(Order, Invoice, Shipper, Index);
+    var entityTypes = List.of(Order, Invoice, Shipper, Index);
     String schema = UUID.randomUUID().toString();
-    StateMachine machine = Init.stateMachine(schema, entityModels);
-    EntitiesByIndex entitiesByIndex = Init.storage(schema, entityModels).entitiesByIndex();
+    StateMachine machine = Init.stateMachine(schema, entityTypes);
+    EntitiesByIndex entitiesByIndex = Init.storage(schema, entityTypes).entitiesByIndex();
 
     UUID customerId = UUID.randomUUID();
     machine.onEvent(trigger(OrderCreated, Order), customerId).blockFirst(Duration.ofSeconds(10));

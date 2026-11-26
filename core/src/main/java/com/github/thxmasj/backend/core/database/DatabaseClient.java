@@ -6,7 +6,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import jakarta.validation.constraints.NotBlank;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -247,12 +247,12 @@ public interface DatabaseClient extends AutoCloseable {
 
     private final TableType tableType;
 
-    public DataIntegrityViolation(String queryName, EntityModel model, TableType tableType, String message, Throwable t) {
+    public DataIntegrityViolation(String queryName, EntityType model, TableType tableType, String message, Throwable t) {
       super(queryName, model, message, t);
       this.tableType = tableType;
     }
 
-    public DataIntegrityViolation(String queryName, EntityModel model, TableType tableType, Throwable e) {
+    public DataIntegrityViolation(String queryName, EntityType model, TableType tableType, Throwable e) {
       super(queryName, model, e);
       this.tableType = tableType;
     }
@@ -274,7 +274,7 @@ public interface DatabaseClient extends AutoCloseable {
 
     public PrimaryKeyConstraintViolation(
         String queryName,
-        EntityModel model,
+        EntityType model,
         String duplicateKey,
         TableType tableType,
         String constraintName,
@@ -302,7 +302,7 @@ public interface DatabaseClient extends AutoCloseable {
 
     public UniqueIndexConstraintViolation(
         String queryName,
-        EntityModel model,
+        EntityType model,
         String duplicateKey,
         TableType tableType,
         String indexName,
@@ -324,15 +324,15 @@ public interface DatabaseClient extends AutoCloseable {
 
   class DatabaseException extends RuntimeException {
 
-    public DatabaseException(String queryName, EntityModel model, String message, Throwable t) {
+    public DatabaseException(String queryName, EntityType model, String message, Throwable t) {
       super("Query " + queryName + " failed (model=" + (model != null ? model.name() : "N/A)")  + ")" + (message != null ? ": " + message : ""), t);
     }
 
-    public DatabaseException(String queryName, EntityModel model, String message) {
+    public DatabaseException(String queryName, EntityType model, String message) {
       this(queryName, model, message, null);
     }
 
-    public DatabaseException(String queryName, EntityModel model, Throwable e) {
+    public DatabaseException(String queryName, EntityType model, Throwable e) {
       this(queryName, model, null, e);
     }
   }

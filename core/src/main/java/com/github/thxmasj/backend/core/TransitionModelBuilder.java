@@ -136,7 +136,7 @@ public class TransitionModelBuilder<I, T, O> {
                     i.timestamp(),
                     i.from()
                 ),
-                i.log().entityModel(),
+                i.log().entityType(),
                 Severity.Info
             )
         ))))
@@ -169,7 +169,7 @@ public class TransitionModelBuilder<I, T, O> {
                     eventType,
                     new RejectedEvent(
                         eventType,
-                        i.log().entityModel(),
+                        i.log().entityType(),
                         i.log().entityId(),
                         i.from(),
                         invalidRollbackTo
@@ -180,7 +180,7 @@ public class TransitionModelBuilder<I, T, O> {
           EventLog log = i.log();
           var effectiveEvents = log.effectiveEvents();
           List<Event<?>> eventsToRollback = effectiveEvents.subList(actualRollbackTo, effectiveEvents.size());
-          Traverser traverser = i.stateMachine().traverser(log.entityModel());
+          Traverser traverser = i.stateMachine().traverser(log.entityType());
           Mono<TransitionStep<?>> currentContext = Mono.just(i);
           for (var event : eventsToRollback.reversed()) {
             var tm = traverser.transitionForEventNumber(log, event.eventNumber());
@@ -219,7 +219,7 @@ public class TransitionModelBuilder<I, T, O> {
                       i.timestamp(),
                       i.stepOutput()
                   ),
-                  i.log().entityModel(),
+                  i.log().entityType(),
                   Severity.Info
               )
           ))));
@@ -370,14 +370,14 @@ public class TransitionModelBuilder<I, T, O> {
         Function<T, Mono<I1>> reactiveDataAdapter
     ) {
 
-      public ConditionalWithEntity<I, T, O, I1, O1> on(EntityModel entityModel) {
-        requireTarget(entityModel);
-        return new ConditionalWithEntity<>(this, entityModel);
+      public ConditionalWithEntity<I, T, O, I1, O1> on(EntityType entityType) {
+        requireTarget(entityType);
+        return new ConditionalWithEntity<>(this, entityType);
       }
 
     }
 
-    public record ConditionalWithEntity<I, T, O, I1, O1>(ConditionalWithEventTypeAndData<I, T, O, I1, O1> eventTypeAndData, EntityModel entityModel) {
+    public record ConditionalWithEntity<I, T, O, I1, O1>(ConditionalWithEventTypeAndData<I, T, O, I1, O1> eventTypeAndData, EntityType entityType) {
 
       /// @param entitySelector the entity, which may be selected by a fallback if the selector finds none, e.g. with
       ///                       [EntitySelector#idEvent(EventType, Object, EntitySelector)]
@@ -388,7 +388,7 @@ public class TransitionModelBuilder<I, T, O> {
                 eventType.eventType(),
                 eventTypeAndData.dataAdapter(),
                 entitySelector,
-                entityModel,
+                entityType,
                 eventType.condition()
             ),
             eventTypeAndData.reactiveDataAdapter()
@@ -407,9 +407,9 @@ public class TransitionModelBuilder<I, T, O> {
         this(eventType, dataAdapter, null);
       }
 
-      public WithEntity<I, T, O, I1, O1> on(EntityModel entityModel) {
-        requireTarget(entityModel);
-        return new WithEntity<>(this, entityModel);
+      public WithEntity<I, T, O, I1, O1> on(EntityType entityType) {
+        requireTarget(entityType);
+        return new WithEntity<>(this, entityType);
       }
 
       /// Triggers the event on the entity after the delay, unless another event is stored on it first. The data of the
@@ -451,7 +451,7 @@ public class TransitionModelBuilder<I, T, O> {
                 this.entity.eventTypeAndData.eventType.eventType,
                 this.entity.eventTypeAndData.dataAdapter,
                 this.entitySelector,
-                this.entity.entityModel
+                this.entity.entityType
             ),
             this.entity.eventTypeAndData.reactiveDataAdapter
         );
@@ -459,7 +459,7 @@ public class TransitionModelBuilder<I, T, O> {
 
     }
 
-    public record WithEntity<I, T, O, I1, O1>(WithEventTypeAndData<I, T, O, I1, O1> eventTypeAndData, EntityModel entityModel) {
+    public record WithEntity<I, T, O, I1, O1>(WithEventTypeAndData<I, T, O, I1, O1> eventTypeAndData, EntityType entityType) {
 
       /// @param entitySelector the entity, which may be selected by a fallback if the selector finds none, e.g. with
       ///                       [EntitySelector#idEvent(EventType, Object, EntitySelector)]
@@ -490,9 +490,9 @@ public class TransitionModelBuilder<I, T, O> {
       return new WithCondition<>(this, referenceType, indexKey);
     }
 
-    public WithEntity<I, T, O, I1, O1> on(EntityModel entityModel) {
-      requireTarget(entityModel);
-      return new WithEntity<>(new WithEventTypeAndData<>(this, _ -> null), entityModel);
+    public WithEntity<I, T, O, I1, O1> on(EntityType entityType) {
+      requireTarget(entityType);
+      return new WithEntity<>(new WithEventTypeAndData<>(this, _ -> null), entityType);
     }
 
   }
@@ -781,7 +781,7 @@ public class TransitionModelBuilder<I, T, O> {
             .flatMap(c -> step(c, () -> Mono.just(new DelayedTriggerStep<>(
                 c,
                 new DelayedEvent<>(
-                    c.inputStep().log().entityModel(),
+                    c.inputStep().log().entityType(),
                     c.inputStep().log().entityId(),
                     eventType,
                     c.inputStep().eventNumber() + 1,
@@ -813,7 +813,7 @@ public class TransitionModelBuilder<I, T, O> {
                           c.inputStep().log().entityId(),
                           c.inputStep().eventNumber()
                       ),
-                      eventTrigger.entityModel(),
+                      eventTrigger.entityType(),
                       conditionalEntityId(eventTrigger, c),
                       eventTrigger.eventType(),
                       eventTrigger.data().apply(c.stepOutput()),
@@ -864,7 +864,7 @@ public class TransitionModelBuilder<I, T, O> {
       return byId.id();
     }
     if (selector instanceof EntitySelector.ByIdFromSession
-        && c.inputStep().log().entityModel().equals(eventTrigger.entityModel())) {
+        && c.inputStep().log().entityType().equals(eventTrigger.entityType())) {
       return c.inputStep().log().entityId();
     }
     throw new UnsupportedOperationException("Conditional trigger requires the entity to be identified by id or by the session's entity");
@@ -890,7 +890,7 @@ public class TransitionModelBuilder<I, T, O> {
         b,
         ProcessResult.accepted(
             event(b, f.apply(b.stepOutput()), mask),
-            b.inputStep().log().entityModel(),
+            b.inputStep().log().entityType(),
             modelContext.severity()
         )
     )))));
@@ -929,7 +929,7 @@ public class TransitionModelBuilder<I, T, O> {
                       b.previous() instanceof OutputStep<?> o ? o.stepOutput() : (b.previous() instanceof PendingStep<?, ?, ?> p ? p.stepOutput() : null),
                       b.inputStep().log().entityId(),
                       b.inputStep().eventNumber(),
-                      b.inputStep().log().entityModel()
+                      b.inputStep().log().entityType()
                   )
               ));
             }
@@ -954,7 +954,7 @@ public class TransitionModelBuilder<I, T, O> {
                     b.inputStep().timestamp(),
                     null
                 ),
-                b.inputStep().log().entityModel(),
+                b.inputStep().log().entityType(),
                 modelContext.severity()
             )
         )))))
@@ -972,12 +972,12 @@ public class TransitionModelBuilder<I, T, O> {
     Debug.log(ZonedDateTime.now() + ": " + modelContext.description() + ": " + text);
   }
 
-  /// A trigger on an entity model which is null, e.g. a constant read while its class is being initialised as the
+  /// A trigger on an entity type which is null, e.g. a constant read while its class is being initialised as the
   /// transitions are created, would be taken as a trigger on the entity itself
-  private static void requireTarget(EntityModel entityModel) {
-    if (entityModel == null)
+  private static void requireTarget(EntityType entityType) {
+    if (entityType == null)
       throw new NullPointerException(
-          "The entity model to trigger the event on is null. If it is a constant, the transitions are created before " +
+          "The entity type to trigger the event on is null. If it is a constant, the transitions are created before " +
               "it is, e.g. by an inbox declared before it"
       );
   }

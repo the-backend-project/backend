@@ -2,18 +2,18 @@
 
 ## Entities
 
-An entity model has a set of states, and transitions between them on event types. An entity is an instance of an
-entity model, identified by a UUID. Its events are stored in its event log, and its current state is the state its
+An entity type has a set of states, and transitions between them on event types. An entity is an instance of an
+entity type, identified by a UUID. Its events are stored in its event log, and its current state is the state its
 events lead to from the initial state `Begin`. The event logs are the source of truth; see the
 [data model](data-model.md).
 
 Every entity is created by a transition from `Begin`, as its state is found by replaying its events from there. The
-state machine therefore refuses, when it is created, an entity model which has transitions but none from `Begin`, a
+state machine therefore refuses, when it is created, an entity type which has transitions but none from `Begin`, a
 state with transitions which no transition from `Begin` leads to, as no entity could ever be in it, and a transition
 from `Begin` which stays in `Begin`, as an entity in it couldn't be told from one which doesn't exist. Id and index
 entities, which have no states, are the exception: all their events are taken from `Begin`.
 
-The transitions of an entity model are declared with `TransitionModelBuilder`. A transition is taken on an event of a
+The transitions of an entity type are declared with `TransitionModelBuilder`. A transition is taken on an event of a
 type, assembles data from the event and the entity's event log, and can trigger events on other entities:
 
 ```java
@@ -23,12 +23,12 @@ onEvent(GreetingRequested).to(States.Greeted)
     .output()
 ```
 
-An entity model carries its transitions, by the state they are taken from. `EntityModel.of(name, id, transitions)`
+An entity type carries its transitions, by the state they are taken from. `EntityType.of(name, id, transitions)`
 takes a method creating them, which is called when they are first asked for, so the transitions can refer to the model
 itself and to other models declared the same way, e.g. constants which refer to each other:
 
 ```java
-EntityModel Greeting = EntityModel.of("Greeting", UUID.fromString("..."), Greetings::transitions);
+EntityType Greeting = EntityType.of("Greeting", UUID.fromString("..."), Greetings::transitions);
 ```
 
 They are first asked for when the state machine is created, by which time the constants are all created. A trigger
@@ -37,7 +37,7 @@ the refusals of every model it runs together, each once and named after its mode
 go. A model whose transitions can't be created, e.g. as such a trigger fails, is reported with them, and doesn't hide
 the refusals of the other models.
 
-The state machine takes the transitions of each entity model from the model. It is given the entity models nothing
+The state machine takes the transitions of each entity type from the model. It is given the entity types nothing
 triggers events on, e.g. those of an [inbox](http-inbox.md), and runs them with the models their transitions trigger
 events on, and so on, each once. A group triggered on adds no models, as its models are those of the group which are
 run. When the state machine is created, it checks that every model it runs has an id of its own.
@@ -47,12 +47,12 @@ is created from the configuration rather than declared as a constant. That insta
 thereby run, so it is passed to the code triggering events on it, e.g. the inbox requests processing on it. Created
 again, it is another instance with the same id, which may differ, e.g. be created from other configuration. The state
 machine and the test API reject it, and only take the instance they run, which e.g. a test finds among the
-`entityModels()` of the state machine.
+`entityTypes()` of the state machine.
 
 The entity an event is triggered on is selected by an `EntitySelector`: by its entity id, as a new entity, by an id it
 has, as the last one of a group it is indexed in, or as the last one referencing an id by an index event. The ids and
-index keys of entities are events of their own, of id entity models (`IdEntityModel`) and index entity models
-(`IndexEntityModel`). An id is unique among the ids of its type, so an event claiming an id that is taken is rejected.
+index keys of entities are events of their own, of id entity types (`IdEntityType`) and index entity types
+(`IndexEntityType`). An id is unique among the ids of its type, so an event claiming an id that is taken is rejected.
 
 ## Naming event types
 
@@ -76,8 +76,8 @@ The subject keeps an event type apart from the state it leads to, which is a bar
 |-------------------------------------|----------------------------------|-------------------------------------------|
 | A request, e.g. from the HTTP inbox | `<subject> requested`            | `Token requested`, `Greeting requested`   |
 | A request found to be invalid       | `<problem> detected`             | `Unknown merchant detected`               |
-| An id of an id entity model         | `<id> claimed`                   | `Client id claimed`, `Message id claimed` |
-| A key of an index entity model      | `<subject> referenced`/`indexed` | `Process referenced`, `Batch indexed`     |
+| An id of an id entity type         | `<id> claimed`                   | `Client id claimed`, `Message id claimed` |
+| A key of an index entity type      | `<subject> referenced`/`indexed` | `Process referenced`, `Batch indexed`     |
 | An entity read, not stored          | `<subject> looked up`            | `Merchant looked up`, `Status looked up`  |
 
 Event types are identified by their id, not by their name, so an event type can be renamed without migrating the
@@ -135,11 +135,11 @@ tested, drawn in the state diagrams and told the [monitoring](monitoring.md), wi
   A delayed or conditional trigger may fire an event which isn't stored: the trigger is deleted with the changes of
   the event, as it is when the event is stored. An event reading an entity, for another entity to assemble from, is one, named `<subject> looked up`.
 * **An entity of the session only** is created by an event which is not stored, i.e. one from `Begin`, or is of an
-  entity model which is not stored, an `EntityModel.NotStored`, e.g. one of `EntityModel.notStored(name, id, transitions)`. None of its
+  entity type which is not stored, an `EntityType.NotStored`, e.g. one of `EntityType.notStored(name, id, transitions)`. None of its
   events are stored, whatever their types, so its transitions may go to any state, also on events not stored. The
   [session](sessions.md#sessions) finds it among the events of its transactions, but no other session does, so it can't have
   delayed or conditional triggers, which fire in a session of their own: the change fails if it has one. Nor can its
-  transitions trigger events on an id or index model (`IdEntityModel`, `IndexEntityModel`), which would point to an
+  transitions trigger events on an id or index model (`IdEntityType`, `IndexEntityType`), which would point to an
   entity which doesn't exist, and claim an id for good. The state machine refuses both when it is created. An inbox
   request which is [not stored](http-inbox.md#requests-not-stored) is one, and isn't indexed by the entity of the
   application.

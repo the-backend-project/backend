@@ -23,8 +23,8 @@ public interface EventType<I, O> {
   /// given to the one who triggered it and is told to the [Listener]. But it is not written to the event log, so the
   /// state of its entity must not depend on it: on an entity which is stored, its transitions stay in their state
   /// (`toSelf()`), which the state machine checks when it is created. An event which is not stored creating an entity,
-  /// i.e. from [EntityModel#Begin], makes the entity one of the session only: none of its events are stored, and only
-  /// the transactions of the session find it (see [EntityModel.NotStored]).
+  /// i.e. from [EntityType#Begin], makes the entity one of the session only: none of its events are stored, and only
+  /// the transactions of the session find it (see [EntityType.NotStored]).
   ///
   /// A typical one reads an entity for another entity to assemble from, named `<subject> looked up`.
   interface NotStored<I, O> extends EventType<I, O> {}

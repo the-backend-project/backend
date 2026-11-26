@@ -6,7 +6,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 
-/// A diagram drawn by hand in the DOT language of Graphviz, for what isn't an entity model, such as how the event logs
+/// A diagram drawn by hand in the DOT language of Graphviz, for what isn't an entity type, such as how the event logs
 /// of several entities relate. It is rendered with `dot`, which must be on the path, into an SVG which takes the colour
 /// scheme of the page like the other diagrams: in dark mode, its edges and their labels are drawn in light colours.
 public final class GraphvizFormatter {

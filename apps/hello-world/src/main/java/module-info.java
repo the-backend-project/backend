@@ -1,4 +1,4 @@
-// The backoffice of the application reads its entities with its entity models. It is not a dependency, so the
+// The backoffice of the application reads its entities with its entity types. It is not a dependency, so the
 // compiler would warn that it is not found.
 @SuppressWarnings("module")
 module com.github.thxmasj.backend.helloworld {

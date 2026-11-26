@@ -1,6 +1,6 @@
 package com.github.thxmasj.backend.core.test;
 
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static com.github.thxmasj.backend.core.EntitySelector.entityId;
 import static com.github.thxmasj.backend.core.EntitySelector.entityIdFromSession;
 import static com.github.thxmasj.backend.core.EntitySelector.newEntityId;
@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.github.thxmasj.backend.core.Action;
 import com.github.thxmasj.backend.core.InputEvent;
 import com.github.thxmasj.backend.core.DataType;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.Event;
 import com.github.thxmasj.backend.core.EventLog;
 import com.github.thxmasj.backend.core.EventType;
@@ -60,7 +60,7 @@ public class NotStoredTest {
   static EventType<Void, Void> TimeoutSet = EventType.of("Timeout set", UUID.fromString("9d1f3b5c-7e8a-4c0e-b2d4-f6a8c0e2a419"));
   static EventType<Void, Void> AccountTimedOut = EventType.of("Account timed out", UUID.fromString("b1f3d5e7-9a0c-4e2a-84f6-a8c0e2a4c63b"));
   static EventType<UUID, UUID> WatchStarted = EventType.of("Watch started", UUID.fromString("d3b5f7a9-1c2e-4a4c-a6a8-c0e2a4c6e85d"), DataType.uuid());
-  static EntityModel Watcher = EntityModel.of("Watcher", UUID.fromString("f5d7b9c1-3e4a-4c6e-88ca-e2a4c6e8a07f"), () -> Map.<State, List<TransitionModel<?, ?>>>of(
+  static EntityType Watcher = EntityType.of("Watcher", UUID.fromString("f5d7b9c1-3e4a-4c6e-88ca-e2a4c6e8a07f"), () -> Map.<State, List<TransitionModel<?, ?>>>of(
       Begin, List.of(
           onEvent(WatchStarted).to(VisitStates.Open)
               .assembleInput()
@@ -74,11 +74,11 @@ public class NotStoredTest {
   static EventType<Void, Void> ReminderScheduled = EventType.notStored("Reminder scheduled", UUID.fromString("8e2c4a6f-0b1d-4f37-95e9-a3c5e7b9d148"));
   static EventType<String, String> PasswordSet = EventType.of("Password set", UUID.fromString("6a1f3c5e-8b2d-4e90-a7c4-d9e1b3f5a768"), DataType.string());
 
-  static EntityModel Account = EntityModel.of("Account", UUID.fromString("8d4b0f2a-6e3c-4a91-b7d5-e9c1f3a5b067"), NotStoredTest::accountTransitions);
-  static EntityModel Views = EntityModel.of("Views", UUID.fromString("b6e2a8d4-0c5f-4e17-9a3b-f1d7c9e5a283"), NotStoredTest::viewTransitions);
-  static EntityModel SignIn = EntityModel.of("SignIn", UUID.fromString("f3a7c1e5-9d2b-4f68-8c0a-b4e6d8f0a159"), NotStoredTest::signInTransitions);
+  static EntityType Account = EntityType.of("Account", UUID.fromString("8d4b0f2a-6e3c-4a91-b7d5-e9c1f3a5b067"), NotStoredTest::accountTransitions);
+  static EntityType Views = EntityType.of("Views", UUID.fromString("b6e2a8d4-0c5f-4e17-9a3b-f1d7c9e5a283"), NotStoredTest::viewTransitions);
+  static EntityType SignIn = EntityType.of("SignIn", UUID.fromString("f3a7c1e5-9d2b-4f68-8c0a-b4e6d8f0a159"), NotStoredTest::signInTransitions);
   /// A model which is not stored
-  static EntityModel Session = EntityModel.notStored("Session", UUID.fromString("0d6b2f8e-4a1c-4b73-95e7-c3a9f5d1b724"), NotStoredTest::sessionTransitions);
+  static EntityType Session = EntityType.notStored("Session", UUID.fromString("0d6b2f8e-4a1c-4b73-95e7-c3a9f5d1b724"), NotStoredTest::sessionTransitions);
 
   enum VisitStates implements State { Open, Closed }
   enum DeliveryStates implements State { Dispatched, Delivered }
@@ -97,7 +97,7 @@ public class NotStoredTest {
   };
 
   /// A visit, which is not stored, waits for a delivery, which is
-  static EntityModel Visit = EntityModel.notStored("Visit", UUID.fromString("a0c2e4a6-8d9f-4ab1-9f13-c5e7a9cbd30a"), () -> Map.<State, List<TransitionModel<?, ?>>>of(
+  static EntityType Visit = EntityType.notStored("Visit", UUID.fromString("a0c2e4a6-8d9f-4ab1-9f13-c5e7a9cbd30a"), () -> Map.<State, List<TransitionModel<?, ?>>>of(
       Begin, List.of(
           onEvent(VisitStarted).to(VisitStates.Open)
               .trigger(DeliveryRequested).on(NotStoredTest.Delivery).identifiedBy(newEntityId())
@@ -106,7 +106,7 @@ public class NotStoredTest {
       VisitStates.Open, List.of(onEvent(VisitClosed).to(VisitStates.Closed).output()),
       VisitStates.Closed, List.of()
   ));
-  static EntityModel Delivery = EntityModel.of("Delivery", UUID.fromString("c2e4a6c8-0f1b-4cd3-b135-e7a9cbedf52c"), () -> Map.<State, List<TransitionModel<?, ?>>>of(
+  static EntityType Delivery = EntityType.of("Delivery", UUID.fromString("c2e4a6c8-0f1b-4cd3-b135-e7a9cbedf52c"), () -> Map.<State, List<TransitionModel<?, ?>>>of(
       Begin, List.of(onEvent(DeliveryRequested).to(DeliveryStates.Dispatched).assemble(_ -> "").trigger(courier).with(d -> d).output()),
       DeliveryStates.Dispatched, List.of(
           // In a later transaction of the session, which finds the visit among the events of the first one
@@ -133,7 +133,7 @@ public class NotStoredTest {
   };
   /// A locker opened with a code, which arms itself in the same transaction, with an action whose result is taken in a
   /// later transaction, which reads the code
-  static EntityModel Locker = EntityModel.of("Locker", UUID.fromString("833ebdd8-56d4-4d26-bb5e-ca8d4f312e6c"), () -> Map.<State, List<TransitionModel<?, ?>>>of(
+  static EntityType Locker = EntityType.of("Locker", UUID.fromString("833ebdd8-56d4-4d26-bb5e-ca8d4f312e6c"), () -> Map.<State, List<TransitionModel<?, ?>>>of(
       Begin, List.of(
           onEvent(LockerOpened).to(LockerStates.Opened)
               .assemble(c -> tuple(c.input(), c.log().entityId()))
@@ -155,12 +155,12 @@ public class NotStoredTest {
   private static final String schema = UUID.randomUUID().toString();
   private static final StateMachine machine = Init.stateMachine(
       schema,
-      entityModels(),
+      entityTypes(),
       Clock.systemUTC(),
       new JsonLinesListener(lines::add, Clock.systemUTC())
   );
 
-  private static List<EntityModel> entityModels() {
+  private static List<EntityType> entityTypes() {
     return List.of(Account, Views, SignIn, Session, Visit, Watcher, Locker);
   }
 
@@ -228,8 +228,8 @@ public class NotStoredTest {
     );
   }
 
-  private static EventLog log(EntityModel model, List<EventType<?, ?>> types, UUID entityId) {
-    return Init.storage(schema, entityModels()).eventsByEntityId().execute(model, types, entityId).block();
+  private static EventLog log(EntityType model, List<EventType<?, ?>> types, UUID entityId) {
+    return Init.storage(schema, entityTypes()).eventsByEntityId().execute(model, types, entityId).block();
   }
 
   private static List<String> events(EventLog log) {

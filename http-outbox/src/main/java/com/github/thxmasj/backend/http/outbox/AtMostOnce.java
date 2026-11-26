@@ -18,7 +18,7 @@ import static com.github.thxmasj.backend.http.outbox.EventTypes.TimeoutExpired;
 import static com.github.thxmasj.backend.http.outbox.HttpOutboxRequest.toHttpRequest;
 
 import com.github.thxmasj.backend.core.DataType;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EventLog;
 import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.State;
@@ -67,8 +67,8 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
 
   /// The callbacks of the outcomes of a request, events triggered on the entity of the process which dispatched it
   record Callbacks<T1, T2, T3, T4, T5, T6, T7, RS>(
-      Callback<EntityModel, T1> onPeerUnavailable,
-      Callback<EntityModel, T2> onMissingResponse,
+      Callback<EntityType, T1> onPeerUnavailable,
+      Callback<EntityType, T2> onMissingResponse,
       Callback<HttpResponse<RS>, T3> onSuccess,
       Callback<HttpResponse<RS>, T4> onFailure,
       Callback<HttpResponse<RS>, T7> onValidResponseUnknown,
@@ -92,7 +92,7 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
       DataType<RS> responsePayloadType,
       ForwardAction forward,
       Duration inflightTimeout,
-      EntityModel processModel,
+      EntityType processModel,
       Callbacks<T1, T2, T3, T4, T5, T6, T7, RS> callbacks,
       ResponseRules<RQ, RS> rules,
       Masking masking
@@ -368,7 +368,7 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
                     .output() : null,
             shape.callbacks().onPeerUnavailable() != null ?
                 onEvent(ConnectionFailed).to(Failed)
-                    .assemble(c -> c.log().entityModel())
+                    .assemble(c -> c.log().entityType())
                     .trigger(shape.callbacks().onPeerUnavailable().eventType())
                     .with(shape.callbacks().onPeerUnavailable().dataAdapter())
                     .on(shape.processModel())
@@ -377,7 +377,7 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
                 onEvent(ConnectionFailed).to(Failed).output(),
             shape.callbacks().onMissingResponse() != null ?
                 onEvent(ConnectionDropped).to(Unknown)
-                    .assemble(c -> c.log().entityModel())
+                    .assemble(c -> c.log().entityType())
                     .trigger(shape.callbacks().onMissingResponse().eventType())
                     .with(shape.callbacks().onMissingResponse().dataAdapter())
                     .on(shape.processModel())
@@ -386,7 +386,7 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
                 onEvent(ConnectionDropped).to(Unknown).output(),
             shape.callbacks().onMissingResponse() != null ?
                 onEvent(TimeoutExpired).to(Unknown)
-                    .assemble(c -> tuple(c.log().entityModel(), shape.dispatched(c.log()).t2()))
+                    .assemble(c -> tuple(c.log().entityType(), shape.dispatched(c.log()).t2()))
                     .trigger(shape.callbacks().onMissingResponse().eventType())
                     .with(d -> shape.callbacks().onMissingResponse().dataAdapter().apply(d.t1()))
                     .on(shape.processModel())
@@ -544,7 +544,7 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
   /// with (of type `RI`) and the request being rolled back, and the context of the process rolling the request back.
   /// Requests are triggered on the copy instead of this, so it is the one the state machine runs. The copy is made once
   /// for each rollback message creator, so dispatchers with the same creator share it, while copies with different
-  /// creators are different entity models with the same id, of which a state machine runs one.
+  /// creators are different entity types with the same id, of which a state machine runs one.
   public <RI> AtMostOnce<RQ, RRQ> withRollback(
       BiFunction<DispatchContext, Tuple2<RI, HttpRequest<RQ>>, Mono<HttpRequest<RRQ>>> rollbackMessageCreator
   ) {

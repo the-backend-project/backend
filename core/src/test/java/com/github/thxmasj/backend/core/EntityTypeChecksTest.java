@@ -1,6 +1,6 @@
 package com.github.thxmasj.backend.core;
 
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static com.github.thxmasj.backend.core.TransitionModelBuilder.WithEvent.onEvent;
 import static com.github.thxmasj.backend.core.TransitionModelBuilder.assemble;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -15,7 +15,7 @@ import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
-public class EntityModelChecksTest {
+public class EntityTypeChecksTest {
 
   enum States implements State {Requested, Accepted, Rejected}
 
@@ -27,7 +27,7 @@ public class EntityModelChecksTest {
 
   /// The model whose transitions are checked, for a trigger on it. The one checked is created by [#check(Map)] with
   /// its id.
-  static final EntityModel Self = EntityModel.of("Self", UUID.fromString("2c5f0a4e-8d1b-4f6a-9c3e-7b2d1e0f4a00"), Map::of);
+  static final EntityType Self = EntityType.of("Self", UUID.fromString("2c5f0a4e-8d1b-4f6a-9c3e-7b2d1e0f4a00"), Map::of);
 
   /// Checks the transitions of a stored model with the id of [#Self]
   static void check(Map<State, List<TransitionModel<?, ?>>> transitions) {
@@ -36,9 +36,9 @@ public class EntityModelChecksTest {
 
   /// Checks the transitions of a model with the id of [#Self], stored or not
   static void check(Map<State, List<TransitionModel<?, ?>>> transitions, boolean stored) {
-    EntityModelChecks.check(stored
-        ? EntityModel.of(Self.name(), Self.id(), () -> transitions)
-        : EntityModel.notStored(Self.name(), Self.id(), () -> transitions));
+    EntityTypeChecks.check(stored
+        ? EntityType.of(Self.name(), Self.id(), () -> transitions)
+        : EntityType.notStored(Self.name(), Self.id(), () -> transitions));
   }
 
   /// Shared by the choices, as the same transition reached by more than one path
@@ -182,11 +182,11 @@ public class EntityModelChecksTest {
     assertDoesNotThrow(() -> check(Map.of(Begin, List.of(acceptance), States.Accepted, List.of(delayedThenQuiet, quietWithoutDelay))));
     // On another model, the two delayed triggers are on different entities
     Map<State, List<TransitionModel<?, ?>>> transitions = Map.of(Begin, List.of(acceptance), States.Accepted, List.of(delayedThenQuiet, quiet));
-    assertDoesNotThrow(() -> EntityModelChecks.check(EntityModel.of("Another", UUID.randomUUID(), () -> transitions)));
+    assertDoesNotThrow(() -> EntityTypeChecks.check(EntityType.of("Another", UUID.randomUUID(), () -> transitions)));
     // On a group which includes the model, it may be the same entity
     var onGroup = onEvent(Retried).toSelf()
         .trigger(Accepted).after(_ -> Duration.ofMinutes(1))
-        .trigger(QuietlyRetried).on(EntityModelGroup.of("Group", UUID.randomUUID(), m -> m.id().equals(Self.id()))).identifiedBy(_ -> null)
+        .trigger(QuietlyRetried).on(EntityTypeGroup.of("Group", UUID.randomUUID(), m -> m.id().equals(Self.id()))).identifiedBy(_ -> null)
         .output();
     assertThrows(IllegalArgumentException.class, () -> check(Map.of(Begin, List.of(acceptance), States.Accepted, List.of(onGroup, quiet))));
   }
@@ -290,17 +290,17 @@ public class EntityModelChecksTest {
   @Test
   public void aFailingSupplierAndARefusedModelAreBothReported() {
     var failure = new IllegalStateException("Not configured");
-    var failing = EntityModel.of("Failing", UUID.randomUUID(), () -> {throw failure;});
-    var refused = EntityModel.of("Refused", UUID.randomUUID(), () -> Map.of(
+    var failing = EntityType.of("Failing", UUID.randomUUID(), () -> {throw failure;});
+    var refused = EntityType.of("Refused", UUID.randomUUID(), () -> Map.of(
         Begin, List.of(onEvent(Requested).to(States.Requested)
             .trigger(Accepted).after(_ -> Duration.ofMinutes(1))
             .trigger(Rejected).after(_ -> Duration.ofMinutes(2))
             .output())
     ));
-    var e = assertThrows(IllegalArgumentException.class, () -> EntityModelChecks.check(List.of(failing, refused)));
+    var e = assertThrows(IllegalArgumentException.class, () -> EntityTypeChecks.check(List.of(failing, refused)));
     assertEquals(
-        "The transitions of entity model Failing can't be created: java.lang.IllegalStateException: Not configured\n" +
-            "The transitions of entity model Refused are refused: The transition on Requested triggers 2 delayed events, " +
+        "The transitions of entity type Failing can't be created: java.lang.IllegalStateException: Not configured\n" +
+            "The transitions of entity type Refused are refused: The transition on Requested triggers 2 delayed events, " +
             "but an entity has at most one pending delayed trigger, so the second would replace the first",
         e.getMessage()
     );
@@ -311,10 +311,10 @@ public class EntityModelChecksTest {
   @Test
   public void twoModelsWithTheSameIdAreRefused() {
     var id = UUID.randomUUID();
-    var e = assertThrows(IllegalArgumentException.class, () -> EntityModelChecks.check(List.of(
-        EntityModel.of("First", id, Map::of),
-        EntityModel.of("Second", id, Map::of)
+    var e = assertThrows(IllegalArgumentException.class, () -> EntityTypeChecks.check(List.of(
+        EntityType.of("First", id, Map::of),
+        EntityType.of("Second", id, Map::of)
     )));
-    assertTrue(e.getMessage().startsWith("Entity models First and Second have the same id"), e.getMessage());
+    assertTrue(e.getMessage().startsWith("Entity types First and Second have the same id"), e.getMessage());
   }
 }

@@ -1,6 +1,6 @@
 # HTTP outboxes
 
-An application sends requests to other systems through outboxes. An outbox is an entity model whose entities are the
+An application sends requests to other systems through outboxes. An outbox is an entity type whose entities are the
 requests sent, so every request has a state and an event log of its own, stored in the same database as the entities
 of the application.
 
@@ -334,16 +334,16 @@ onEvent(Authorise).to(Authorising)
 A process rolling the request back triggers `rollbackDispatched()` of the dispatcher on the entity of the request,
 e.g. by the entity id it got back when it was dispatched.
 
-The state machine runs the entity models the transitions of its models trigger events on, so the outbox request is
+The state machine runs the entity types the transitions of its models trigger events on, so the outbox request is
 run because the process triggers requests on it. Its rollback models and `HttpOutboxRequest.Index`, which the requests
 are indexed in (see [below](#finding-the-requests-of-a-process)), are run because the outbox request's transitions
 trigger events on them.
 
 The outbox request is built with its process model, `processModel(Payment)`, whose transitions in turn trigger the
-request on the dispatcher's outbox. A process model declared as a constant with `EntityModel.of(name, id, transitions)`
+request on the dispatcher's outbox. A process model declared as a constant with `EntityType.of(name, id, transitions)`
 takes care of that, as its transitions are created when the state machine first asks for them, after the outbox
 requests are built. If one transition triggers on the outbox request the dispatcher was created with, and another on
-its `outbox()`, the state machine finds two entity models with the same id when it is created, and fails. Trigger on
+its `outbox()`, the state machine finds two entity types with the same id when it is created, and fails. Trigger on
 the `outbox()`.
 
 ### Headers

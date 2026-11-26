@@ -1,6 +1,6 @@
 package com.github.thxmasj.backend.templates.cardpayment;
 
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static com.github.thxmasj.backend.core.EntitySelector.CreationMode.CreateIfNotExists;
 import static com.github.thxmasj.backend.core.EntitySelector.entityId;
 import static com.github.thxmasj.backend.core.EntitySelector.entityIdFromSession;
@@ -73,7 +73,7 @@ import static com.github.thxmasj.backend.templates.cardpayment.SettlementEvent.M
 import static com.github.thxmasj.backend.templates.cardpayment.validators.ValidatedAmount.validateAmount;
 import static com.github.thxmasj.backend.templates.cardpayment.validators.ValidatedTransactionTime.validateTransactionTime;
 
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EventLog;
 import com.github.thxmasj.backend.core.Identifiable;
 import com.github.thxmasj.backend.core.State;
@@ -148,9 +148,9 @@ public class PaymentTransitions {
   
   private final Map<State, List<TransitionModel<?, ?>>> transitions;
   private final Function<String, PaymentToken> tokenDecrypter;
-  private final EntityModel merchant;
-  private final EntityModel settlement;
-  private final List<EntityModel> outboxRequestModels;
+  private final EntityType merchant;
+  private final EntityType settlement;
+  private final List<EntityType> outboxRequestModels;
 
   // To acquirer
   private final DispatcherWithRollback<Tuple4<Authorisation, Merchant, AuthenticationResult, PaymentToken>, ?, Tuple2<ReversalData, Merchant>> preauthorisation;
@@ -211,7 +211,7 @@ public class PaymentTransitions {
     return transitions;  
   }
 
-  public List<EntityModel> outboxRequestModels() {
+  public List<EntityType> outboxRequestModels() {
     return outboxRequestModels;
   }
 
@@ -221,8 +221,8 @@ public class PaymentTransitions {
   /// @param settlementModel the model of the settlements of the merchants
   <I1, I2, I3, I4, I5, I6, I7, I8, I9, I10, I11, I12, I13, I14, I15, I16, I17> PaymentTransitions(
       Function<String, PaymentToken> tokenDecrypter,
-      EntityModel merchantModel,
-      EntityModel settlementModel,
+      EntityType merchantModel,
+      EntityType settlementModel,
       Dispatcher<AuthenticationData, I1> authentication,
       // To acquirer
       DispatcherWithRollback<Tuple4<Authorisation, Merchant, AuthenticationResult, PaymentToken>, I2, Tuple2<ReversalData, Merchant>> preauthorisation,
@@ -282,7 +282,7 @@ public class PaymentTransitions {
         approvedRefund,
         declinedRefund
     );
-    this.outboxRequestModels = dispatchers.stream().<EntityModel>map(Dispatcher::outbox).toList();
+    this.outboxRequestModels = dispatchers.stream().<EntityType>map(Dispatcher::outbox).toList();
 
     this.transitions = mergeModels(Map.of(
             Begin, List.of(

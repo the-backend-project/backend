@@ -1,6 +1,6 @@
 package com.github.thxmasj.backend.backoffice;
 
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static com.github.thxmasj.backend.core.EntitySelector.entityIdFromSession;
 import static com.github.thxmasj.backend.core.EntitySelector.idEvent;
 import static com.github.thxmasj.backend.core.EntitySelector.newEntityId;
@@ -12,10 +12,10 @@ import static com.github.thxmasj.backend.http.inbox.HttpInbox.Request;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.github.thxmasj.backend.core.DataType;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EntitySelector;
 import com.github.thxmasj.backend.core.EventType;
-import com.github.thxmasj.backend.core.IdEntityModel;
+import com.github.thxmasj.backend.core.IdEntityType;
 import com.github.thxmasj.backend.core.Severity;
 import com.github.thxmasj.backend.core.State;
 import com.github.thxmasj.backend.core.TransitionModel;
@@ -296,7 +296,7 @@ final class Sessions {
       UUID.fromString("f0a6d3c9-4e2b-4f85-a1d7-8b5c2e9f6a14"),
       DataType.string()
   );
-  static final IdEntityModel Tokens = IdEntityModel.of("BackofficeTokens", UUID.fromString("5e1b8d4a-9c7f-4a32-8e60-4d2f7b1c9a85"), TokenClaimed);
+  static final IdEntityType Tokens = IdEntityType.of("BackofficeTokens", UUID.fromString("5e1b8d4a-9c7f-4a32-8e60-4d2f7b1c9a85"), TokenClaimed);
 
   static final ResponseEventType<Reply> ReplyCreated = new ResponseEventType<>(
       "Backoffice reply created",
@@ -320,9 +320,9 @@ final class Sessions {
   private final Map<String, String> files;
   private final AtMostOnceDispatcher<Redemption, String> tokenRequests;
   /// The sessions of the users
-  private final EntityModel session;
+  private final EntityType session;
   /// A request not of a session, e.g. for a static file or the health check
-  private final EntityModel resource;
+  private final EntityType resource;
   private final HttpInbox inbox;
 
   /// @param forwarder the HTTP client the token requests are sent with
@@ -331,8 +331,8 @@ final class Sessions {
     this.provider = provider;
     this.pages = pages;
     this.files = Map.copyOf(files);
-    this.session = EntityModel.of("BackofficeSession", UUID.fromString("4b6f2c8e-1d3a-4f57-9e0b-7a2c5d8f3e61"), this::sessionTransitions);
-    this.resource = EntityModel.of("BackofficeResource", UUID.fromString("8e3c1a6f-4b2d-4d97-a5e0-2f7b9c4d1e83"), this::resourceTransitions);
+    this.session = EntityType.of("BackofficeSession", UUID.fromString("4b6f2c8e-1d3a-4f57-9e0b-7a2c5d8f3e61"), this::sessionTransitions);
+    this.resource = EntityType.of("BackofficeResource", UUID.fromString("8e3c1a6f-4b2d-4d97-a5e0-2f7b9c4d1e83"), this::resourceTransitions);
     // The token request is masked in the event log, its code, PKCE verifier and client secret, and the tokens of its
     // response
     AtMostOnce<String, Void> tokenRequest = HttpOutboxRequest.atMostOnce()
@@ -397,7 +397,7 @@ final class Sessions {
   }
 
   /// The model of the sessions
-  EntityModel session() {
+  EntityType session() {
     return session;
   }
 

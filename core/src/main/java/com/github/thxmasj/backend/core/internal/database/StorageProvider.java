@@ -17,7 +17,7 @@ public interface StorageProvider {
   /// The queries and updates of the schema
   ///
   /// @param client a client of the database
-  /// @param models the entity models the state machine runs, with their event types
+  /// @param models the entity types the state machine runs, with their event types
   Storage storage(
       DatabaseClient client,
       ResolvedModels models,

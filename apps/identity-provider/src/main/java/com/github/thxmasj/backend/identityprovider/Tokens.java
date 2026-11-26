@@ -1,6 +1,6 @@
 package com.github.thxmasj.backend.identityprovider;
 
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static com.github.thxmasj.backend.core.EntitySelector.entityIdFromSession;
 import static com.github.thxmasj.backend.core.EntitySelector.idEvent;
 import static com.github.thxmasj.backend.core.TransitionModelBuilder.WithEvent.onEvent;
@@ -10,7 +10,7 @@ import static com.github.thxmasj.backend.identityprovider.Clients.Client;
 import static com.github.thxmasj.backend.identityprovider.Clients.ClientIdClaimed;
 
 import com.github.thxmasj.backend.core.DataType;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.Severity;
 import com.github.thxmasj.backend.core.State;
@@ -127,8 +127,8 @@ public interface Tokens {
   );
 
   /// The token requests, whose tokens live as long as the lifetime
-  static EntityModel tokenRequest(Duration lifetime) {
-    return EntityModel.of("Token request", UUID.fromString("4f8c2a6e-9d13-4b70-8e5f-3a1d7c9b2e48"), () -> transitions(lifetime));
+  static EntityType tokenRequest(Duration lifetime) {
+    return EntityType.of("Token request", UUID.fromString("4f8c2a6e-9d13-4b70-8e5f-3a1d7c9b2e48"), () -> transitions(lifetime));
   }
 
   private static Map<State, List<TransitionModel<?, ?>>> transitions(Duration lifetime) {

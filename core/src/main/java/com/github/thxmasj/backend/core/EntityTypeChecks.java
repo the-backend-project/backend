@@ -1,8 +1,8 @@
 package com.github.thxmasj.backend.core;
 
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 
-import com.github.thxmasj.backend.core.internal.EntityModels;
+import com.github.thxmasj.backend.core.internal.EntityTypes;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -15,47 +15,47 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.Predicate;
 
-/// The checks of the entity models a state machine runs, made when it is created. They fail with the refusals and
+/// The checks of the entity types a state machine runs, made when it is created. They fail with the refusals and
 /// failures of every model at once, each named, so that the models are fixed in one go rather than one refusal at a
 /// time.
-final class EntityModelChecks {
+final class EntityTypeChecks {
 
-  private final EntityModel model;
+  private final EntityType model;
   private final Map<State, List<TransitionModel<?, ?>>> transitions;
   /// Why the transitions are refused, all of them. Each is told once, by the transition it is declared on, also if the
   /// transition is reached by more than one path.
   private final Set<String> refusals = new LinkedHashSet<>();
 
-  private EntityModelChecks(EntityModel model) {
+  private EntityTypeChecks(EntityType model) {
     this.model = model;
     this.transitions = model.transitions();
   }
 
-  /// The entity models given, and those their transitions trigger events on, and so on (see
-  /// [EntityModels#resolve(List)]), checked
+  /// The entity types given, and those their transitions trigger events on, and so on (see
+  /// [EntityTypes#resolve(List)]), checked
   ///
   /// @throws IllegalArgumentException with the refusals of the transitions of every model, and the failures of the
   ///                                  models whose transitions can't be created or checked, e.g. as their supplier
   ///                                  fails, each named. The failures are suppressed exceptions of it, with their
-  ///                                  stack traces. Also if one of the models given is an [EntityModelGroup], or if
+  ///                                  stack traces. Also if one of the models given is an [EntityTypeGroup], or if
   ///                                  two of the models have the same id.
-  /// @throws NullPointerException if one of the entity models given is null, e.g. a constant not created yet
-  static List<EntityModel> check(List<? extends EntityModel> entityModels) {
-    var failures = new LinkedHashMap<EntityModel, RuntimeException>();
-    List<EntityModel> models = EntityModels.resolve(entityModels, failures);
+  /// @throws NullPointerException if one of the entity types given is null, e.g. a constant not created yet
+  static List<EntityType> check(List<? extends EntityType> entityTypes) {
+    var failures = new LinkedHashMap<EntityType, RuntimeException>();
+    List<EntityType> models = EntityTypes.resolve(entityTypes, failures);
     var refusals = new ArrayList<String>();
     var causes = new ArrayList<RuntimeException>();
     failures.forEach((model, e) -> {
-      refusals.add("The transitions of entity model " + model.name() + " can't be created: " + e);
+      refusals.add("The transitions of entity type " + model.name() + " can't be created: " + e);
       causes.add(e);
     });
     for (var model : models) {
       try {
         check(model);
       } catch (IllegalArgumentException e) {
-        refusals.add("The transitions of entity model " + model.name() + " are refused: " + e.getMessage());
+        refusals.add("The transitions of entity type " + model.name() + " are refused: " + e.getMessage());
       } catch (RuntimeException e) {
-        refusals.add("The transitions of entity model " + model.name() + " can't be checked: " + e);
+        refusals.add("The transitions of entity type " + model.name() + " can't be checked: " + e);
         causes.add(e);
       }
     }
@@ -67,18 +67,18 @@ final class EntityModelChecks {
     return models;
   }
 
-  /// Checks the transitions of the entity model
+  /// Checks the transitions of the entity type
   ///
-  /// @param model the entity model whose transitions are checked. Whether its entities are stored (see
-  ///              [EntityModel.NotStored]) tells whether an event which is not stored may change their state, and its
+  /// @param model the entity type whose transitions are checked. Whether its entities are stored (see
+  ///              [EntityType.NotStored]) tells whether an event which is not stored may change their state, and its
   ///              id tells a trigger on the model from one on another.
   /// @throws IllegalArgumentException with the refusals of the transitions, all of them
-  static void check(EntityModel model) {
-    new EntityModelChecks(model).checkTransitions();
+  static void check(EntityType model) {
+    new EntityTypeChecks(model).checkTransitions();
   }
 
   private void checkTransitions() {
-    boolean stored = !(model instanceof EntityModel.NotStored);
+    boolean stored = !(model instanceof EntityType.NotStored);
     transitions.forEach(this::requireUniquePaths);
     requireReachableFromBegin();
     requireLeavingBegin();
@@ -231,26 +231,26 @@ final class EntityModelChecks {
   /// choose, therefore can't trigger events on an id or index model.
   private void requireNoIdOrIndex(TransitionModel<?, ?> transition) {
     for (var trigger : transition.triggers())
-      if (trigger.entityModel() instanceof IdEntityModel || trigger.entityModel() instanceof IndexEntityModel)
+      if (trigger.entityType() instanceof IdEntityType || trigger.entityType() instanceof IndexEntityType)
         refuse(String.format(
             "The transition on %s may be of an entity of the session only, which is never stored, so it can't trigger %s " +
                 "on the %s model %s, which would point to an entity which doesn't exist",
             transition.eventType().name(),
             trigger.eventType().name(),
-            trigger.entityModel() instanceof IdEntityModel ? "id" : "index",
-            trigger.entityModel().name()
+            trigger.entityType() instanceof IdEntityType ? "id" : "index",
+            trigger.entityType().name()
         ));
     for (var filter : transition.filters())
       requireNoIdOrIndex(filter.alternative().model());
   }
 
-  /// Whether the trigger is on the entity model of the transitions, or may be: on a group which includes it, or without
+  /// Whether the trigger is on the entity type of the transitions, or may be: on a group which includes it, or without
   /// a model of its own, as a delayed trigger, which is on the entity of its transition
   private boolean isOnTheModel(EventTrigger<?, ?, ?> trigger) {
-    if (trigger.entityModel() == null)
+    if (trigger.entityType() == null)
       return true;
-    return trigger.entityModel().id().equals(model.id())
-        || trigger.entityModel() instanceof EntityModelGroup group && group.includes(model);
+    return trigger.entityType().id().equals(model.id())
+        || trigger.entityType() instanceof EntityTypeGroup group && group.includes(model);
   }
 
   /// An entity of the session only is not found after its session, so its transitions, and those they may choose, can't
@@ -272,7 +272,7 @@ final class EntityModelChecks {
   /// which doesn't exist, and its state would be that of an entity without events. An id or index entity has no states,
   /// so all its events are taken from `Begin`.
   private void requireLeavingBegin() {
-    if (model instanceof IdEntityModel || model instanceof IndexEntityModel)
+    if (model instanceof IdEntityType || model instanceof IndexEntityType)
       return;
     for (var transition : transitions.getOrDefault(Begin, List.of()))
       for (var leaf : transition.leaves())
@@ -346,7 +346,7 @@ final class EntityModelChecks {
   }
 
   /// An event which is not stored is not in the log, so it must not change the state of an entity which is stored. One
-  /// creating an entity, from [EntityModel#Begin], makes the entity one of the session only, whose state is not found
+  /// creating an entity, from [EntityType#Begin], makes the entity one of the session only, whose state is not found
   /// from a log.
   private void requireNotStoredToSelf(State from, List<TransitionModel<?, ?>> transitionsFromState) {
     for (var transition : transitionsFromState) {

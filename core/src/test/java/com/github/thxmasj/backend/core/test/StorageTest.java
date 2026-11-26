@@ -1,6 +1,6 @@
 package com.github.thxmasj.backend.core.test;
 
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static com.github.thxmasj.backend.core.TransitionModelBuilder.WithEvent.onEvent;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -8,11 +8,11 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.github.thxmasj.backend.core.DataType;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.Event;
 import com.github.thxmasj.backend.core.EventLog;
 import com.github.thxmasj.backend.core.EventType;
-import com.github.thxmasj.backend.core.IdEntityModel;
+import com.github.thxmasj.backend.core.IdEntityType;
 import com.github.thxmasj.backend.core.State;
 import com.github.thxmasj.backend.core.database.UnknownEntity;
 import com.github.thxmasj.backend.core.internal.DelayedEvent;
@@ -47,21 +47,21 @@ public class StorageTest {
   static EventType<Void, Void> PersonCreated = EventType.of("Person created", UUID.fromString("5a4bd3b2-5d0e-4a8e-9a61-2f3b1d6e0c01"));
   static EventType<String, String> NameClaimed = EventType.of("Name claimed", UUID.fromString("5a4bd3b2-5d0e-4a8e-9a61-2f3b1d6e0c02"), DataType.string());
 
-  static EntityModel Person = EntityModel.of(
+  static EntityType Person = EntityType.of(
       "Person",
       UUID.fromString("5a4bd3b2-5d0e-4a8e-9a61-2f3b1d6e0c03"),
       () -> Map.of(Begin, List.of(onEvent(PersonCreated).to(States.Created).output()))
   );
-  static IdEntityModel Names = IdEntityModel.of("Names", UUID.fromString("5a4bd3b2-5d0e-4a8e-9a61-2f3b1d6e0c04"), NameClaimed);
+  static IdEntityType Names = IdEntityType.of("Names", UUID.fromString("5a4bd3b2-5d0e-4a8e-9a61-2f3b1d6e0c04"), NameClaimed);
 
-  private static final List<EntityModel> entityModels = List.of(Person, Names);
+  private static final List<EntityType> entityTypes = List.of(Person, Names);
 
   private static final Clock clock = Clock.systemUTC();
 
   private static Storage storage() {
     String schema = UUID.randomUUID().toString();
     Storage.createSchema(Init.migrationDataSource(), schema, "Test").block();
-    return Init.storage(schema, entityModels);
+    return Init.storage(schema, entityTypes);
   }
 
   private static void store(Storage storage, Change... changes) {
@@ -76,9 +76,9 @@ public class StorageTest {
     };
   }
 
-  private static Change change(EntityModel entityModel, Event<?> event) {
+  private static Change change(EntityType entityType, Event<?> event) {
     return new Change() {
-      @Override public EntityModel entityModel() {return entityModel;}
+      @Override public EntityType entityType() {return entityType;}
       @Override public UUID entityId() {return event.entityId();}
       @Override public Event<?> newEvent() {return event;}
       @Override public DelayedEvent<?> delayedEvent() {return null;}
@@ -94,7 +94,7 @@ public class StorageTest {
     EventLog log = storage.eventsByIdEvent().execute(NameClaimed, NameClaimed.outputDataType().marshal("Alice")).block();
 
     assertEquals(alice, log.entityId());
-    assertEquals(Person, log.entityModel());
+    assertEquals(Person, log.entityType());
     assertEquals(List.of("1:Person created"), log.events().stream().map(e -> e.eventNumber() + ":" + e.typeName()).toList());
     assertNull(storage.eventsByIdEvent().execute(NameClaimed, NameClaimed.outputDataType().marshal("Bob")).block());
   }

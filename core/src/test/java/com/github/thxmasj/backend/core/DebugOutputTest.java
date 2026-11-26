@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test;
 public class DebugOutputTest {
 
   static final EventType<String, String> SecretSet = EventType.of("Secret set", UUID.randomUUID(), DataType.string());
-  static final EntityModel Vault = EntityModel.of("Vault", UUID.randomUUID(), java.util.Map::of);
+  static final EntityType Vault = EntityType.of("Vault", UUID.randomUUID(), java.util.Map::of);
 
   @Test
   public void anInputEventIsWrittenWithoutItsData() {

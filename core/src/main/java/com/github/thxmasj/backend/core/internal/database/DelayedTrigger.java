@@ -1,13 +1,13 @@
 package com.github.thxmasj.backend.core.internal.database;
 
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EventType;
 import java.time.ZonedDateTime;
 import java.util.UUID;
 
 public record DelayedTrigger<T>(
     UUID entityId,
-    EntityModel entityModel,
+    EntityType entityType,
     int eventNumber,
     EventType<T, ?> eventType,
     T data,
@@ -18,7 +18,7 @@ public record DelayedTrigger<T>(
   /// The trigger without its data, which may be a secret, as it is written e.g. in debug output
   @Override
   public String toString() {
-    return "DelayedTrigger[" + entityModel.name() + ":" + entityId + ":" + eventNumber + ":" + eventType.name() + ", next attempt at " + nextAttemptAt + "]";
+    return "DelayedTrigger[" + entityType.name() + ":" + entityId + ":" + eventNumber + ":" + eventType.name() + ", next attempt at " + nextAttemptAt + "]";
   }
 
 }

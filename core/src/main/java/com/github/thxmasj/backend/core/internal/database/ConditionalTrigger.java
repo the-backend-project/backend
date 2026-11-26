@@ -1,6 +1,6 @@
 package com.github.thxmasj.backend.core.internal.database;
 
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EventReference;
 import com.github.thxmasj.backend.core.EventType;
 import java.time.ZonedDateTime;
@@ -10,7 +10,7 @@ import java.util.UUID;
 public record ConditionalTrigger<T>(
     UUID id,
     EventReference triggerEvent,
-    EntityModel entityModel,
+    EntityType entityType,
     UUID entityId,
     EventType<T, ?> type,
     T data,
@@ -24,7 +24,7 @@ public record ConditionalTrigger<T>(
   /// The trigger without its data, which may be a secret, as it is written e.g. in debug output
   @Override
   public String toString() {
-    return "ConditionalTrigger[" + id + ": " + type.name() + " on " + entityModel.name() + ":" + entityId + "]";
+    return "ConditionalTrigger[" + id + ": " + type.name() + " on " + entityType.name() + ":" + entityId + "]";
   }
 
 }

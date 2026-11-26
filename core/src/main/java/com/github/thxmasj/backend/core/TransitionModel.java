@@ -24,7 +24,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import reactor.core.publisher.Mono;
 
-/// The model of a transition of an entity model on an event type, built by [TransitionModelBuilder]. It calculates the
+/// The model of a transition of an entity type on an event type, built by [TransitionModelBuilder]. It calculates the
 /// steps of the transition from its input step to its output step.
 public class TransitionModel<I, O> {
 
@@ -71,7 +71,7 @@ public class TransitionModel<I, O> {
     return modelContext.reverseModel();
   }
 
-  TransitionModel<Tuple4<I, EntityModel, EventType<?, ?>, String>, O> rejectModel() {
+  TransitionModel<Tuple4<I, EntityType, EventType<?, ?>, String>, O> rejectModel() {
     return null;
   }
 
@@ -80,7 +80,7 @@ public class TransitionModel<I, O> {
   /// machine, and the tests of the transitions of the library's modules.
   public Mono<OutputStep<O>> calculate(InputStep<I> inputStep) {
     // Without the input, which may be a secret, e.g. the credentials of a request
-    log(modelContext, "calculate [" + eventType().name() + "] on [" + inputStep.log().entityModel().name() + ":" + inputStep.log().entityId() + "]");
+    log(modelContext, "calculate [" + eventType().name() + "] on [" + inputStep.log().entityType().name() + ":" + inputStep.log().entityId() + "]");
     return chain.apply(Mono.just(inputStep))
         .map(TransitionModel::marshalledIfStored)
         .doOnError(e -> inputStep.stateMachine().transitionFailed(inputStep, e));

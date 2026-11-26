@@ -1,14 +1,14 @@
 package com.github.thxmasj.backend.http.inbox;
 
 import com.github.thxmasj.backend.core.DataType;
-import com.github.thxmasj.backend.core.EntityModel;
-import com.github.thxmasj.backend.core.EntityModelGroup;
+import com.github.thxmasj.backend.core.EntityType;
+import com.github.thxmasj.backend.core.EntityTypeGroup;
 import com.github.thxmasj.backend.core.EntitySelector;
 import com.github.thxmasj.backend.core.EventReference;
 import com.github.thxmasj.backend.core.EventTrigger;
 import com.github.thxmasj.backend.core.EventType;
-import com.github.thxmasj.backend.core.IdEntityModel;
-import com.github.thxmasj.backend.core.IndexEntityModel;
+import com.github.thxmasj.backend.core.IdEntityType;
+import com.github.thxmasj.backend.core.IndexEntityType;
 import com.github.thxmasj.backend.core.State;
 import com.github.thxmasj.backend.core.Tuples.Tuple2;
 import com.github.thxmasj.backend.core.Tuples.Tuple3;
@@ -22,14 +22,14 @@ import java.util.UUID;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
-/// The HTTP inbox of an application: the [HttpInboxRequest]s it receives, and its `RequestRouting` entity model routing
+/// The HTTP inbox of an application: the [HttpInboxRequest]s it receives, and its `RequestRouting` entity type routing
 /// a received request to the inbox request matching it. The inbox is created from the requests with [#of(List)], and
-/// gives the entity models to create the state machine with. The state machine runs them with the entity models of the
+/// gives the entity types to create the state machine with. The state machine runs them with the entity types of the
 /// application the requests trigger events on, and so on:
 ///
 /// ```java
 /// HttpInbox inbox = HttpInbox.of(List.of(PlaceOrder));
-/// StateMachine stateMachine = new StateMachine(inbox.entityModels(), dataSource, schemaName, true);
+/// StateMachine stateMachine = new StateMachine(inbox.entityTypes(), dataSource, schemaName, true);
 /// DisposableServer server = new HttpInboxListener(stateMachine, inbox).listen(port);
 /// ```
 public interface HttpInbox {
@@ -40,7 +40,7 @@ public interface HttpInbox {
   /// ```java
   /// .trigger(RequestCompleted).with(d -> tuple("Done", d)).on(HttpInbox.Request).identifiedBy(entityIdFromSession())
   /// ```
-  EntityModelGroup Request = EntityModelGroup.of(
+  EntityTypeGroup Request = EntityTypeGroup.of(
       "Request",
       UUID.fromString("0f3b6e2a-9c41-4d7e-8a15-6b2f9d4c3e71"),
       model -> model instanceof HttpInboxRequest<?>
@@ -176,7 +176,7 @@ public interface HttpInbox {
       new MessageIdDataType()
   );
   /// Ids of the requests, by the entity id of their inbox request
-  IdEntityModel MessageIds = IdEntityModel.of(
+  IdEntityType MessageIds = IdEntityType.of(
       "MessageIds",
       UUID.fromString("3c8e1f5a-7b2d-4e9c-a6f0-8d4b2e7c1a95"),
       MessageIdClaimed,
@@ -185,12 +185,12 @@ public interface HttpInbox {
 
   /// The entity of the application an accepted request triggered its event on, indexed by the entity id of the
   /// request, so that the requests of an entity are found by its entity id, like the outbox requests of an entity
-  EventType<UUID, UUID> ProcessReferenced = IndexEntityModel.referenceEventType(
+  EventType<UUID, UUID> ProcessReferenced = IndexEntityType.referenceEventType(
       "Process referenced",
       UUID.fromString("b8d2f4e6-3a1c-4e7b-9f05-6c8a2d4e1b39")
   );
   /// The entities of the application the requests triggered their events on, by the entity id of the request
-  IndexEntityModel Index = IndexEntityModel.of(
+  IndexEntityType Index = IndexEntityType.of(
       "RequestIndex",
       UUID.fromString("e1a7c3d9-5b2f-4a86-8c4e-0d9f6b3a7e52"),
       ProcessReferenced
@@ -199,7 +199,7 @@ public interface HttpInbox {
   /// The inbox of the requests. It asks for no transitions, so that it may be a constant declared before the models
   /// the requests trigger events on and what their transitions refer to.
   ///
-  /// Every inbox request is checked to take the responses its own processes may give, when the entity models of the
+  /// Every inbox request is checked to take the responses its own processes may give, when the entity types of the
   /// inbox are first asked for, e.g. by the state machine. From the event of each process,
   /// the transitions taken on it in any state, with all the transitions they may choose, and the transitions of the
   /// events they trigger at once on other entities, in the same session, are followed. The event types they trigger on
@@ -211,19 +211,19 @@ public interface HttpInbox {
     return InboxModels.of(requests);
   }
 
-  /// The entity model routing every request received to the inbox request matching it, and answering it with the
+  /// The entity type routing every request received to the inbox request matching it, and answering it with the
   /// response the inbox request gives it. A request matching no inbox request is answered with 400 Bad Request.
-  EntityModel requestRouting();
+  EntityType requestRouting();
 
   /// The requests the inbox receives
   List<HttpInboxRequest<?>> requests();
 
-  /// The entity models of the inbox, [#requestRouting()], the inbox requests, [#MessageIds] and [#Index], to create the
-  /// state machine with. It also runs the entity models of the application the inbox requests trigger events on.
+  /// The entity types of the inbox, [#requestRouting()], the inbox requests, [#MessageIds] and [#Index], to create the
+  /// state machine with. It also runs the entity types of the application the inbox requests trigger events on.
   ///
   /// @throws IllegalArgumentException if an inbox request doesn't take a response its processes may give, which is
   ///                                  checked the first time they are asked for (see [#of(List)])
-  List<EntityModel> entityModels();
+  List<EntityType> entityTypes();
 
   /// Triggers a received request on a new entity of [#requestRouting()]. The correlation id of the events it triggers
   /// is taken from the request header `X-Correlation-Id`, or the one given by [#correlationIdHeader(String)]. A request
@@ -231,8 +231,8 @@ public interface HttpInbox {
   EventTrigger.Immediate<HttpRequest<byte[]>, HttpRequest<byte[]>, ?> trigger();
 
   /// Returns the inbox with the correlation id of a request taken from the given header, e.g. `CorrelationId`, instead
-  /// of `X-Correlation-Id`. The returned inbox has the same entity models, so a state machine created with the entity
-  /// models of either runs both.
+  /// of `X-Correlation-Id`. The returned inbox has the same entity types, so a state machine created with the entity
+  /// types of either runs both.
   HttpInbox correlationIdHeader(String correlationIdHeader);
 
   static <T> Function<HttpRequest<byte[]>, Validated<T>> jsonParser(Class<T> contentType) {

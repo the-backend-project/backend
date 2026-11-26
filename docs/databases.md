@@ -142,7 +142,7 @@ finds the database behind it among the modules on the module path or class path:
 ```java
 DataSource dataSource = new DataSourceBuilder(new PgsqlDatabase(), config).buildPooled();
 DataSource schemaDataSource = new DataSourceBuilder(new PgsqlDatabase(), adminConfig).build();
-new StateMachine(delayer, entityModels, dataSource, schemaDataSource, schemaName, role, clock, listener);
+new StateMachine(delayer, entityTypes, dataSource, schemaDataSource, schemaName, role, clock, listener);
 ```
 
 With a reactive module, the state machine is given the module's `Database` and a client of it, which has a connection
@@ -152,7 +152,7 @@ pool of its own. The schema data source is a JDBC one, from the same `Database`:
 Database database = new PgsqlVertxDatabase();
 new StateMachine(
     delayer,
-    entityModels,
+    entityTypes,
     database,
     database.client(config),
     database.dataSource(adminConfig),

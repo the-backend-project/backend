@@ -3,7 +3,7 @@ package com.github.thxmasj.backend.core.internal.database;
 import static java.lang.String.format;
 
 import com.github.thxmasj.backend.core.DataType;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EventReference;
 import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.database.DatabaseClient;
@@ -25,25 +25,25 @@ public class ConditionalTriggers {
 
   private final DatabaseClient databaseClient;
   private final Clock clock;
-  private final Map<UUID, Map<UUID, EventType<?, ?>>> eventTypesByEntityModelId;
-  private final Map<UUID, EntityModel> entityModels;
+  private final Map<UUID, Map<UUID, EventType<?, ?>>> eventTypesByEntityTypeId;
+  private final Map<UUID, EntityType> entityTypes;
   private final String sql;
 
   /// @param sql the SQL selecting the oldest conditional triggers whose condition is met, at most `:limit` of them
   public ConditionalTriggers(
       DatabaseClient databaseClient,
       String sql,
-      Map<EntityModel, List<EventType<?, ?>>> eventTypesByEntityModel,
+      Map<EntityType, List<EventType<?, ?>>> eventTypesByEntityType,
       Clock clock
   ) {
     this.databaseClient = databaseClient;
-    this.eventTypesByEntityModelId = eventTypesByEntityModel.entrySet().stream().collect(Collectors.toMap(
+    this.eventTypesByEntityTypeId = eventTypesByEntityType.entrySet().stream().collect(Collectors.toMap(
         e -> e.getKey().id(),
         e -> e.getValue().stream().collect(Collectors.toMap(EventType::id, Function.identity()))
     ));
     this.clock = clock;
-    this.entityModels = eventTypesByEntityModel.keySet().stream()
-        .collect(Collectors.toMap(EntityModel::id, Function.identity()));
+    this.entityTypes = eventTypesByEntityType.keySet().stream()
+        .collect(Collectors.toMap(EntityType::id, Function.identity()));
     this.sql = sql;
   }
 
@@ -59,16 +59,16 @@ public class ConditionalTriggers {
   }
 
   private ConditionalTrigger<?> map(Row row) {
-    UUID entityModelId = row.get("EntityModelId", UUID.class);
-    EntityModel entityModel = entityModels.get(entityModelId);
-    if (entityModel == null)
-      throw new MappingFailure(format("No entity model for id %s", entityModelId));
+    UUID entityTypeId = row.get("EntityTypeId", UUID.class);
+    EntityType entityType = entityTypes.get(entityTypeId);
+    if (entityType == null)
+      throw new MappingFailure(format("No entity type for id %s", entityTypeId));
     return create(
         row.get("Id", UUID.class),
         new EventReference(row.get("TriggerEntityId", UUID.class), row.get("TriggerEventNumber", Integer.class)),
-        entityModel,
+        entityType,
         row.get("EntityId", UUID.class),
-        eventType(entityModel, row.get("Type", UUID.class)),
+        eventType(entityType, row.get("Type", UUID.class)),
         row.get("Data", byte[].class),
         ZonedDateTime.of(row.get("Timestamp", LocalDateTime.class), clock.getZone()),
         anyEventType(row.get("ReferenceType", UUID.class)),
@@ -80,19 +80,19 @@ public class ConditionalTriggers {
     );
   }
 
-  private EventType<?, ?> eventType(EntityModel entityModel, UUID eventTypeId) {
-    EventType<?, ?> eventType = eventTypesByEntityModelId.get(entityModel.id()).get(eventTypeId);
+  private EventType<?, ?> eventType(EntityType entityType, UUID eventTypeId) {
+    EventType<?, ?> eventType = eventTypesByEntityTypeId.get(entityType.id()).get(eventTypeId);
     if (eventType == null)
-      throw new MappingFailure(format("No event type for type id %s in entity model %s", eventTypeId, entityModel.name()));
+      throw new MappingFailure(format("No event type for type id %s in entity type %s", eventTypeId, entityType.name()));
     return eventType;
   }
 
   /**
-   * Reference and last types belong to the referenced entities, whose entity model is not known here. They are only
-   * used for their id and name, so any entity model's event type with a matching id will do.
+   * Reference and last types belong to the referenced entities, whose entity type is not known here. They are only
+   * used for their id and name, so any entity type's event type with a matching id will do.
    */
   private EventType<?, ?> anyEventType(UUID eventTypeId) {
-    return eventTypesByEntityModelId.values().stream()
+    return eventTypesByEntityTypeId.values().stream()
         .map(eventTypes -> eventTypes.get(eventTypeId))
         .filter(Objects::nonNull)
         .findFirst()
@@ -102,7 +102,7 @@ public class ConditionalTriggers {
   private <T> ConditionalTrigger<T> create(
       UUID id,
       EventReference triggerEvent,
-      EntityModel entityModel,
+      EntityType entityType,
       UUID entityId,
       EventType<T, ?> type,
       byte[] data,
@@ -115,7 +115,7 @@ public class ConditionalTriggers {
     return new ConditionalTrigger<>(
         id,
         triggerEvent,
-        entityModel,
+        entityType,
         entityId,
         type,
         data != null ? type.inputDataType().unmarshal(data) : null,

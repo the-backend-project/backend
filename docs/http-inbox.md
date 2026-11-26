@@ -1,8 +1,8 @@
 # HTTP inboxes
 
 An inbox is the set of requests an application receives. Each type of request is an `HttpInboxRequest`: an entity
-model whose entities are the requests of that type, with a body of one type, which trigger one event type on one entity
-model of the application. Like an [outbox](http-outbox.md) request, every request has a state and an event log of its
+type whose entities are the requests of that type, with a body of one type, which trigger one event type on one entity
+type of the application. Like an [outbox](http-outbox.md) request, every request has a state and an event log of its
 own, drawn in the same kind of state diagram as the entities of the application (see the
 [state diagrams](#state-diagrams)).
 
@@ -24,7 +24,7 @@ HttpInboxRequest<Order> PlaceOrder = HttpInboxRequest
 |-------------------|----------|--------------------------------------------------------------------------------------------------|
 | `matching`        | Yes      | Tells which requests are of this type, e.g. by method and path                                    |
 | `contentParser`   | Yes      | Parses the body, or `noContent()` to ignore it. An invalid body is answered with 400              |
-| `process`         | Yes      | The event type the request triggers, the entity model and the entity, e.g. `newEntity()` or `parseEntityId(...)`, and the event's data, which an event without data leaves out. Repeated with a content predicate for [content routing](#content-routing) |
+| `process`         | Yes      | The event type the request triggers, the entity type and the entity, e.g. `newEntity()` or `parseEntityId(...)`, and the event's data, which an event without data leaves out. Repeated with a content predicate for [content routing](#content-routing) |
 | `deduplicateOn`   | No       | The id of the request, by which a retried request is recognised. Without it, nothing is deduplicated, and the request can't be rolled back |
 | `authorizer`      | No       | Authorizes the request, e.g. with a bearer token (see [access tokens](#access-tokens))           |
 | `response`        | No       | A response of the application of its own, made from a `ResponseEventType` the application triggers |
@@ -33,20 +33,20 @@ HttpInboxRequest<Order> PlaceOrder = HttpInboxRequest
 | `masking`         | No       | What of the requests and responses is masked in the event log, besides the credentials every request masks, see [masking](#masking) |
 | `notStored`       | No       | Neither the requests nor their routing are stored, see [requests not stored](#requests-not-stored). Not with `deduplicateOn` |
 
-`HttpInbox.of(requests)` creates the inbox of the requests. Its `entityModels()` are the inbox's own, the inbox
+`HttpInbox.of(requests)` creates the inbox of the requests. Its `entityTypes()` are the inbox's own, the inbox
 requests, `RequestRouting`, `MessageIds` and `Index`, to create the state machine with. The state machine also runs the
-entity models their transitions trigger events on, i.e. the models of the application the requests are processed on,
+entity types their transitions trigger events on, i.e. the models of the application the requests are processed on,
 and in turn the models those trigger events on, e.g. outbox requests. The listener is given the inbox too:
 
 ```java
 HttpInbox inbox = HttpInbox.of(List.of(PlaceOrder));
-StateMachine stateMachine = new StateMachine(inbox.entityModels(), dataSource, schemaName, true);
+StateMachine stateMachine = new StateMachine(inbox.entityTypes(), dataSource, schemaName, true);
 DisposableServer server = new HttpInboxListener(stateMachine, inbox).listen(port);
 ```
 
 An inbox request declares the custom responses its own processes give, and no others. The inbox checks this per
-request, when its `entityModels()` are first asked for, e.g. by the state machine, rather than when it is created, so
-that the inbox may be a constant declared before the models of the application. It starts from the event of each process on its entity model, and follows, through the models triggered on:
+request, when its `entityTypes()` are first asked for, e.g. by the state machine, rather than when it is created, so
+that the inbox may be a constant declared before the models of the application. It starts from the event of each process on its entity type, and follows, through the models triggered on:
 
 - the transitions taken on that event, in any state, with every transition they may choose, as which one is taken is
   decided at runtime;
@@ -56,7 +56,7 @@ that the inbox may be a constant declared before the models of the application. 
 The event types triggered on `HttpInbox.Request` along the way are the responses the request may get. Each must be
 `RequestCompleted`, `InvalidRequestCompleted`, `FailedRequestCompleted` or one the request has a `response` for.
 Otherwise the check fails, naming the request, the response and the event giving it, rather than leaving the response
-to be rejected when it is given. A request on an entity model shared with other requests only declares the responses
+to be rejected when it is given. A request on an entity type shared with other requests only declares the responses
 its own events lead to.
 
 Delayed triggers (`after(..)`), conditional triggers, reversals and actions such as sending an outbox request are not
@@ -78,7 +78,7 @@ entity and waits for the application to respond.
 The inbox gives every request a correlation id, which the events and transactions of the request are logged with (see
 [monitoring](monitoring.md)). Its `trigger()` takes it from the request header `X-Correlation-Id`, or from the header
 given with `inbox.correlationIdHeader("CorrelationId")`, and generates one prefixed with `SYS-` for a request without
-the header. The inbox `correlationIdHeader` returns has the same entity models, so it can be given to a listener of a
+the header. The inbox `correlationIdHeader` returns has the same entity types, so it can be given to a listener of a
 state machine created with the models of the first.
 
 The application responds by triggering an event of a `ResponseEventType` on the inbox request, e.g. `RequestCompleted`,
@@ -98,7 +98,7 @@ The request is stored as the listener received it, a header received several tim
 and the listener sends every value of a header of the response, e.g. two `Set-Cookie` headers. A request with an
 invalid header or URI is answered with 400 Bad Request at once, and not stored. See [headers](http-outbox.md#headers).
 
-Requests carrying a message id are deduplicated through the `MessageIds` id entity model: a retried request gets the
+Requests carrying a message id are deduplicated through the `MessageIds` id entity type: a retried request gets the
 response of the first one, also if the application rejected it, without triggering anything again. A message id is
 the client's: the authorized subject and the id, or the id alone without an authorizer. All inbox requests share
 `MessageIds`, so a client can use a message id once, for one request of one type. A request with the message id of an
@@ -125,7 +125,7 @@ once, the processes are tried in the order they are given, and the first one who
 request matching none is answered with 400 Bad Request and the detail `No process for the content`. A process without
 a predicate takes any content, so it can only be the last one, as a default.
 
-Each process has its own event type, entity model, input and entity selector, while `deduplicateOn`, the
+Each process has its own event type, entity type, input and entity selector, while `deduplicateOn`, the
 authorizer and the normalizer are those of the endpoint. Here the result of an enrolment activates the payment token
 it is about, or rejects it, by its status:
 
@@ -195,8 +195,8 @@ back`, and takes the message id, so that the request is rejected with 422 Unproc
 
 A rollback finds the request, and the request finds the events to roll back, through the event logs of the entities
 involved. Here a `DELETE /orders/42` rolls back the `PUT /orders/42` of the `PlaceOrder` inbox request, whose process
-placed an order. Each entity is a box, like a class in a class diagram, with the name of its entity model, and the kind
-of entity as a stereotype unless it is a plain entity model, over its events, the oldest on top. The `MessageIds`
+placed an order. Each entity is a box, like a class in a class diagram, with the name of its entity type, and the kind
+of entity as a stereotype unless it is a plain entity type, over its events, the oldest on top. The `MessageIds`
 entity has the same entity id as the `PlaceOrder` entity. An event in italics, with a dashed border, is not stored: it
 leads to a choice, of which only the event of the chosen transition is stored, or is of an entity of the session only,
 a box with a dashed border, as the `RequestRouting` entities are. Solid arrows are triggers, and dashed arrows the
@@ -245,16 +245,16 @@ authorizer takes a rollback with an authorizer of its own, and a request without
 message id of a request is the authorized subject's, so the rollback is of the request the same subject sent: another
 subject's rollback with the message id has nothing to roll back. The message ids of all inbox requests share
 `MessageIds`, but a rollback only finds requests of its own inbox request: the message id of another type of request
-has nothing to roll back. The processes of an inbox request with a rollback must have the same entity model, which the
+has nothing to roll back. The processes of an inbox request with a rollback must have the same entity type, which the
 rollback rolls the events back on.
 
 ## The requests of an entity
 
 An accepted request is indexed by the entity of the application its event was triggered on: the inbox request gets an
-index event `Process referenced` of the index entity model `RequestIndex`, `HttpInbox.Index`, with the entity id of the
+index event `Process referenced` of the index entity type `RequestIndex`, `HttpInbox.Index`, with the entity id of the
 application's entity as key. The inbox requests of an entity are thereby found by its entity id, as its
 [outbox requests](http-outbox.md) are by the `Process referenced` of the outbox, e.g. by the
-[backoffice](backoffice.md). `Index` is one of the entity models of the inbox, along with `MessageIds`.
+[backoffice](backoffice.md). `Index` is one of the entity types of the inbox, along with `MessageIds`.
 
 ## Access tokens
 
@@ -410,7 +410,7 @@ The monitoring writes no data of the events, and the [backoffice](backoffice.md)
 
 ### Requests not stored
 
-An inbox request with `notStored()` doesn't store its requests: it is an entity model which is not stored, so its
+An inbox request with `notStored()` doesn't store its requests: it is an entity type which is not stored, so its
 requests, like their `RequestRouting` entities, are [entities of the session only](entities.md#events-and-entities-not-stored). The event its
 process triggers on the application is stored if it is of a stored type, so a request not stored can still change an
 entity which is. It suits requests for static files and health checks, pages rendered from other entities, and the

@@ -73,7 +73,7 @@ public final class HelloWorld {
   public static StateMachine stateMachine(Config config) {
     return new StateMachine(
         null,
-        Greetings.Inbox.entityModels(),
+        Greetings.Inbox.entityTypes(),
         new DataSourceBuilder(database, config.database()).buildPooled(),
         null, // The schema is created by the migrate admin process
         config.schema(),

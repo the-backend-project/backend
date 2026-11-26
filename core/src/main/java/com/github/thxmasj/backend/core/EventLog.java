@@ -13,7 +13,7 @@ import java.util.UUID;
 import java.util.stream.Stream;
 
 public record EventLog(
-    EntityModel entityModel,
+    EntityType entityType,
     UUID entityId,
     List<Event<?>> events
 ) {
@@ -64,7 +64,7 @@ public record EventLog(
         .findFirst()
         .orElseThrow(() -> new NoSuchElementException(String.format("one(%s) on %s [log: %s]",
             eventType.name(),
-            entityModel.name(),
+            entityType.name(),
             events.stream().map(Event::typeName).collect(joining(","))
         )));
   }
@@ -150,18 +150,18 @@ public record EventLog(
 
   /// The log with its events as they are stored, e.g. masked, as a later transaction reads it
   EventLog asStored() {
-    return new EventLog(entityModel(), entityId(), events().stream().<Event<?>>map(Event::asStored).toList());
+    return new EventLog(entityType(), entityId(), events().stream().<Event<?>>map(Event::asStored).toList());
   }
 
   public EventLog withNewEvent(Event<?> newEvent) {
     return new EventLog(
-        entityModel(),
+        entityType(),
         entityId(),
         join(events(), newEvent)
     );
   }
 
-  public static EventLog empty(UUID id, EntityModel model) {
+  public static EventLog empty(UUID id, EntityType model) {
     return new EventLog(model, id, List.of());
   }
 
@@ -186,13 +186,13 @@ public record EventLog(
   /// Whether the entity is one of the session only, whose events are not stored: of a model which is not stored, or
   /// created by an event which is not stored
   boolean isSessionOnly() {
-    return entityModel instanceof EntityModel.NotStored || (!events.isEmpty() && events.getFirst().type() instanceof EventType.NotStored);
+    return entityType instanceof EntityType.NotStored || (!events.isEmpty() && events.getFirst().type() instanceof EventType.NotStored);
   }
 
   /// Whether the entity would be one of the session only with the event as its next, see [#isSessionOnly()]
   boolean isSessionOnlyWith(Event<?> next) {
     Event<?> first = events.isEmpty() ? next : events.getFirst();
-    return entityModel instanceof EntityModel.NotStored || first.type() instanceof EventType.NotStored;
+    return entityType instanceof EntityType.NotStored || first.type() instanceof EventType.NotStored;
   }
 
 

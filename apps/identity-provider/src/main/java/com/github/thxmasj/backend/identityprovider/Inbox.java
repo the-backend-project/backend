@@ -9,7 +9,7 @@ import static com.github.thxmasj.backend.http.inbox.HttpInboxRequest.when;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.github.thxmasj.backend.core.DataType;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.State;
 import com.github.thxmasj.backend.core.TransitionModelBuilder.TransitionContext;
@@ -99,8 +99,8 @@ public interface Inbox {
   enum AnswerStates implements State {Answered}
 
   /// The answers of the requests answered at once, which are entities of the session only
-  EntityModel Answers = EntityModel.notStored("Answers", UUID.fromString("5d0a8e2c-7f4b-4c19-9e63-b1f8d4a2c705"), () -> Map.of(
-      EntityModel.Begin, List.of(
+  EntityType Answers = EntityType.notStored("Answers", UUID.fromString("5d0a8e2c-7f4b-4c19-9e63-b1f8d4a2c705"), () -> Map.of(
+      EntityType.Begin, List.of(
           onEvent(AnswerRequested).to(AnswerStates.Answered)
               .assembleInput()
               .trigger(Answered).with(d -> d).on(HttpInbox.Request).identifiedBy(entityIdFromSession())
@@ -135,7 +135,7 @@ public interface Inbox {
   /// authentication is answered at once, by the [#immediateHttpRequest(Endpoints)]. Its form and credentials are parsed
   /// by its content parser, whose result chooses the process. The code, the code verifier and a client secret wrongly
   /// in the form are masked in the event log, and the response, with the tokens signed.
-  static HttpInboxRequest<Endpoints.TokenEndpointRequest> tokenHttpRequest(EntityModel tokenRequest, Endpoints endpoints) {
+  static HttpInboxRequest<Endpoints.TokenEndpointRequest> tokenHttpRequest(EntityType tokenRequest, Endpoints endpoints) {
     return HttpInboxRequest
         .matching(m -> m.method() == Method.POST && m.uri().getPath().equals("/token"))
         .contentParser(endpoints::tokenEndpointRequest)
@@ -187,7 +187,7 @@ public interface Inbox {
   /// The user returning from the upstream provider, `GET /callback`, whose code is redeemed by an [UpstreamSignIn]. The
   /// code of the upstream provider, the cookie and the redirect to the client with the code generated for it are
   /// masked in the event log.
-  static HttpInboxRequest<Authorizations.Callback> callbackHttpRequest(Endpoints endpoints, EntityModel upstreamSignIn) {
+  static HttpInboxRequest<Authorizations.Callback> callbackHttpRequest(Endpoints endpoints, EntityType upstreamSignIn) {
     return HttpInboxRequest
         .matching(m -> m.method() == Method.GET && m.uri().getPath().equals("/callback"))
         .contentParser(Endpoints::callback)
@@ -199,7 +199,7 @@ public interface Inbox {
 
   /// A UserInfo request, `GET /userinfo`, with a valid access token, processed on the token request which issued the
   /// token
-  static HttpInboxRequest<String> userInfoHttpRequest(EntityModel tokenRequest, Endpoints endpoints) {
+  static HttpInboxRequest<String> userInfoHttpRequest(EntityType tokenRequest, Endpoints endpoints) {
     return HttpInboxRequest
         .matching(m -> m.method() == Method.GET && m.uri().getPath().equals("/userinfo"))
         .contentParser(Endpoints::tokenId)
@@ -223,7 +223,7 @@ public interface Inbox {
     );
   }
 
-  /// The inbox of the identity provider for its entity models only, e.g. for a backoffice or a diagram. Its requests
+  /// The inbox of the identity provider for its entity types only, e.g. for a backoffice or a diagram. Its requests
   /// can't be served, as it has no keys.
   static HttpInbox inbox(Duration tokenLifetime) {
     return inbox(tokenLifetime, new Endpoints(null, null, Map.of()), new JdkHttpClient(), true);
@@ -241,7 +241,7 @@ public interface Inbox {
   }
 
   private static HttpInbox inbox(Duration tokenLifetime, Endpoints endpoints, HttpClient forwarder, boolean signIn) {
-    EntityModel tokenRequest = Tokens.tokenRequest(tokenLifetime);
+    EntityType tokenRequest = Tokens.tokenRequest(tokenLifetime);
     // In the order they are matched in, as the first matching one takes a request
     var requests = new ArrayList<HttpInboxRequest<?>>(List.of(
         immediateHttpRequest(endpoints),

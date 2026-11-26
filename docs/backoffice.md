@@ -7,7 +7,7 @@ in with [OpenID Connect](https://openid.net/specs/openid-connect-core-1_0.html),
 permitted claim value get in. The backoffice only reads.
 
 The backoffice of an application is an application of its own, packaged and deployed apart from the application it
-looks into, with the application's entity models, which it needs to unmarshal the data of the events. It is a state
+looks into, with the application's entity types, which it needs to unmarshal the data of the events. It is a state
 machine of its own, in a schema of its own: every request it receives is an inbox request, and every decision a
 transition, from signing users in with the provider to rendering the pages. Every sign-in is an entity whose event log
 tells who signed in and which pages they viewed. It reads the application's schema with a role which may only read it. The pages are HTML, made interactive with
@@ -38,17 +38,17 @@ monitoring. A session expires after its lifetime, or after 30,000 events, as the
 
 ## The backoffice of an application
 
-An application's backoffice is a module of its own, which depends on the application for its entity models and on
+An application's backoffice is a module of its own, which depends on the application for its entity types and on
 `backoffice`, and whose main method runs `BackofficeApp` with the name of the application, its default schema and the
-entity models of its state machine:
+entity types of its state machine:
 
 ```java
 public static void main(String[] args) {
-  BackofficeApp.run("Orders", "orders", Orders.Inbox.entityModels(), args, System.getenv());
+  BackofficeApp.run("Orders", "orders", Orders.Inbox.entityTypes(), args, System.getenv());
 }
 ```
 
-The application exports the package of its entity models to the module of its backoffice, e.g.
+The application exports the package of its entity types to the module of its backoffice, e.g.
 `exports com.example.orders to com.example.orders.backoffice;`. The backoffice is built and deployed like the
 [apps](apps.md): a native executable in an image built from `scratch`, with a migrate admin process. It is named after
 the application, e.g. "Orders backoffice", in the header and the title of its pages.
@@ -97,9 +97,9 @@ and role are not shared with it.
 
 | Page | Shows |
 |---|---|
-| `/backoffice/` | A search for entities, and the entity models of the application |
+| `/backoffice/` | A search for entities, and the entity types of the application |
 | `/backoffice/search?q=` | The entities found by a text: the entity with it as entity id, the entities having it as an id, e.g. a client id, and the entities indexed by it |
-| `/backoffice/models/{id}` | The latest entities of an entity model, 25 at a time. Entity ids are time ordered, so they are listed in the order they were created. |
+| `/backoffice/models/{id}` | The latest entities of an entity type, 25 at a time. Entity ids are time ordered, so they are listed in the order they were created. |
 | `/backoffice/entities/{id}` | An entity: its events with their data, its ids and index keys, the event it waits for and the entities it refers to and is referred to by |
 
 The data of an event is shown as its data type marshalled it: JSON indented, HTTP messages as text, and other bytes as
@@ -210,5 +210,5 @@ organisation's accounts.
   [monitoring](monitoring.md) events.
 - The current state of an entity is not shown, as it is computed by the transitions, not stored. Its last event tells
   it.
-- An entity of an entity model the application no longer has is listed, but its events are shown with the ids of
+- An entity of an entity type the application no longer has is listed, but its events are shown with the ids of
   their event types and their data as bytes.

@@ -1,7 +1,7 @@
 package com.github.thxmasj.backend.core.internal;
 
 import com.github.thxmasj.backend.core.Event;
-import com.github.thxmasj.backend.core.IdEntityModel;
+import com.github.thxmasj.backend.core.IdEntityType;
 import com.github.thxmasj.backend.core.StateMachine.ProcessResult.Accepted;
 import com.github.thxmasj.backend.core.StateMachine.ProcessResult.IdExists;
 import com.github.thxmasj.backend.core.internal.TransitionStep.OutputStep;
@@ -107,7 +107,7 @@ public final class Transaction {
 
   private static boolean isTransactionOf(Event<?> idEvent, OutputStep<?> output) {
     return output.stepOutput() instanceof Accepted<?> accepted
-        && accepted.entityModel() instanceof IdEntityModel
+        && accepted.entityType() instanceof IdEntityType
         && isSameId(accepted.event(), idEvent);
   }
 

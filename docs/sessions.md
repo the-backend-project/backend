@@ -11,7 +11,7 @@ transaction stores one or more transitions, and a session is one or more transac
 
 ## Transitions
 
-A [transition model](transition-models.md) takes an entity of its [entity model](entities.md) from a state to the
+A [transition model](transition-models.md) takes an entity of its [entity type](entities.md) from a state to the
 next on an event type. Taking it calculates the new event of the entity, and the triggers it declares, from the event
 log of the entity and the data of the event. Nothing is stored and nothing is sent while it is calculated.
 
@@ -57,14 +57,14 @@ A session guarantees three things about each of its transactions:
   [What a later transaction sees](#what-a-later-transaction-sees)). The outcomes of several actions of one
   transaction are processed independently, in any order.
 * **It finds the entity of the session.** An event triggered on the entity identified by the session
-  (`entityIdFromSession()`) goes to the entity of the trigger's entity model that the session last took a transition
+  (`entityIdFromSession()`) goes to the entity of the trigger's entity type that the session last took a transition
   on before the trigger: in the transaction of the trigger first, then in the transactions before it. For an
-  `EntityModelGroup`, such as `HttpInbox.Request`, it is the entity of a model in the group, and the session is the
+  `EntityTypeGroup`, such as `HttpInbox.Request`, it is the entity of a model in the group, and the session is the
   only way to identify it. That is how an application responds to the
   [inbox request](http-inbox.md) it was called from, e.g. from the callback of an outbox request, without knowing
   which inbox request that is.
 * **It reaches the caller.** `StateMachine.onEvent` returns the new events with the entity id it was called on, of any
-  entity model, so also those of an id or index entity with the same id, and also events which are not stored. The
+  entity type, so also those of an id or index entity with the same id, and also events which are not stored. The
   events of later transactions of the session are returned as well, which is how the `HttpInboxListener` gets a
   response given after a request to another system.
 

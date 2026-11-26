@@ -1,6 +1,6 @@
 package com.github.thxmasj.backend.core;
 
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static com.github.thxmasj.backend.core.EntitySelector.entityIdFromSession;
 import static com.github.thxmasj.backend.core.TransitionModelBuilder.WithEvent.onEvent;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -31,8 +31,8 @@ import reactor.core.publisher.Mono;
 public class TransactionTest {
 
   static EventType<String, String> NumberClaimed = EventType.of("Number claimed", UUID.fromString("0d2f4a6c-8e9b-4b1d-a3f5-7c9e1b3d5f17"), DataType.string());
-  static IdEntityModel Ids = IdEntityModel.of("Ids", UUID.fromString("f5a7c9e1-3b4d-4d6f-8a0c-2e4f6a8c0e29"), NumberClaimed);
-  static EntityModel Order = EntityModel.of("Order", UUID.fromString("a1c3e5f7-9b0d-4f2a-8c4e-6a8c0e2b4d3b"), Map::of);
+  static IdEntityType Ids = IdEntityType.of("Ids", UUID.fromString("f5a7c9e1-3b4d-4d6f-8a0c-2e4f6a8c0e29"), NumberClaimed);
+  static EntityType Order = EntityType.of("Order", UUID.fromString("a1c3e5f7-9b0d-4f2a-8c4e-6a8c0e2b4d3b"), Map::of);
 
   enum States implements State { Placed, Rejected }
 
@@ -41,7 +41,7 @@ public class TransactionTest {
   static EventType<String, String> OrderRejected = EventType.of("Order rejected", UUID.fromString("3e5a7c9d-1f2b-4a4c-8e6f-0b2d4f6a8c61"), DataType.string());
   static EventType<String, String> ReminderSent = EventType.of("Reminder sent", UUID.fromString("d7f9b1c3-5e6a-4c8d-9a0b-2e4a6c8e0a73"), DataType.string());
   static EventType<String, String> OrderShipped = EventType.of("Order shipped", UUID.fromString("7a9c1e3f-5b6d-4e8a-b0c2-4a6c8e0b2d85"), DataType.string());
-  static EventType<UUID, UUID> OrderReferenced = IndexEntityModel.referenceEventType("Order referenced", UUID.fromString("1c3e5a7b-9d0f-4a2c-8e4b-6c8e0a2d4f97"));
+  static EventType<UUID, UUID> OrderReferenced = IndexEntityType.referenceEventType("Order referenced", UUID.fromString("1c3e5a7b-9d0f-4a2c-8e4b-6c8e0a2d4f97"));
 
   private final Transaction transaction = new Transaction();
   private final InputStep<String> order = initial(null, Order);
@@ -224,7 +224,7 @@ public class TransactionTest {
     }).block();
   }
 
-  private InputStep<String> initial(TransitionStep<?> previous, EntityModel entityModel) {
+  private InputStep<String> initial(TransitionStep<?> previous, EntityType entityType) {
     return new InputStep<>(
         null,
         previous,
@@ -232,7 +232,7 @@ public class TransactionTest {
         null,
         Begin,
         1,
-        EventLog.empty(UUID.randomUUID(), entityModel),
+        EventLog.empty(UUID.randomUUID(), entityType),
         ZonedDateTime.now(),
         "correlation",
         "input",

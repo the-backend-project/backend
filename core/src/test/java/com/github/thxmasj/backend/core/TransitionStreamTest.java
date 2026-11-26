@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 
 public class TransitionStreamTest {
 
-  static final EntityModel Lamp = EntityModel.of("Lamp", UUID.fromString("59d3158c-7b2a-4312-a293-325858c2673f"), Map::of);
+  static final EntityType Lamp = EntityType.of("Lamp", UUID.fromString("59d3158c-7b2a-4312-a293-325858c2673f"), Map::of);
   enum States implements State {Off, On}
   static EventType<Void, Void>
       LampToggled = EventType.of("Lamp toggled", UUID.fromString("46b0211e-f583-49b3-a6e7-8d13742e0260")),

@@ -1,6 +1,6 @@
 package com.github.thxmasj.backend.identityprovider;
 
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static com.github.thxmasj.backend.core.EntitySelector.entityIdFromSession;
 import static com.github.thxmasj.backend.core.EntitySelector.idEvent;
 import static com.github.thxmasj.backend.core.EntitySelector.newEntityId;
@@ -11,9 +11,9 @@ import static com.github.thxmasj.backend.identityprovider.Clients.Client;
 import static com.github.thxmasj.backend.identityprovider.Clients.ClientIdClaimed;
 
 import com.github.thxmasj.backend.core.DataType;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EventType;
-import com.github.thxmasj.backend.core.IdEntityModel;
+import com.github.thxmasj.backend.core.IdEntityType;
 import com.github.thxmasj.backend.core.Severity;
 import com.github.thxmasj.backend.core.State;
 import com.github.thxmasj.backend.core.StateMachine.ProcessResult;
@@ -49,7 +49,7 @@ public interface Authorizations {
   /// The scopes of OpenID Connect a client may request. Other scopes are ignored, OpenID Connect Core section 3.1.2.1.
   List<String> SupportedScopes = List.of("openid", "email", "profile");
 
-  EntityModel Authorization = EntityModel.of("Authorization", UUID.fromString("7ff5bfea-81ed-4e10-aa73-e80e69884814"), Authorizations::authorizationTransitions);
+  EntityType Authorization = EntityType.of("Authorization", UUID.fromString("7ff5bfea-81ed-4e10-aa73-e80e69884814"), Authorizations::authorizationTransitions);
 
   enum States implements State {
     Authenticating,
@@ -158,7 +158,7 @@ public interface Authorizations {
       UUID.fromString("914c9ed3-4262-4206-8f26-5afad478d267"),
       DataType.string()
   );
-  IdEntityModel Codes = IdEntityModel.of("Codes", UUID.fromString("a5b6d5e7-e5e9-4b16-9d7b-bd08c596bdd0"), CodeClaimed);
+  IdEntityType Codes = IdEntityType.of("Codes", UUID.fromString("a5b6d5e7-e5e9-4b16-9d7b-bd08c596bdd0"), CodeClaimed);
 
   private static Map<State, List<TransitionModel<?, ?>>> authorizationTransitions() {
     return Map.of(

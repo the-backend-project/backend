@@ -1,7 +1,7 @@
 package com.github.thxmasj.backend.core.internal.database;
 
 import com.github.thxmasj.backend.core.DelaySpecification;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.database.DatabaseClient;
 import java.time.Clock;
@@ -19,7 +19,7 @@ public class NextDelayedTrigger {
   private final DatabaseClient databaseClient;
   private final Clock clock;
   private final String sql;
-  private final Map<UUID, EntityModel> entityModels;
+  private final Map<UUID, EntityType> entityTypes;
   private final Function<UUID, EventType<?, ?>> eventTypeMapper;
 
   /// @param sql the SQL selecting the delayed trigger with the earliest passed deadline, if any, and postponing its
@@ -29,12 +29,12 @@ public class NextDelayedTrigger {
       String sql,
       List<EventType<?, ?>> eventTypes,
       Clock clock,
-      List<EntityModel> entityModels
+      List<EntityType> entityTypes
   ) {
     this.databaseClient = databaseClient;
     this.eventTypeMapper = Mappers.eventTypeMapper(eventTypes);
     this.clock = clock;
-    this.entityModels = entityModels.stream().collect(Collectors.toMap(EntityModel::id, Function.identity()));
+    this.entityTypes = entityTypes.stream().collect(Collectors.toMap(EntityType::id, Function.identity()));
     this.sql = sql;
   }
 
@@ -50,7 +50,7 @@ public class NextDelayedTrigger {
           byte[] rawData = row.get("Data", byte[].class);
           return create(
                   row.get("EntityId", UUID.class),
-                  entityModels.get(row.get("EntityModelId", UUID.class)),
+                  entityTypes.get(row.get("EntityTypeId", UUID.class)),
                   row.get("EventNumber", Integer.class),
                   eventType,
                   rawData,
@@ -63,7 +63,7 @@ public class NextDelayedTrigger {
 
   private <T> DelayedTrigger<T> create(
           UUID entityId,
-          EntityModel model,
+          EntityType model,
           int eventNumber,
           EventType<T, ?> eventType,
           byte[] data,

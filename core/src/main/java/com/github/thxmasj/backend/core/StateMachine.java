@@ -95,21 +95,21 @@ public class StateMachine implements AutoCloseable {
   private final DatabaseClient client;
   private final Storage storage;
   private final ResolvedModels models;
-  private final Map<EntityModel, Traverser> traversers;
-  private final Map<EntityModel, List<EventType<?, ?>>> eventTypesByEntityModel;
+  private final Map<EntityType, Traverser> traversers;
+  private final Map<EntityType, List<EventType<?, ?>>> eventTypesByEntityType;
 
   public StateMachine(
-      List<? extends EntityModel> entityModels,
+      List<? extends EntityType> entityTypes,
       DataSource dataSource,
       String schemaName,
       boolean withResolving
   ) {
-    this(null, entityModels, dataSource, null, schemaName, null, Clock.systemUTC(), null, withResolving);
+    this(null, entityTypes, dataSource, null, schemaName, null, Clock.systemUTC(), null, withResolving);
   }
 
   public StateMachine(
       Function<List<String>, Mono<Void>> delayer,
-      List<? extends EntityModel> entityModels,
+      List<? extends EntityType> entityTypes,
       DataSource dataSource,
       DataSource schemaDataSource,
       String schemaName,
@@ -117,13 +117,13 @@ public class StateMachine implements AutoCloseable {
       Clock clock,
       Listener listener
   ) {
-    this(delayer, entityModels, dataSource, schemaDataSource, schemaName, role, clock, listener, true);
+    this(delayer, entityTypes, dataSource, schemaDataSource, schemaName, role, clock, listener, true);
   }
 
   /// The database is the one behind the data source (see [Database#of(DataSource)])
   public StateMachine(
       Function<List<String>, Mono<Void>> delayer,
-      List<? extends EntityModel> entityModels,
+      List<? extends EntityType> entityTypes,
       DataSource dataSource,
       DataSource schemaDataSource,
       String schemaName,
@@ -133,29 +133,29 @@ public class StateMachine implements AutoCloseable {
       boolean withResolving
   ) {
     Database database = Database.of(dataSource);
-    this(delayer, entityModels, database, database.client(dataSource), schemaDataSource, schemaName, role, clock, listener, withResolving);
+    this(delayer, entityTypes, database, database.client(dataSource), schemaDataSource, schemaName, role, clock, listener, withResolving);
   }
 
   /// @param delayer delays the storing of new events until the returned [Mono] completes, e.g. for tests to hold a
   ///                request at an event. It is given a key `<correlation id>-<event type id>` of each new event, so an
   ///                event is identified by its [EventType#id()], which stays the same when the event type is renamed.
   ///                Null for no delay.
-  /// @param entityModels the entity models to run, each with its transitions, of which the state machine also runs
+  /// @param entityTypes the entity types to run, each with its transitions, of which the state machine also runs
   ///                     the models the transitions trigger events on, and so on. It is enough to give the models
-  ///                     which nothing triggers events on, e.g. the entity models of an inbox (see
-  ///                     `HttpInbox#entityModels()`). An [EntityModelGroup] is not one of them, since it has no entities
+  ///                     which nothing triggers events on, e.g. the entity types of an inbox (see
+  ///                     `HttpInbox#entityTypes()`). An [EntityTypeGroup] is not one of them, since it has no entities
   ///                     of its own.
-  /// @throws IllegalArgumentException if one of the entity models given is an [EntityModelGroup], if two of the
+  /// @throws IllegalArgumentException if one of the entity types given is an [EntityTypeGroup], if two of the
   ///                                  models run have the same id, or if the transitions of models are refused or
   ///                                  can't be created, e.g. as their supplier fails, with the refusals and failures
   ///                                  of every model, each named
-  /// @throws NullPointerException if one of the entity models given is null, e.g. a constant not created yet
+  /// @throws NullPointerException if one of the entity types given is null, e.g. a constant not created yet
   /// @param client a client of the database, which is closed with the state machine
   /// @param schemaDataSource a data source of the database to create the schema with, or null if it is created
   ///                         elsewhere
   public StateMachine(
       Function<List<String>, Mono<Void>> delayer,
-      List<? extends EntityModel> entityModels,
+      List<? extends EntityType> entityTypes,
       Database database,
       DatabaseClient client,
       DataSource schemaDataSource,
@@ -165,12 +165,12 @@ public class StateMachine implements AutoCloseable {
       Listener listener,
       boolean withResolving
   ) {
-    List<EntityModel> models = EntityModelChecks.check(entityModels);
+    List<EntityType> models = EntityTypeChecks.check(entityTypes);
     this.traversers = traversers(models);
     ResolvedModels resolved = ResolvedModels.ofResolved(models);
     this.models = resolved;
-    Debug.log("Supported entity models:\n" + models.stream().map(EntityModel::name).collect(joining("\n")));
-    this.eventTypesByEntityModel = resolved.eventTypesByEntityModel();
+    Debug.log("Supported entity types:\n" + models.stream().map(EntityType::name).collect(joining("\n")));
+    this.eventTypesByEntityType = resolved.eventTypesByEntityType();
     this.delayer = delayer != null ? delayer : _ -> Mono.empty();
     if (schemaDataSource != null) {
       database.createSchema(schemaDataSource, schemaName, role)
@@ -218,19 +218,19 @@ public class StateMachine implements AutoCloseable {
   }
 
   /// The traversers of the transitions of the models, which are checked
-  private static Map<EntityModel, Traverser> traversers(List<EntityModel> models) {
-    var traversers = new HashMap<EntityModel, Traverser>();
+  private static Map<EntityType, Traverser> traversers(List<EntityType> models) {
+    var traversers = new HashMap<EntityType, Traverser>();
     for (var model : models)
       traversers.put(model, new Traverser(model));
     return traversers;
   }
 
-  private EventLog emptyEventLog(EntityModel entityModel) {
-    return new EventLog(entityModel, Identifiers.newId(), List.of());
+  private EventLog emptyEventLog(EntityType entityType) {
+    return new EventLog(entityType, Identifiers.newId(), List.of());
   }
 
-  private EventLog emptyEventLog(EntityModel entityModel, UUID entityId) {
-    return new EventLog(entityModel, entityId, List.of());
+  private EventLog emptyEventLog(EntityType entityType, UUID entityId) {
+    return new EventLog(entityType, entityId, List.of());
   }
 
   enum ResolverStatus {Ok, Empty, Error}
@@ -241,7 +241,7 @@ public class StateMachine implements AutoCloseable {
         delayedTrigger.eventType(),
         delayedTrigger.data(),
         delayedTrigger.entityId(),
-        delayedTrigger.entityModel(),
+        delayedTrigger.entityType(),
         delayedTrigger.correlationId()
     );
     Debug.log("resolveState with: " + trigger.eventType().name());
@@ -255,7 +255,7 @@ public class StateMachine implements AutoCloseable {
     var backoff = new DelaySpecification(ofSeconds(10), ofMinutes(10), ofHours(5), 1.5);
     return storage.nextDelayedTrigger().execute(backoff)
         .doOnNext(d -> Debug.log(ZonedDateTime.now() + ": Next delayed trigger: " + d))
-        .zipWhen(delayedTrigger -> storage.eventsByEntityId().execute(delayedTrigger.entityModel(), eventTypesByEntityModel.get(delayedTrigger.entityModel()), delayedTrigger.entityId())
+        .zipWhen(delayedTrigger -> storage.eventsByEntityId().execute(delayedTrigger.entityType(), eventTypesByEntityType.get(delayedTrigger.entityType()), delayedTrigger.entityId())
             .switchIfEmpty(Mono.error(new RuntimeException("Unknown entity " + delayedTrigger.entityId() + " for delayed event")))
         )
         .flatMap(delayedTriggerAndEventLog -> {
@@ -268,7 +268,7 @@ public class StateMachine implements AutoCloseable {
           }
           Debug.log("Delayed trigger eventNumber: " + delayedTrigger.eventNumber() + ", log's last event number: "
               + eventLog.lastEventNumber());
-          var currentState = traversers.get(delayedTrigger.entityModel()).currentState(eventLog);
+          var currentState = traversers.get(delayedTrigger.entityType()).currentState(eventLog);
           if (currentState == null)
             return Mono.error(new RuntimeException(
                 "Invalid event log: " + eventLog.events().stream().map(Event::typeName).collect(joining(","))));
@@ -284,7 +284,7 @@ public class StateMachine implements AutoCloseable {
               // fired the trigger too, or by an event which replaced it. Either way the trigger is done with, as when its
               // event isn't stored (TriggerFiredElsewhere), so it is not a failure.
               .onErrorResume(
-                  e -> e instanceof EventAlreadyExists exists && exists.isOf(delayedTrigger.entityModel(), delayedTrigger.entityId(), delayedTrigger.eventNumber()),
+                  e -> e instanceof EventAlreadyExists exists && exists.isOf(delayedTrigger.entityType(), delayedTrigger.entityId(), delayedTrigger.eventNumber()),
                   e -> {
                     Debug.log("The event of delayed trigger " + delayedTrigger + " was stored by another transaction first");
                     return Mono.just(ResolverStatus.Ok);
@@ -305,13 +305,13 @@ public class StateMachine implements AutoCloseable {
 
   public sealed interface ProcessResult<T> permits Accepted, Completed, IdExists, Pending, Rejected, UnknownId {
 
-    record Completed<T>(ProcessResult<?> choiceResult, UUID entityId, int eventNumber, EntityModel entityModel) implements ProcessResult<T> {
+    record Completed<T>(ProcessResult<?> choiceResult, UUID entityId, int eventNumber, EntityType entityType) implements ProcessResult<T> {
       public Completed<T> completed() {return this;}
     }
 
     /// @param severity the severity declared on the transition which accepted the event. The trigger which fired the
     ///                 transaction, if any, is on its first step, see [InputStep#triggerType()].
-    record Accepted<T>(Event<T> event, EntityModel entityModel, Severity severity) implements ProcessResult<T> {
+    record Accepted<T>(Event<T> event, EntityType entityType, Severity severity) implements ProcessResult<T> {
       public Accepted<T> accepted() {return this;}
     }
 
@@ -357,8 +357,8 @@ public class StateMachine implements AutoCloseable {
       }
     }
 
-    static <T> Completed<T> completed(ProcessResult<?> choiceResult, UUID entityId, int eventNumber, EntityModel entityModel) {
-      return new Completed<>(choiceResult, entityId, eventNumber, entityModel);
+    static <T> Completed<T> completed(ProcessResult<?> choiceResult, UUID entityId, int eventNumber, EntityType entityType) {
+      return new Completed<>(choiceResult, entityId, eventNumber, entityType);
     }
 
     default boolean isCompleted() {
@@ -369,12 +369,12 @@ public class StateMachine implements AutoCloseable {
       throw new IllegalStateException("Result is " + this);
     }
 
-    static <T> Accepted<T> accepted(Event<T> event, EntityModel entityModel) {
-      return new Accepted<>(event, entityModel, Severity.Info);
+    static <T> Accepted<T> accepted(Event<T> event, EntityType entityType) {
+      return new Accepted<>(event, entityType, Severity.Info);
     }
 
-    static <T> Accepted<T> accepted(Event<T> event, EntityModel entityModel, Severity severity) {
-      return new Accepted<>(event, entityModel, severity);
+    static <T> Accepted<T> accepted(Event<T> event, EntityType entityType, Severity severity) {
+      return new Accepted<>(event, entityType, severity);
     }
 
     default boolean isAccepted() {
@@ -435,8 +435,8 @@ public class StateMachine implements AutoCloseable {
 
   }
 
-  private Mono<EventLog> eventLogByEntityId(EntityModel entityModel, UUID entityId) {
-    return storage.eventsByEntityId().execute(entityModel, eventTypesByEntityModel.get(entityModel), entityId);
+  private Mono<EventLog> eventLogByEntityId(EntityType entityType, UUID entityId) {
+    return storage.eventsByEntityId().execute(entityType, eventTypesByEntityType.get(entityType), entityId);
   }
 
   /// Triggers the event of a trigger without input, as [#onEvent(Immediate, Object)]
@@ -446,19 +446,19 @@ public class StateMachine implements AutoCloseable {
 
   /// Triggers the event with the correlation id the trigger gives the input (see
   /// [EventTrigger#correlationId(Object)]). Fails with an [IllegalArgumentException] if the state machine doesn't run
-  /// the entity model triggered on, the same instance (see [#runs(EntityModel)]).
+  /// the entity type triggered on, the same instance (see [#runs(EntityType)]).
   public <T, I, O> Flux<Event<?>> onEvent(Immediate<T, I, O> eventTrigger, T input) {
-    EntityModel target = eventTrigger.entityModel();
-    if (target != null && !(target instanceof EntityModelGroup) && !runs(target))
+    EntityType target = eventTrigger.entityType();
+    if (target != null && !(target instanceof EntityTypeGroup) && !runs(target))
       return Flux.error(models.notRun(target, "the state machine"));
     return Flux.defer(() -> onEvent(eventTrigger.correlationId(input), eventTrigger, input, null));
   }
 
-  /// Whether the state machine runs the entity model, the same instance as it was given or found. Another instance
+  /// Whether the state machine runs the entity type, the same instance as it was given or found. Another instance
   /// with its id isn't, as it may differ, e.g. be created from other configuration. The models run are given by
-  /// [#entityModels()].
-  public boolean runs(EntityModel entityModel) {
-    return models.runs(entityModel);
+  /// [#entityTypes()].
+  public boolean runs(EntityType entityType) {
+    return models.runs(entityType);
   }
 
   private <T, I, O> Flux<Event<?>> onEvent(
@@ -525,7 +525,7 @@ public class StateMachine implements AutoCloseable {
         case OutputStep<?> occ
             when occ.stepOutput().isAccepted() && !(occ.previous() instanceof ChoiceStep<?>) -> {
           var accepted = occ.stepOutput().accepted();
-          nextEvents.put(new EntityKey(accepted.entityModel().id(), accepted.event().entityId()), accepted.event());
+          nextEvents.put(new EntityKey(accepted.entityType().id(), accepted.event().entityId()), accepted.event());
           changes.add(Change.fromAcceptedEvent(accepted));
         }
         case OutputStep<?> _ -> {}
@@ -548,7 +548,7 @@ public class StateMachine implements AutoCloseable {
   /// The delayed event numbered after the event of its transition, the next one accepted on its entity, if that is
   /// stored, or with its number if it isn't
   private static <T> DelayedEvent<T> numbered(DelayedEvent<T> delayedEvent, Map<EntityKey, Event<?>> nextEvents) {
-    Event<?> transitionsEvent = nextEvents.get(new EntityKey(delayedEvent.entityModel().id(), delayedEvent.entityId()));
+    Event<?> transitionsEvent = nextEvents.get(new EntityKey(delayedEvent.entityType().id(), delayedEvent.entityId()));
     if (transitionsEvent == null)
       return delayedEvent;
     return delayedEvent.withEventNumber(transitionsEvent.eventNumber() + (transitionsEvent.type() instanceof EventType.NotStored ? 0 : 1));
@@ -592,7 +592,7 @@ public class StateMachine implements AutoCloseable {
       UUID triggerId,
       @Nullable EventReference triggerEvent
   ) {
-    Debug.log(eventLog.entityModel().name() + ": onEvent " + eventType.name() + " with log " + eventLog.events().stream().map(Event::typeName).collect(joining(",")));
+    Debug.log(eventLog.entityType().name() + ": onEvent " + eventType.name() + " with log " + eventLog.events().stream().map(Event::typeName).collect(joining(",")));
     var now = ZonedDateTime.now(clock);
     var tuple = transitionModel(eventLog, eventType);
     if (tuple.t2() == null) {
@@ -633,7 +633,7 @@ public class StateMachine implements AutoCloseable {
     if (listener != null && inputStep.transaction().isNewFailure(failure))
       listener.transitionFailed(
           inputStep.correlationId(),
-          inputStep.log().entityModel(),
+          inputStep.log().entityType(),
           inputStep.log().entityId(),
           inputStep.transitionModel().eventType(),
           failure
@@ -663,7 +663,7 @@ public class StateMachine implements AutoCloseable {
                       initial.correlationId(),
                       tuple(
                           initial.input(),
-                          initial.log().entityModel(),
+                          initial.log().entityType(),
                           transitionModel.eventType(),
                           r.exception.getMessage()
                       ),
@@ -694,7 +694,7 @@ public class StateMachine implements AutoCloseable {
 
   /// The existing id, if the triggered event is an id event with an id found to exist when storing the changes
   private <I, O> TransitionStep<ProcessResult<O>> idExists(EventTrigger<?, I, O> eventTrigger, TransitionStep<?> tail, I data) {
-    if (!(eventTrigger.entityModel() instanceof IdEntityModel))
+    if (!(eventTrigger.entityType() instanceof IdEntityType))
       return null;
     EventType<I, O> type = eventTrigger.eventType();
     return tail.inputStep().transaction().existingIds().stream()
@@ -736,13 +736,13 @@ public class StateMachine implements AutoCloseable {
 
 
   /// The current state of the selected entity. Completes empty if the entity does not exist.
-  /// Fails with an [IllegalArgumentException] if the state machine doesn't run the entity model, the same instance
-  /// (see [#runs(EntityModel)]).
-  public Mono<State> onStatus(EntitySelector entitySelector, EntityModel entityModel) {
-    if (!runs(entityModel))
-      return Mono.error(models.notRun(entityModel, "the state machine"));
-    return eventLog(entitySelector, entityModel, null)
-        .map(log -> traversers.get(entityModel).currentState(log))
+  /// Fails with an [IllegalArgumentException] if the state machine doesn't run the entity type, the same instance
+  /// (see [#runs(EntityType)]).
+  public Mono<State> onStatus(EntitySelector entitySelector, EntityType entityType) {
+    if (!runs(entityType))
+      return Mono.error(models.notRun(entityType, "the state machine"));
+    return eventLog(entitySelector, entityType, null)
+        .map(log -> traversers.get(entityType).currentState(log))
         .onErrorResume(UnknownEntity.class, _ -> Mono.empty());
   }
 
@@ -759,7 +759,7 @@ public class StateMachine implements AutoCloseable {
         eventType,
         conditionalTrigger.data(),
         conditionalTrigger.entityId(),
-        conditionalTrigger.entityModel(),
+        conditionalTrigger.entityType(),
         conditionalTrigger.correlationId()
     );
     // The conditional trigger is deleted together with the change of the fired event
@@ -796,21 +796,21 @@ public class StateMachine implements AutoCloseable {
       T inputData,
       TransitionStep<?> transitionStep
   ) {
-    return eventLog(eventTrigger.entitySelector().apply(inputData), eventTrigger.entityModel(), transitionStep);
+    return eventLog(eventTrigger.entitySelector().apply(inputData), eventTrigger.entityType(), transitionStep);
   }
 
   private <I> Mono<EventLog> eventLog(
       EntitySelector entitySelector,
-      EntityModel entityModel,
+      EntityType entityType,
       @Nullable TransitionStep<?> transitionStep
   ) {
-    if (entityModel instanceof EntityModelGroup && !(entitySelector instanceof ByIdFromSession))
-      throw new IllegalArgumentException("An entity of the group " + entityModel.name() + " can only be identified by the session");
+    if (entityType instanceof EntityTypeGroup && !(entitySelector instanceof ByIdFromSession))
+      throw new IllegalArgumentException("An entity of the group " + entityType.name() + " can only be identified by the session");
     return switch (entitySelector) {
       case EntitySelector.ByIdFromSession _ -> {
-        EventLog log = logFromSteps(transitionStep, entityModel);
+        EventLog log = logFromSteps(transitionStep, entityType);
         // The model of the session's entity, which is not the target if that is a group
-        EntityModel model = log.entityModel();
+        EntityType model = log.entityType();
         UUID id = log.entityId();
         log = logFromNestedChanges(id, model, transitionStep);
         if (log == null) yield eventLogByEntityId(model, id);
@@ -819,85 +819,85 @@ public class StateMachine implements AutoCloseable {
       case ById s -> {
         UUID entityId = s.id();
         yield switch (s.creationMode()) {
-          case NeverCreate -> Mono.justOrEmpty(logFromNestedChanges(entityId, entityModel, transitionStep))
-              .switchIfEmpty(storage.eventsByEntityId().execute(entityModel, eventTypesByEntityModel.get(entityModel), entityId));
-          case CreateIfNotExists -> Mono.justOrEmpty(logFromNestedChanges(entityId, entityModel, transitionStep))
-              .switchIfEmpty(storage.eventsByEntityId().execute(entityModel, eventTypesByEntityModel.get(entityModel), entityId))
-              .onErrorResume(UnknownEntity.class, _ -> Mono.just(emptyEventLog(entityModel, entityId)));
-          case AlwaysCreate -> Mono.just(emptyEventLog(entityModel, s.id()));
+          case NeverCreate -> Mono.justOrEmpty(logFromNestedChanges(entityId, entityType, transitionStep))
+              .switchIfEmpty(storage.eventsByEntityId().execute(entityType, eventTypesByEntityType.get(entityType), entityId));
+          case CreateIfNotExists -> Mono.justOrEmpty(logFromNestedChanges(entityId, entityType, transitionStep))
+              .switchIfEmpty(storage.eventsByEntityId().execute(entityType, eventTypesByEntityType.get(entityType), entityId))
+              .onErrorResume(UnknownEntity.class, _ -> Mono.just(emptyEventLog(entityType, entityId)));
+          case AlwaysCreate -> Mono.just(emptyEventLog(entityType, s.id()));
         };
       }
-      case ByIdEvent<?> s -> eventLog(s, entityModel, transitionStep);
-      case ByLastIndexed<?> s -> eventLog(s, entityModel);
-      case ByLastReferencing s -> eventLog(s, entityModel);
+      case ByIdEvent<?> s -> eventLog(s, entityType, transitionStep);
+      case ByLastIndexed<?> s -> eventLog(s, entityType);
+      case ByLastReferencing s -> eventLog(s, entityType);
       case EntitySelector s -> throw new IllegalStateException("Unexpected value: " + s);
     };
   }
 
-  private <T> Mono<EventLog> eventLog(ByIdEvent<T> selector, EntityModel entityModel, TransitionStep<?> transitionStep) {
+  private <T> Mono<EventLog> eventLog(ByIdEvent<T> selector, EntityType entityType, TransitionStep<?> transitionStep) {
     Mono<EventLog> log = storage.eventsByIdEvent().execute(selector.type(), selector.type().outputDataType().marshal(selector.id()))
-        .filter(l -> l.entityModel().equals(entityModel));
+        .filter(l -> l.entityType().equals(entityType));
     return switch (selector.creationMode()) {
       case NeverCreate -> log.switchIfEmpty(Mono.defer(() -> selector.fallback() != null ?
-          eventLog(selector.fallback(), entityModel, transitionStep) :
-          Mono.error(new UnknownEntity(entityModel, selector.type(), selector.id()))
+          eventLog(selector.fallback(), entityType, transitionStep) :
+          Mono.error(new UnknownEntity(entityType, selector.type(), selector.id()))
       ));
-      case CreateIfNotExists -> log.switchIfEmpty(Mono.fromSupplier(() -> emptyEventLog(entityModel)));
-      case AlwaysCreate -> Mono.just(emptyEventLog(entityModel));
+      case CreateIfNotExists -> log.switchIfEmpty(Mono.fromSupplier(() -> emptyEventLog(entityType)));
+      case AlwaysCreate -> Mono.just(emptyEventLog(entityType));
     };
   }
 
   @SuppressWarnings("unchecked")
-  private <G> Mono<EventLog> eventLog(ByLastIndexed<G> selector, EntityModel entityModel) {
+  private <G> Mono<EventLog> eventLog(ByLastIndexed<G> selector, EntityType entityType) {
     if (!(selector.type().outputDataType() instanceof GroupedDataType<?, ?> dataType))
       throw new IllegalArgumentException("Data type of index event type " + selector.type().name() + " is not grouped");
     Mono<EventLog> log = storage.eventsByLastIndexEvent().execute(
-        entityModel,
-        eventTypesByEntityModel.get(entityModel),
+        entityType,
+        eventTypesByEntityType.get(entityType),
         selector.type().id(),
         ((GroupedDataType<?, G>) dataType).marshalGroup(selector.group()),
         selector.position()
     );
     return switch (selector.creationMode()) {
-      case NeverCreate -> log.switchIfEmpty(Mono.error(() -> new EntityGroupNotInitialised(entityModel, selector.type(), selector.group())));
-      case CreateIfNotExists -> log.switchIfEmpty(Mono.fromSupplier(() -> emptyEventLog(entityModel)));
+      case NeverCreate -> log.switchIfEmpty(Mono.error(() -> new EntityGroupNotInitialised(entityType, selector.type(), selector.group())));
+      case CreateIfNotExists -> log.switchIfEmpty(Mono.fromSupplier(() -> emptyEventLog(entityType)));
       case AlwaysCreate -> throw new IllegalStateException("Unexpected value: " + selector.creationMode());
     };
   }
 
   /// The entity of the model created last of those referencing the id, by entity id if they were created at the same
   /// time, as entity ids are time-ordered
-  private Mono<EventLog> eventLog(ByLastReferencing selector, EntityModel entityModel) {
+  private Mono<EventLog> eventLog(ByLastReferencing selector, EntityType entityType) {
     return storage.entitiesByIndex().execute(selector.id(), selector.type())
-        .filter(log -> log.entityModel().equals(entityModel))
+        .filter(log -> log.entityType().equals(entityType))
         .reduce((a, b) -> Comparator.comparing(EventLog::created).thenComparing(EventLog::entityId).compare(a, b) >= 0 ? a : b)
-        .switchIfEmpty(Mono.error(() -> new UnknownEntity(entityModel, selector.type(), selector.id())));
+        .switchIfEmpty(Mono.error(() -> new UnknownEntity(entityType, selector.type(), selector.id())));
   }
 
   /// The log of the entity of the model the session has, as it was given to its transition, searched in the transaction
   /// of the step and then in the transactions of the session before it, each walked once. The transactions of a session
   /// are linked by the first step of each, which refers to the tail of the one before.
-  private EventLog logFromSteps(TransitionStep<?> context, EntityModel entityModel) {
+  private EventLog logFromSteps(TransitionStep<?> context, EntityType entityType) {
     for (var transaction = context; transaction != null; transaction = previousTransaction(transaction)) {
       for (var c = transaction; c != null; c = c.previous()) {
-        if (c instanceof InputStep<?> i && EntityModelGroup.targets(entityModel, i.log().entityModel()))
+        if (c instanceof InputStep<?> i && EntityTypeGroup.targets(entityType, i.log().entityType()))
           return i.log();
       }
     }
-    throw new NoSuchElementException(entityModel.name() + " not found in transition step");
+    throw new NoSuchElementException(entityType.name() + " not found in transition step");
   }
 
   /// The log of the entity as the session has it, with the events accepted in the transaction of the step, or, for an
   /// entity of the session only, in the transactions of the session before it, or null if the session has no events of
   /// it. A stored entity is otherwise read from the database, as an earlier transaction's events of it may have been
   /// followed by those of other sessions. An id entity or index entity has the same entity id as its entity, so the
-  /// entity model is matched too.
-  private EventLog logFromNestedChanges(UUID entityId, EntityModel entityModel, TransitionStep<?> transitionStep) {
-    var found = inTransaction(entityId, entityModel, transitionStep);
-    if (found.log() != null || !hasEntitiesOfTheSessionOnly(entityModel))
+  /// entity type is matched too.
+  private EventLog logFromNestedChanges(UUID entityId, EntityType entityType, TransitionStep<?> transitionStep) {
+    var found = inTransaction(entityId, entityType, transitionStep);
+    if (found.log() != null || !hasEntitiesOfTheSessionOnly(entityType))
       return found.log();
     while (found.previousTransaction() != null) {
-      found = inTransaction(entityId, entityModel, found.previousTransaction());
+      found = inTransaction(entityId, entityType, found.previousTransaction());
       if (found.log() != null)
         return found.log().isSessionOnly() ? found.log() : null;
     }
@@ -909,12 +909,12 @@ public class StateMachine implements AutoCloseable {
   private record InTransaction(EventLog log, TransitionStep<?> previousTransaction) {}
 
   /// Walks the transaction of the step once, from its tail, for the last event accepted on the entity
-  private static InTransaction inTransaction(UUID entityId, EntityModel entityModel, TransitionStep<?> transitionStep) {
+  private static InTransaction inTransaction(UUID entityId, EntityType entityType, TransitionStep<?> transitionStep) {
     for (var c = transitionStep; c != null; c = c.previous()) {
       if (c instanceof OutputStep<?>(TransitionStep<?> previous, ProcessResult<?> stepOutput)
-          && stepOutput instanceof Accepted<?>(Event<?> event, EntityModel model, _)
+          && stepOutput instanceof Accepted<?>(Event<?> event, EntityType model, _)
           && event.entityId().equals(entityId)
-          && model.equals(entityModel)
+          && model.equals(entityType)
           && !(previous instanceof ChoiceStep)) {
         EventLog log = c.inputStep().log();
         // An event which is not stored is not in the log of a stored entity, which the next event stored follows. The
@@ -927,14 +927,14 @@ public class StateMachine implements AutoCloseable {
   }
 
   /// Whether entities of the session only are of the model, which a group is not
-  private boolean hasEntitiesOfTheSessionOnly(EntityModel entityModel) {
-    Traverser traverser = traversers.get(entityModel);
+  private boolean hasEntitiesOfTheSessionOnly(EntityType entityType) {
+    Traverser traverser = traversers.get(entityType);
     return traverser == null || traverser.hasEntitiesOfTheSessionOnly();
   }
 
-  private record EntityKey(UUID entityModelId, UUID entityId) {
+  private record EntityKey(UUID entityTypeId, UUID entityId) {
     static EntityKey of(Change change) {
-      return new EntityKey(change.entityModel().id(), change.entityId());
+      return new EntityKey(change.entityType().id(), change.entityId());
     }
   }
 
@@ -943,7 +943,7 @@ public class StateMachine implements AutoCloseable {
     var keys = new HashSet<EntityKey>();
     for (var c = tail; c != null; c = c.previous()) {
       if (c instanceof OutputStep<?>(TransitionStep<?> previous, ProcessResult<?> stepOutput)
-          && stepOutput instanceof Accepted<?>(Event<?> event, EntityModel model, _)
+          && stepOutput instanceof Accepted<?>(Event<?> event, EntityType model, _)
           && !(previous instanceof ChoiceStep)
           && c.inputStep().log().isSessionOnlyWith(event))
         keys.add(new EntityKey(model.id(), event.entityId()));
@@ -960,12 +960,12 @@ public class StateMachine implements AutoCloseable {
     InputStep<?> initial = initial(tail);
     if (initial == null || initial.triggerType() == null)
       return changes;
-    var entity = new EntityKey(initial.log().entityModel().id(), initial.log().entityId());
+    var entity = new EntityKey(initial.log().entityType().id(), initial.log().entityId());
     if (initial.triggerType() == TriggerType.DELAYED && hasStoredEvent(changes, entity, storing))
       return changes;
     var withDeletion = new ArrayList<Change>(changes.size() + 1);
     withDeletion.add(Change.fromFiredTrigger(
-        initial.log().entityModel(),
+        initial.log().entityType(),
         initial.log().entityId(),
         new Change.FiredTrigger(initial.triggerType(), initial.triggerId(), initial.eventNumber(), initial.transitionModel().eventType().id())
     ));
@@ -978,7 +978,7 @@ public class StateMachine implements AutoCloseable {
   }
 
   /// The changes of the events with an entity id, in the order the events are emitted to the one who triggered the
-  /// event: by number, those of the entity model coming first among the changes first, as an id or index entity, which
+  /// event: by number, those of the entity type coming first among the changes first, as an id or index entity, which
   /// has the entity id of its entity, follows the entity, and the events with the same number on an entity, of which
   /// all but the last aren't stored, in the order they were calculated, the reverse of the order they are collected in
   private static List<Change> inEmitOrder(List<Change> collected) {
@@ -986,11 +986,11 @@ public class StateMachine implements AutoCloseable {
     var modelRank = new HashMap<UUID, Integer>();
     for (Change change : collected) {
       position.put(change, position.size());
-      modelRank.putIfAbsent(change.entityModel().id(), modelRank.size());
+      modelRank.putIfAbsent(change.entityType().id(), modelRank.size());
     }
     return collected.stream()
         .sorted(Comparator.<Change>comparingInt(change -> change.newEvent().eventNumber())
-            .thenComparingInt(change -> modelRank.get(change.entityModel().id()))
+            .thenComparingInt(change -> modelRank.get(change.entityType().id()))
             .thenComparingInt(change -> -position.get(change)))
         .toList();
   }
@@ -1019,7 +1019,7 @@ public class StateMachine implements AutoCloseable {
       var owners = new IdentityHashMap<ConditionalTrigger<?>, EntityKey>();
       for (var c = tail; c != null; c = c.previous())
         if (c instanceof ConditionalTriggerStep<?, ?> step)
-          owners.put(step.conditionalTrigger(), new EntityKey(step.inputStep().log().entityModel().id(), step.inputStep().log().entityId()));
+          owners.put(step.conditionalTrigger(), new EntityKey(step.inputStep().log().entityType().id(), step.inputStep().log().entityId()));
       return new Storing(sessionOnlyEntities(tail), owners);
     }
 
@@ -1073,7 +1073,7 @@ public class StateMachine implements AutoCloseable {
                 "pending delayed trigger, so one would quietly replace the other",
             other.delayedEvent().type().name(),
             change.delayedEvent().type().name(),
-            change.entityModel().name(),
+            change.entityType().name(),
             change.entityId(),
             change.delayedEvent().eventNumber()
         ));
@@ -1092,19 +1092,19 @@ public class StateMachine implements AutoCloseable {
             "%s on %s/%s is a delayed or conditional trigger of an entity of the session only, whose events are not " +
                 "stored, but it fires in a session of its own",
             change.delayedEvent() != null ? change.delayedEvent().type().name() : change.conditionalTrigger().type().name(),
-            change.entityModel().name(),
+            change.entityType().name(),
             storing.owner(change).entityId()
         ));
     }
   }
 
-  private void checkCircular(TransitionStep<?> tail, EntityModel entityModel, UUID entityId, InputEvent<?> inputEvent) {
+  private void checkCircular(TransitionStep<?> tail, EntityType entityType, UUID entityId, InputEvent<?> inputEvent) {
     for (var c = tail; c != null; c = c.previous()) {
       switch (c) {
         case OutputStep<?> o
-            when o.stepOutput().isAccepted() && o.stepOutput().accepted().entityModel().equals(entityModel): return;
-        case InputStep<?> i when i.log().entityModel().equals(entityModel):
-          throw new CircularChange(inputEvent, entityModel, entityId);
+            when o.stepOutput().isAccepted() && o.stepOutput().accepted().entityType().equals(entityType): return;
+        case InputStep<?> i when i.log().entityType().equals(entityType):
+          throw new CircularChange(inputEvent, entityType, entityId);
         default:
       }
     }
@@ -1147,14 +1147,14 @@ public class StateMachine implements AutoCloseable {
     if (idExists != null)
       return Mono.just(idExists);
     return Mono.deferContextual(ctx -> {
-          // The entity model of the entity, which for a trigger on a group is the model of the session's entity
-          EntityModel entityModel = eventTrigger.entityModel();
+          // The entity type of the entity, which for a trigger on a group is the model of the session's entity
+          EntityType entityType = eventTrigger.entityType();
           UUID entityId = null;
           switch (eventTrigger.entitySelector().apply(data)) {
             case ByIdFromSession _ -> {
               try {
-                EventLog sessionLog = logFromSteps(tail, entityModel);
-                entityModel = sessionLog.entityModel();
+                EventLog sessionLog = logFromSteps(tail, entityType);
+                entityType = sessionLog.entityType();
                 entityId = sessionLog.entityId();
               } catch (NoSuchElementException e) {
                 throw new RuntimeException(e.getMessage() + "\nFound in Reactor context:\n" +
@@ -1165,7 +1165,7 @@ public class StateMachine implements AutoCloseable {
             default -> {}
           }
           if (!skipCircularCheck && entityId != null) {
-            checkCircular(tail, entityModel, entityId, new InputEvent<>(eventTrigger.eventType(), adaptedData));
+            checkCircular(tail, entityType, entityId, new InputEvent<>(eventTrigger.eventType(), adaptedData));
           }
           return Mono.just(ctx);
         }
@@ -1209,22 +1209,22 @@ public class StateMachine implements AutoCloseable {
 
   public static class CircularChange extends RuntimeException {
 
-    private final EntityModel entityModel;
+    private final EntityType entityType;
     private final UUID entityId;
 
-    public CircularChange(InputEvent<?> inputEvent, EntityModel entityModel, UUID entityId) {
+    public CircularChange(InputEvent<?> inputEvent, EntityType entityType, UUID entityId) {
       super(String.format(
           "%s on %s/id=%s is circular",
           inputEvent.eventType().name(),
-          entityModel.name(),
+          entityType.name(),
           entityId.toString()
       ));
-      this.entityModel = entityModel;
+      this.entityType = entityType;
       this.entityId = entityId;
     }
 
-    public EntityModel entityModel() {
-      return entityModel;
+    public EntityType entityType() {
+      return entityType;
     }
 
     public UUID entityId() {
@@ -1245,15 +1245,15 @@ public class StateMachine implements AutoCloseable {
 
     private final Reason reason;
     private final EventType<?, ?> eventType;
-    private final EntityModel entityModel;
+    private final EntityType entityType;
     private final UUID entityId;
     private final State currentState;
 
-    private static String prefixMessage(EventType<?, ?> eventType, EntityModel entityModel, UUID entityId) {
+    private static String prefixMessage(EventType<?, ?> eventType, EntityType entityType, UUID entityId) {
       return String.format(
           "[%s] on [%s]/%s rejected",
           eventType != null ? eventType.name() : "<no event type>",
-          entityModel != null ? entityModel.name() : "<no entity model>",
+          entityType != null ? entityType.name() : "<no entity type>",
           entityId != null ? entityId : "<no entity id>"
       );
     }
@@ -1261,33 +1261,33 @@ public class StateMachine implements AutoCloseable {
     public RejectedEvent(EventType<?, ?> eventType, EventLog eventLog, State currentState) {
       super(String.format(
           "%s for state [%s] (%s)",
-          prefixMessage(eventType, eventLog.entityModel(), eventLog.entityId()),
+          prefixMessage(eventType, eventLog.entityType(), eventLog.entityId()),
           currentState != null ? currentState.name() : "<no current state>",
           eventLog.events().stream().map(e -> e.type().name()).collect(joining(", "))
       ));
       this.reason = Reason.InvalidState;
       this.eventType = eventType;
-      this.entityModel = eventLog.entityModel();
+      this.entityType = eventLog.entityType();
       this.entityId = eventLog.entityId();
       this.currentState = currentState;
     }
 
     public RejectedEvent(
         EventType<?, ?> eventType,
-        EntityModel entityModel,
+        EntityType entityType,
         UUID entityId,
         State currentState,
         int rollbackTo
     ) {
       super(String.format(
           "%s for state [%s]: Can't rollback to event number %d",
-          prefixMessage(eventType, entityModel, entityId),
+          prefixMessage(eventType, entityType, entityId),
           currentState != null ? currentState.name() : "<no current state>",
           rollbackTo
       ));
       this.reason = Reason.InvalidRollback;
       this.eventType = eventType;
-      this.entityModel = entityModel;
+      this.entityType = entityType;
       this.entityId = entityId;
       this.currentState = currentState;
     }
@@ -1295,12 +1295,12 @@ public class StateMachine implements AutoCloseable {
     RejectedEvent(EventType<?, ?> eventType, UnknownEntity unknownEntity) {
       super(String.format(
           "%s: %s",
-          prefixMessage(eventType, unknownEntity.entityModel(), unknownEntity.id()),
+          prefixMessage(eventType, unknownEntity.entityType(), unknownEntity.id()),
           unknownEntity.getMessage()
       ));
       this.reason = Reason.UnknownEntity;
       this.eventType = eventType;
-      this.entityModel = unknownEntity.entityModel();
+      this.entityType = unknownEntity.entityType();
       this.entityId = unknownEntity.id();
       this.currentState = null;
     }
@@ -1313,8 +1313,8 @@ public class StateMachine implements AutoCloseable {
       return eventType;
     }
 
-    public EntityModel entityModel() {
-      return entityModel;
+    public EntityType entityType() {
+      return entityType;
     }
 
     public UUID entityId() {
@@ -1326,8 +1326,8 @@ public class StateMachine implements AutoCloseable {
       EventLog eventLog,
       EventType<I, O> eventType
   ) {
-    var traverser = traversers.get(eventLog.entityModel());
-    if (traverser == null) throw new IllegalStateException("No traverser for " + eventLog.entityModel().name());
+    var traverser = traversers.get(eventLog.entityType());
+    if (traverser == null) throw new IllegalStateException("No traverser for " + eventLog.entityType().name());
     var currentStateAndTransition = traverser.accept(eventLog, eventType);
     return tuple(eventLog, (TransitionModel<I, O>) currentStateAndTransition.t2(), currentStateAndTransition.t1());
   }
@@ -1340,7 +1340,7 @@ public class StateMachine implements AutoCloseable {
         .filter(change -> change.firedTrigger() == null)
         .map(change -> new Listener.Change(
                 new Listener.Change.Entity(
-                    change.entityModel().name(),
+                    change.entityType().name(),
                     change.entityId()
                 ),
                 change.newEvent() != null ? new Listener.Change.Event(
@@ -1410,7 +1410,7 @@ public class StateMachine implements AutoCloseable {
                                 var changeList = inEmitOrder(collected);
                                 Optional<Many<Event<?>>> responseSink = ctx.getOrEmpty("RS/" + entityId);
                                 if (responseSink.isPresent()) {
-                                  Debug.log("Found response sink for " + changeList.stream().map(c -> c.entityModel().name() + "/" + c.entityId() + "/" + c.newEvent().typeName()).toList());
+                                  Debug.log("Found response sink for " + changeList.stream().map(c -> c.entityType().name() + "/" + c.entityId() + "/" + c.newEvent().typeName()).toList());
                                   changeList.forEach(change -> responseSink.get().tryEmitNext(change.newEvent()).orThrow());
                                 }
                               });
@@ -1436,7 +1436,7 @@ public class StateMachine implements AutoCloseable {
   /// triggers events on, also its id or index entity, which has the same entity id, is calculated again, which reads
   /// their event logs again.
   private <T> Mono<ProcessResult<?>> triggerAction(ActionTrigger<T> actionTrigger, String correlationId, TransitionStep<?> stage1) {
-    EntityModel entityModel = actionTrigger.eventLog().entityModel();
+    EntityType entityType = actionTrigger.eventLog().entityType();
     UUID entityId = actionTrigger.eventLog().entityId();
     return actionTrigger.trigger()
         .flatMap(triggerResult -> onEvent(
@@ -1445,9 +1445,9 @@ public class StateMachine implements AutoCloseable {
                 actionTrigger.eventLog(),
                 stage1
             )
-            .doOnError(e -> Debug.log("onEvent ERROR for " + triggerResult.eventType().name() + " on " + actionTrigger.eventLog().entityModel().name() + ":" + entityId + ": " + e))
+            .doOnError(e -> Debug.log("onEvent ERROR for " + triggerResult.eventType().name() + " on " + actionTrigger.eventLog().entityType().name() + ":" + entityId + ": " + e))
             .onErrorResume(
-                e -> e instanceof EventAlreadyExists exists && exists.isOn(entityModel, entityId),
+                e -> e instanceof EventAlreadyExists exists && exists.isOn(entityType, entityId),
                 _ -> {
                   Debug.log("The outcome " + triggerResult.eventType().name() + " of the action " + actionTrigger.action().name() + " on " + entityId + " is dropped, as another event was stored on the entity first");
                   return Mono.empty();
@@ -1467,13 +1467,13 @@ public class StateMachine implements AutoCloseable {
         );
   }
 
-  /// The entity models the state machine runs: those it was given, and those their transitions trigger events on
-  public List<EntityModel> entityModels() {
-    return models.entityModels();
+  /// The entity types the state machine runs: those it was given, and those their transitions trigger events on
+  public List<EntityType> entityTypes() {
+    return models.entityTypes();
   }
 
-  Traverser traverser(EntityModel entityModel) {
-    return traversers.get(entityModel);
+  Traverser traverser(EntityType entityType) {
+    return traversers.get(entityType);
   }
 
 }

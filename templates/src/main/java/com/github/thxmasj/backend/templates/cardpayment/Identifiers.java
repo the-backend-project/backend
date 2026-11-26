@@ -2,8 +2,8 @@ package com.github.thxmasj.backend.templates.cardpayment;
 
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EventType;
-import com.github.thxmasj.backend.core.IdEntityModel;
-import com.github.thxmasj.backend.core.IndexEntityModel;
+import com.github.thxmasj.backend.core.IdEntityType;
+import com.github.thxmasj.backend.core.IndexEntityType;
 import java.util.UUID;
 
 public interface Identifiers {
@@ -27,7 +27,7 @@ public interface Identifiers {
   );
 
   /// Ids of merchants and settlements
-  IdEntityModel Ids = IdEntityModel.of(
+  IdEntityType Ids = IdEntityType.of(
       "CardPaymentIds",
       UUID.fromString("5f0d2b8e-4c6a-4e1f-9b3d-7a2c8e4f6b10"),
       MerchantIdClaimed,
@@ -43,7 +43,7 @@ public interface Identifiers {
       new BatchNumberDataType()
   );
 
-  IndexEntityModel Index = IndexEntityModel.of(
+  IndexEntityType Index = IndexEntityType.of(
       "CardPaymentIndex",
       UUID.fromString("c7b9d1f3-5e6a-4b8c-a0d2-e4f6a8b0c2d5"),
       BatchIndexed

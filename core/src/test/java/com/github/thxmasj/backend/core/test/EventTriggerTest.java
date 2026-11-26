@@ -1,6 +1,6 @@
 package com.github.thxmasj.backend.core.test;
 
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.State;
 import com.github.thxmasj.backend.core.StateMachine;
 import com.github.thxmasj.backend.core.TransitionModel;
@@ -15,8 +15,8 @@ public class EventTriggerTest {
 
   enum States implements State {Begin, Processing, Unreachable}
 
-  static final EntityModel Apple = EntityModel.of("Apple", UUID.fromString("29d5e5d6-a9d6-4899-9083-8444a5fe4cd2"), EventTriggerTest::appleTransitions);
-  static final EntityModel Banana = EntityModel.of("Banana", UUID.fromString("f01199a0-d2f0-4cc3-8c05-b44e0da7c3d1"), EventTriggerTest::bananaTransitions);
+  static final EntityType Apple = EntityType.of("Apple", UUID.fromString("29d5e5d6-a9d6-4899-9083-8444a5fe4cd2"), EventTriggerTest::appleTransitions);
+  static final EntityType Banana = EntityType.of("Banana", UUID.fromString("f01199a0-d2f0-4cc3-8c05-b44e0da7c3d1"), EventTriggerTest::bananaTransitions);
 
   private static Map<State, List<TransitionModel<?, ?>>> appleTransitions() {
     return Map.of(

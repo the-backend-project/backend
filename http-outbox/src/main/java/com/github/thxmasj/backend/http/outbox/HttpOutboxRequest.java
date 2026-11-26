@@ -1,7 +1,7 @@
 package com.github.thxmasj.backend.http.outbox;
 
 import static com.github.thxmasj.backend.core.EntitySelector.lastReferencing;
-import static com.github.thxmasj.backend.core.IndexEntityModel.referenceEventType;
+import static com.github.thxmasj.backend.core.IndexEntityType.referenceEventType;
 import static com.github.thxmasj.backend.core.internal.EventTypes.eventTypesFor;
 
 import com.github.thxmasj.backend.core.DataType;
@@ -9,7 +9,7 @@ import com.github.thxmasj.backend.core.EntityId;
 import com.github.thxmasj.backend.core.EntitySelector;
 import com.github.thxmasj.backend.core.EventLog;
 import com.github.thxmasj.backend.core.EventType;
-import com.github.thxmasj.backend.core.IndexEntityModel;
+import com.github.thxmasj.backend.core.IndexEntityType;
 import com.github.thxmasj.backend.core.State;
 import com.github.thxmasj.backend.core.TransitionModel;
 import com.github.thxmasj.backend.http.HttpDataType;
@@ -27,7 +27,7 @@ import java.util.stream.Stream;
 /// [#batchedRequestDispatched()]. The request messages are created outside of it, by the dispatcher of the request, so
 /// that the outbox request is independent of where it is used. See [Dispatcher] for ways to pair an outbox request with
 /// the creator of its request messages.
-public sealed interface HttpOutboxRequest<RQ> extends com.github.thxmasj.backend.core.EntityModel permits AtLeastOnce, AtMostOnce {
+public sealed interface HttpOutboxRequest<RQ> extends com.github.thxmasj.backend.core.EntityType permits AtLeastOnce, AtMostOnce {
 
   default List<EventType<?, ?>> eventTypes() {
     return transitions().values()
@@ -82,7 +82,7 @@ public sealed interface HttpOutboxRequest<RQ> extends com.github.thxmasj.backend
   EventType<UUID, UUID> ProcessReferenced = referenceEventType("Process referenced", UUID.fromString("d5b264d9-bf81-4c1d-9d9b-93dd556d0f66"));
   EventType<UUID, UUID> BatchReferenced = referenceEventType("Batch referenced", UUID.fromString("18055445-263e-4c95-9610-1aa780f205d7"));
 
-  IndexEntityModel Index = IndexEntityModel.of(
+  IndexEntityType Index = IndexEntityType.of(
       "Index",
       UUID.fromString("06e6e5e6-f893-44f8-8239-3bff5cca1338"),
       ProcessReferenced,

@@ -10,7 +10,7 @@ import com.github.thxmasj.backend.backoffice.Graph.StoredEvent;
 import com.github.thxmasj.backend.backoffice.Graph.View;
 import com.github.thxmasj.backend.backoffice.Sessions.User;
 import com.github.thxmasj.backend.core.DataType;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EventReference;
 import com.github.thxmasj.backend.core.Tuples.Tuple2;
 import com.github.thxmasj.backend.core.Tuples.Tuple3;
@@ -38,7 +38,7 @@ import tools.jackson.databind.JsonNode;
 /// of a reference expanded in place, so the graph of an entity can be followed on a single page.
 final class Pages {
 
-  /// The most entities listed on a page of an entity model
+  /// The most entities listed on a page of an entity type
   static final int pageSize = 25;
   /// The most characters of the data of an event shown
   private static final int maxDataLength = 64 * 1024;
@@ -71,9 +71,9 @@ final class Pages {
     }
     if (rest.startsWith("/models/")) {
       UUID modelId = Graph.uuid(rest.substring("/models/".length()));
-      var model = modelId != null ? graph.model(modelId) : java.util.Optional.<EntityModel>empty();
+      var model = modelId != null ? graph.model(modelId) : java.util.Optional.<EntityType>empty();
       if (model.isEmpty())
-        return Mono.just(notFound(user, fragment, "No such entity model"));
+        return Mono.just(notFound(user, fragment, "No such entity type"));
       UUID before = Graph.uuid(query.get("before"));
       return latest(model.get(), before).map(html -> new Page(200, fragment ? html : document(model.get().name(), user, html)));
     }
@@ -106,7 +106,7 @@ final class Pages {
 
   private String home(String q) {
     var models = new StringBuilder();
-    for (EntityModel model : graph.models())
+    for (EntityType model : graph.models())
       models.append("<li><a href=\"%s/models/%s\">%s</a></li>\n".formatted(Sessions.Path, model.id(), escape(model.name())));
     return """
         <section>
@@ -118,7 +118,7 @@ final class Pages {
         <div id="results"><!--results--></div>
         </section>
         <section>
-        <h2>Entity models</h2>
+        <h2>Entity types</h2>
         <ul class="models">
         %3$s</ul>
         </section>
@@ -144,7 +144,7 @@ final class Pages {
     });
   }
 
-  private Mono<String> latest(EntityModel model, UUID before) {
+  private Mono<String> latest(EntityType model, UUID before) {
     return graph.latest(model, before, pageSize + 1).collectList().map(listed -> {
       var rows = new StringBuilder();
       for (Listed entity : listed.subList(0, Math.min(pageSize, listed.size())))

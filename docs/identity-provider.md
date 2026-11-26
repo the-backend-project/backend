@@ -57,7 +57,7 @@ The [state diagrams](diagrams.md) are generated from the model. Hover over the n
 
 [Open the diagram in full size](images/com.github.thxmasj.backend.identityprovider.Authorization.svg)
 
-The entity models, with those of the [HTTP inbox](http-inbox.md), and how they relate through triggers:
+The entity types, with those of the [HTTP inbox](http-inbox.md), and how they relate through triggers:
 
 <object data="../images/com.github.thxmasj.backend.identityprovider.er.svg" type="image/svg+xml"></object>
 

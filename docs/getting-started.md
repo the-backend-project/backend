@@ -51,12 +51,12 @@ module com.example.helloworld {
 
 ## Declaring the model
 
-An [entity model](entities.md) has a name and a UUID, a set of states and the event types that move its entities
+An [entity type](entities.md) has a name and a UUID, a set of states and the event types that move its entities
 between them, and its transitions. The UUIDs are what is stored in the database, so generate them once and never
 change them (see the [design principles](principles.md#safe-to-change)):
 
 ```java
-EntityModel Greeting = EntityModel.of("Greeting", UUID.fromString("8a4c1d36-4f0e-4b8e-9a47-2f5f0c0b6d11"), Greetings::transitions);
+EntityType Greeting = EntityType.of("Greeting", UUID.fromString("8a4c1d36-4f0e-4b8e-9a47-2f5f0c0b6d11"), Greetings::transitions);
 
 enum States implements State {
   Greeted
@@ -132,23 +132,23 @@ The inbox of the application is created from its inbox requests:
 HttpInbox Inbox = HttpInbox.of(List.of(GreetingRequest));
 ```
 
-Its `entityModels()` are the inbox's own: the inbox requests, `RequestRouting`, which routes a request to the inbox
+Its `entityTypes()` are the inbox's own: the inbox requests, `RequestRouting`, which routes a request to the inbox
 request matching it and is not stored, `MessageIds` and `RequestIndex`, which indexes the requests by the entities they were processed
 on. The state machine is given them, and also runs the models their transitions trigger events on, here `Greeting`,
 and so on, so the models of the application are found from the inbox. The inbox also checks that the inbox
 request takes the response the greeting gives, `GreetingResponseCreated`, when the state machine asks for the entity
-models of the inbox. All of it is in `Greetings.java` in the demo.
+types of the inbox. All of it is in `Greetings.java` in the demo.
 
 ## Running it
 
-Build a data source with the database module, give it to a `StateMachine` with the entity models of the inbox, and serve
+Build a data source with the database module, give it to a `StateMachine` with the entity types of the inbox, and serve
 HTTP with an `HttpInboxListener` of the inbox:
 
 ```java
 Database database = new MssqlDatabase();
 StateMachine stateMachine = new StateMachine(
     null,                         // no delayer
-    Greetings.Inbox.entityModels(),
+    Greetings.Inbox.entityTypes(),
     new DataSourceBuilder(database, config.database()).buildPooled(),
     null,                         // the schema is created by a separate admin process
     config.schema(),
@@ -175,7 +175,7 @@ To look into the entities, or to put them in a given state before a scenario, ad
 and use its `TestApi` instead of querying the tables (see [Testing](testing.md)):
 
 ```java
-var api = new TestApi(dataSource, schema, Greetings.Inbox.entityModels(), Clock.systemUTC());
+var api = new TestApi(dataSource, schema, Greetings.Inbox.entityTypes(), Clock.systemUTC());
 ```
 
 ## Next steps

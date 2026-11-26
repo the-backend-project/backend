@@ -91,7 +91,7 @@ public sealed interface TransitionStep<T> {
     }
     @Override public I stepOutput() {return input;}
     @Override public String toString() {
-      return "Initial " + log.entityModel().name() + "/" + log.entityId() + "/" + eventNumber + "/" + from.name() + "(stage1=" + (stage1 != null) + "): " + transitionModel + " with " + ofNullable(input).map(i -> i.getClass().getSimpleName()).orElse("-");
+      return "Initial " + log.entityType().name() + "/" + log.entityId() + "/" + eventNumber + "/" + from.name() + "(stage1=" + (stage1 != null) + "): " + transitionModel + " with " + ofNullable(input).map(i -> i.getClass().getSimpleName()).orElse("-");
     }
   }
 
@@ -116,7 +116,7 @@ public sealed interface TransitionStep<T> {
     }
 
     @Override public String toString() {
-      return "Trigger: " + eventTrigger.eventType().name() + "@" + eventTrigger.entityModel().name();
+      return "Trigger: " + eventTrigger.eventType().name() + "@" + eventTrigger.entityType().name();
     }
 
   }
@@ -126,7 +126,7 @@ public sealed interface TransitionStep<T> {
       DelayedEvent<I1> delayedEvent
   ) implements TransitionStep<T> {
     @Override public String toString() {
-      return "Delayed trigger: " + delayedEvent.entityModel().name() + "/" + delayedEvent.type().name() + "/"
+      return "Delayed trigger: " + delayedEvent.entityType().name() + "/" + delayedEvent.type().name() + "/"
           + delayedEvent.entityId() + "/" + delayedEvent.eventNumber() + " after " + delayedEvent.after()
           + " (now is " + previous.inputStep().timestamp() + ")";
     }
@@ -142,7 +142,7 @@ public sealed interface TransitionStep<T> {
       ConditionalTrigger<I1> conditionalTrigger
   ) implements TransitionStep<T> {
     @Override public String toString() {
-      return "Conditional trigger: " + conditionalTrigger.entityModel().name() + "/" + conditionalTrigger.type().name() + "/"
+      return "Conditional trigger: " + conditionalTrigger.entityType().name() + "/" + conditionalTrigger.type().name() + "/"
           + conditionalTrigger.entityId() + " when last event is one of "
           + conditionalTrigger.lastTypes().stream().map(EventType::name).toList();
     }
@@ -187,12 +187,12 @@ public sealed interface TransitionStep<T> {
   ) implements TransitionStep<ProcessResult<T>> {
     @Override public String toString() {
       return "Output:" + switch (stepOutput) {
-        case Accepted<?> a -> "Accepted:" + a.entityModel().name() + "/" + a.event().entityId() + "/" + a.event().typeName() + "/" + a.event().eventNumber();
-        case Rejected<?> r -> "Rejected" + (r.isHandled() ? "[Handled]" : "[Unhandled]") + ":" + r.exception().entityModel().name() + "/" + r.exception().entityId() + r.eventType().name() + ":" + r.exception().getMessage();
+        case Accepted<?> a -> "Accepted:" + a.entityType().name() + "/" + a.event().entityId() + "/" + a.event().typeName() + "/" + a.event().eventNumber();
+        case Rejected<?> r -> "Rejected" + (r.isHandled() ? "[Handled]" : "[Unhandled]") + ":" + r.exception().entityType().name() + "/" + r.exception().entityId() + r.eventType().name() + ":" + r.exception().getMessage();
         case Completed<?> c -> "Completed:" + c.choiceResult();
         case UnknownId<?> u -> "UnknownId:" + u.exception().getMessage() + "/ev=" + u.eventType().name();
-        case IdExists<?> i -> "IdExists:" + i.idEvent().typeName() + "/" + i.log().entityModel().name() + "/" + i.log().entityId();
-        case Pending<?, ?, ?> p -> "Pending:" + p.exception().entityModel() + "/" + p.exception().entityId() + ":" + p.exception().getMessage();
+        case IdExists<?> i -> "IdExists:" + i.idEvent().typeName() + "/" + i.log().entityType().name() + "/" + i.log().entityId();
+        case Pending<?, ?, ?> p -> "Pending:" + p.exception().entityType() + "/" + p.exception().entityId() + ":" + p.exception().getMessage();
       };
     }
 
@@ -222,7 +222,7 @@ public sealed interface TransitionStep<T> {
       ProcessResult.IdExists<O> stepOutput
   ) implements TransitionStep<ProcessResult<O>> {
     @Override public String toString() {
-      return "IdExists:" + stepOutput.idEvent().typeName() + "/" + stepOutput.log().entityModel().name() + "/" + stepOutput.log().entityId();
+      return "IdExists:" + stepOutput.idEvent().typeName() + "/" + stepOutput.log().entityType().name() + "/" + stepOutput.log().entityId();
     }
   }
 

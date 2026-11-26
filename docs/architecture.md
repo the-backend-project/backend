@@ -1,6 +1,6 @@
 # Architecture
 
-The transaction server uses [entity models](entities.md) to handle events. Each entity model defines a finite state
+The transaction server uses [entity types](entities.md) to handle events. Each entity type defines a finite state
 machine: the states its entities can be in, and the transitions between them on types of events. The events of an
 entity are stored in its event log in a database, and its current state is the state its events lead to.
 
@@ -18,7 +18,7 @@ as a new event, again in a transaction of its own. The transactions an event lea
 [Transitions, transactions and sessions](sessions.md).
 
 The transaction server receives requests through [HTTP inboxes](http-inbox.md) and sends requests to other systems
-through [HTTP outboxes](http-outbox.md). They are entity models too, and every request received or sent is an entity
+through [HTTP outboxes](http-outbox.md). They are entity types too, and every request received or sent is an entity
 with a state and an event log of its own. It is stored in the same database and the same transactions as the entities
 it is received for or sent by, and the transaction server doesn't treat a request any differently from a payment or an
 order.

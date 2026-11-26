@@ -1,6 +1,6 @@
 package com.github.thxmasj.backend.core.test;
 
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.Listener;
 import com.github.thxmasj.backend.core.StateMachine;
 import com.github.thxmasj.backend.core.database.DataSourceBuilder;
@@ -64,45 +64,45 @@ public class Init {
   }
 
   /// The storage of a schema in the test database
-  public static Storage storage(String schemaName, List<? extends EntityModel> entityModels) {
-    return StorageProvider.storage(database, client, ResolvedModels.of(entityModels), schemaName, Clock.systemUTC());
+  public static Storage storage(String schemaName, List<? extends EntityType> entityTypes) {
+    return StorageProvider.storage(database, client, ResolvedModels.of(entityTypes), schemaName, Clock.systemUTC());
   }
 
   public static StateMachine stateMachine(
       String schemaName,
-      List<? extends EntityModel> entityModels
+      List<? extends EntityType> entityTypes
   ) {
-    return stateMachine(schemaName, entityModels, Clock.systemUTC());
+    return stateMachine(schemaName, entityTypes, Clock.systemUTC());
   }
 
   public static StateMachine stateMachine(
       String schemaName,
-      List<? extends EntityModel> entityModels,
+      List<? extends EntityType> entityTypes,
       Clock clock
   ) {
-    return stateMachine(schemaName, entityModels, clock, new Logger("Test"));
+    return stateMachine(schemaName, entityTypes, clock, new Logger("Test"));
   }
 
   public static StateMachine stateMachine(
       String schemaName,
-      List<? extends EntityModel> entityModels,
+      List<? extends EntityType> entityTypes,
       Clock clock,
       Listener listener
   ) {
-    return stateMachine(schemaName, entityModels, clock, listener, _ -> Mono.empty());
+    return stateMachine(schemaName, entityTypes, clock, listener, _ -> Mono.empty());
   }
 
   /// @param delayer delays the storing of a transaction's changes, see [StateMachine]
   public static StateMachine stateMachine(
       String schemaName,
-      List<? extends EntityModel> entityModels,
+      List<? extends EntityType> entityTypes,
       Clock clock,
       Listener listener,
       java.util.function.Function<List<String>, Mono<Void>> delayer
   ) {
     return new StateMachine(
         delayer,
-        entityModels,
+        entityTypes,
         database,
         client,
         migrationDataSource,
@@ -115,9 +115,9 @@ public class Init {
   }
 
   public static StateMachine stateMachine(
-      List<? extends EntityModel> entityModels
+      List<? extends EntityType> entityTypes
   ) {
-    return stateMachine(UUID.randomUUID().toString(), entityModels);
+    return stateMachine(UUID.randomUUID().toString(), entityTypes);
   }
 
   public static HttpServer httpServer() throws IOException {

@@ -13,7 +13,7 @@ import java.util.function.Consumer;
 /// severity declared on the transition of the event:
 ///
 /// ```json
-/// {"time":"2026-11-13T12:00:00.123Z","severity":"ERROR","message":"Attempts exhausted on Notification 9f0c5a2e-…","entityModel":"Notification","entityId":"9f0c5a2e-…","eventNumber":7,"eventType":"Attempts exhausted","correlationId":"SYS-1234"}
+/// {"time":"2026-11-13T12:00:00.123Z","severity":"ERROR","message":"Attempts exhausted on Notification 9f0c5a2e-…","entityType":"Notification","entityId":"9f0c5a2e-…","eventNumber":7,"eventType":"Attempts exhausted","correlationId":"SYS-1234"}
 /// ```
 ///
 /// The lines go to stdout, for the execution environment to collect, and to alert on by their `severity`, which is
@@ -54,7 +54,7 @@ public class JsonLinesListener implements Listener {
           event.severity(),
           event.type() + " on " + change.entity().model() + " " + change.entity().id()
       );
-      line.put("entityModel", change.entity().model());
+      line.put("entityType", change.entity().model());
       line.put("entityId", change.entity().id().toString());
       // An event which is not stored has no number in the event log
       if (event.stored())
@@ -75,7 +75,7 @@ public class JsonLinesListener implements Listener {
   @Override
   public void transitionFailed(
       String correlationId,
-      EntityModel entityModel,
+      EntityType entityType,
       UUID entityId,
       EventType<?, ?> eventType,
       Throwable failure
@@ -83,9 +83,9 @@ public class JsonLinesListener implements Listener {
     Map<String, Object> line = line(
         clock.instant(),
         Severity.Error,
-        eventType.name() + " on " + entityModel.name() + " " + entityId + " failed: " + failure
+        eventType.name() + " on " + entityType.name() + " " + entityId + " failed: " + failure
     );
-    line.put("entityModel", entityModel.name());
+    line.put("entityType", entityType.name());
     line.put("entityId", entityId.toString());
     line.put("eventType", eventType.name());
     line.put("correlationId", correlationId);

@@ -1,17 +1,17 @@
 package com.github.thxmasj.backend.diagram;
 
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static com.github.thxmasj.backend.core.EntitySelector.newEntityId;
 import static com.github.thxmasj.backend.core.TransitionModelBuilder.WithEvent.onEvent;
 import static com.github.thxmasj.backend.core.TransitionModelBuilder.assemble;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.github.thxmasj.backend.core.DataType;
-import com.github.thxmasj.backend.core.EntityModel;
-import com.github.thxmasj.backend.core.EntityModelGroup;
+import com.github.thxmasj.backend.core.EntityType;
+import com.github.thxmasj.backend.core.EntityTypeGroup;
 import com.github.thxmasj.backend.core.EntitySelector;
 import com.github.thxmasj.backend.core.EventType;
-import com.github.thxmasj.backend.core.IdEntityModel;
+import com.github.thxmasj.backend.core.IdEntityType;
 import com.github.thxmasj.backend.core.State;
 import com.github.thxmasj.backend.core.TransitionModel;
 import java.io.File;
@@ -34,12 +34,12 @@ class ERDiagramFormatterTest {
   static final EventType<Void, Void> SpeedDecreased = EventType.of("Speed decreased", UUID.randomUUID());
   static final EventType<String, String> NameClaimed = EventType.of("Name claimed", UUID.randomUUID(), DataType.string());
 
-  static final EntityModel Car = EntityModel.of("Car", UUID.randomUUID(), ERDiagramFormatterTest::carTransitions);
-  static final EntityModel Speed = EntityModel.of("Speed", UUID.randomUUID(), ERDiagramFormatterTest::speedTransitions);
-  static final EntityModel Engine = EntityModel.of("Engine", UUID.randomUUID(), Map::of);
-  static final IdEntityModel Ids = IdEntityModel.of("Ids", UUID.randomUUID(), NameClaimed);
+  static final EntityType Car = EntityType.of("Car", UUID.randomUUID(), ERDiagramFormatterTest::carTransitions);
+  static final EntityType Speed = EntityType.of("Speed", UUID.randomUUID(), ERDiagramFormatterTest::speedTransitions);
+  static final EntityType Engine = EntityType.of("Engine", UUID.randomUUID(), Map::of);
+  static final IdEntityType Ids = IdEntityType.of("Ids", UUID.randomUUID(), NameClaimed);
 
-  static List<EntityModel> model() {
+  static List<EntityType> model() {
     return List.of(Car, Speed, Ids);
   }
 
@@ -146,15 +146,15 @@ class ERDiagramFormatterTest {
         .contains("svg{color-scheme:light dark}");
   }
 
-  static final EntityModel Garage = EntityModel.of("Garage", UUID.randomUUID(), ERDiagramFormatterTest::garageTransitions);
-  static final EntityModel Workshop = EntityModel.of("Workshop", UUID.randomUUID(), ERDiagramFormatterTest::workshopTransitions);
-  static final EntityModelGroup Places = EntityModelGroup.of("Places", UUID.randomUUID(), m -> m == Garage || m == Workshop);
+  static final EntityType Garage = EntityType.of("Garage", UUID.randomUUID(), ERDiagramFormatterTest::garageTransitions);
+  static final EntityType Workshop = EntityType.of("Workshop", UUID.randomUUID(), ERDiagramFormatterTest::workshopTransitions);
+  static final EntityTypeGroup Places = EntityTypeGroup.of("Places", UUID.randomUUID(), m -> m == Garage || m == Workshop);
   static final EventType<Void, Void> CarParked = EventType.of("Car parked", UUID.randomUUID());
   /// A car which parks in a place
-  static final EntityModel ParkedCar = EntityModel.of("Car", UUID.randomUUID(), ERDiagramFormatterTest::parkedCarTransitions);
+  static final EntityType ParkedCar = EntityType.of("Car", UUID.randomUUID(), ERDiagramFormatterTest::parkedCarTransitions);
 
   /// A model where the car triggers an event on whichever place of the session it is in
-  static List<EntityModel> modelWithGroup() {
+  static List<EntityType> modelWithGroup() {
     return List.of(ParkedCar, Garage, Workshop);
   }
 

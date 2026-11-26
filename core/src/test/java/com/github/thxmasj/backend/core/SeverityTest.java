@@ -1,6 +1,6 @@
 package com.github.thxmasj.backend.core;
 
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static com.github.thxmasj.backend.core.EntitySelector.entityIdFromSession;
 import static com.github.thxmasj.backend.core.TransitionModelBuilder.WithEvent.onEvent;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -19,14 +19,14 @@ public class SeverityTest {
 
   enum States implements State { Delivered, Returned }
 
-  static EntityModel Parcel = EntityModel.of("Parcel", UUID.fromString("2b6d0c4e-7a1f-4e39-9c58-d3f1a5b7c9e0"), Map::of);
+  static EntityType Parcel = EntityType.of("Parcel", UUID.fromString("2b6d0c4e-7a1f-4e39-9c58-d3f1a5b7c9e0"), Map::of);
 
   static EventType<String, String> ParcelReceived = EventType.of("Parcel received", UUID.fromString("8c1e3a5d-2f4b-4d6a-b8c0-e2f4a6c8d0b1"), DataType.string());
   static EventType<String, String> ParcelDelivered = EventType.of("Parcel delivered", UUID.fromString("4e6a8c0f-1b3d-4f5b-a7c9-d1e3f5a7b9c2"), DataType.string());
   static EventType<String, String> ParcelReturned = EventType.of("Parcel returned", UUID.fromString("a0c2e4f6-3d5b-4a7c-9e1f-b3d5f7a9c1e3"), DataType.string());
   static EventType<String, String> ReceiptReminded = EventType.of("Receipt reminded", UUID.fromString("6f8b0d2e-5c7a-4b9d-8f1a-c3e5a7b9d1f4"), DataType.string());
   static EventType<String, String> ParcelWeighed = EventType.of("Parcel weighed", UUID.fromString("c2e4a6b8-7d9f-4c1e-a3b5-d7f9b1c3e5a6"), DataType.string());
-  static EventType<UUID, UUID> ParcelReferenced = IndexEntityModel.referenceEventType("Parcel referenced", UUID.fromString("1d3f5b7c-8e0a-4d2f-b4c6-e8a0c2d4f6b7"));
+  static EventType<UUID, UUID> ParcelReferenced = IndexEntityType.referenceEventType("Parcel referenced", UUID.fromString("1d3f5b7c-8e0a-4d2f-b4c6-e8a0c2d4f6b7"));
 
   @Test
   public void aTransitionIsOfSeverityInfoUnlessItDeclaresAnother() {

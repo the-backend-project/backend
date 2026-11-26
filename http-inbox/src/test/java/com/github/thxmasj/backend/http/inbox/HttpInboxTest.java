@@ -1,7 +1,7 @@
 package com.github.thxmasj.backend.http.inbox;
 
 import static com.github.thxmasj.backend.core.BuiltinEventTypes.EventsRolledBack;
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static com.github.thxmasj.backend.core.EntitySelector.entityId;
 import static com.github.thxmasj.backend.core.EntitySelector.entityIdFromSession;
 import static com.github.thxmasj.backend.core.EntitySelector.newEntityId;
@@ -37,7 +37,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.github.thxmasj.backend.core.EventType.Rollback.Data;
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.DelaySpecification;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EntitySelector;
 import com.github.thxmasj.backend.core.Event;
 import com.github.thxmasj.backend.core.EventTrigger;
@@ -103,7 +103,7 @@ public class HttpInboxTest {
 
   private static final Random random = new Random();
 
-  static final EntityModel Lamp = EntityModel.of("Lamp", UUID.fromString("59d3158c-7b2a-4312-a293-325858c2673f"), HttpInboxTest::lampTransitions);
+  static final EntityType Lamp = EntityType.of("Lamp", UUID.fromString("59d3158c-7b2a-4312-a293-325858c2673f"), HttpInboxTest::lampTransitions);
 
   private static HttpOutboxRequest<Void> Process0Outbox;
   private static HttpOutboxRequest<Void> Process3Outbox;
@@ -391,7 +391,7 @@ public class HttpInboxTest {
   /// the lamps send, with their rollback models
   private static StateMachine createStateMachine(List<HttpInboxRequest<?>> requests) {
     inbox = HttpInbox.of(requests);
-    return Init.stateMachine(schema, inbox.entityModels());
+    return Init.stateMachine(schema, inbox.entityTypes());
   }
 
   private static HttpRequest<Void> requestMessage(String path) {
@@ -495,18 +495,18 @@ public class HttpInboxTest {
         .block();
     assertNotNull(processIds);
     assertFalse(processIds.isEmpty());
-    var requestModelIds = requests.stream().map(EntityModel::id).toList();
+    var requestModelIds = requests.stream().map(EntityType::id).toList();
     processIds.forEach((requestId, processId) -> {
-      assertTrue(requestModelIds.contains(entityModelId(requestId)), "The index entity is that of an inbox request");
-      assertEquals(Lamp.id(), entityModelId(processId), "The index key is the entity the request was processed on");
+      assertTrue(requestModelIds.contains(entityTypeId(requestId)), "The index entity is that of an inbox request");
+      assertEquals(Lamp.id(), entityTypeId(processId), "The index key is the entity the request was processed on");
     });
   }
 
   /// The data of the stored events of the type on the entities of the model, as text
-  private static List<String> storedData(EntityModel model, EventType<?, ?> type) {
+  private static List<String> storedData(EntityType model, EventType<?, ?> type) {
     return Init.client().sql(
             "SELECT e.Data FROM \"" + schema + "\".\"Event\" e JOIN \"" + schema + "\".\"Entity\" n ON n.EntityId=e.EntityId" +
-                " WHERE n.EntityModelId=:model AND e.Type=:type"
+                " WHERE n.EntityTypeId=:model AND e.Type=:type"
         )
         .name("Test.StoredData")
         .bind("model", model.id())
@@ -537,7 +537,7 @@ public class HttpInboxTest {
         .contains("/masked/" + messageId + "?code=***&state=s1", "Authorization:***", "Cookie:***", "X-Other:kept")
         .doesNotContain("c0de", "t0ken");
     // The routing is of the session only: the inbox request stores the request
-    assertEquals(null, entityModelId(response.entityId()), "The routing is not stored");
+    assertEquals(null, entityTypeId(response.entityId()), "The routing is not stored");
   }
 
   @Test
@@ -569,7 +569,7 @@ public class HttpInboxTest {
         .response(Rang, _ -> new HttpResponse<>(200, "OK", Headers.of("Set-Cookie", "session=s3cret"), null))
         .build("CookieRequest", UUID.fromString("9b1d7f3a-5c2e-4a86-b4d0-e8f6a2c4b917"));
     var cookieInbox = HttpInbox.of(List.of(request));
-    var machine = Init.stateMachine(UUID.randomUUID().toString(), cookieInbox.entityModels());
+    var machine = Init.stateMachine(UUID.randomUUID().toString(), cookieInbox.entityTypes());
     var message = new HttpRequest<byte[]>(PUT, URI.create("/bell/" + UUID.randomUUID()), Headers.of(), null);
     Function<HttpRequest<byte[]>, HttpResponse<byte[]>> send = m -> HttpResponse.raw(machine.onEvent(cookieInbox.trigger(), m)
         .skip(1).next().block(Duration.ofSeconds(5)).data());
@@ -641,11 +641,11 @@ public class HttpInboxTest {
         .hasMessageContaining("is not stored, so it can't be deduplicated");
   }
 
-  private static UUID entityModelId(UUID entityId) {
-    return Init.client().sql("SELECT EntityModelId FROM \"" + schema + "\".\"Entity\" WHERE EntityId=:entityId")
-        .name("Test.EntityModel")
+  private static UUID entityTypeId(UUID entityId) {
+    return Init.client().sql("SELECT EntityTypeId FROM \"" + schema + "\".\"Entity\" WHERE EntityId=:entityId")
+        .name("Test.EntityType")
         .bind("entityId", entityId)
-        .map(row -> row.get("EntityModelId", UUID.class))
+        .map(row -> row.get("EntityTypeId", UUID.class))
         .one()
         .block();
   }
@@ -1116,11 +1116,11 @@ public class HttpInboxTest {
         .hasMessageContaining("doesn't run the request routing of the inbox");
   }
 
-  /// The inbox asks for no transitions until its entity models are asked for, so it may be a constant declared before
+  /// The inbox asks for no transitions until its entity types are asked for, so it may be a constant declared before
   /// what the transitions refer to
   @Test
   public void inboxAsksForNoTransitionsWhenCreated() {
-    var notYet = EntityModel.of("NotYet", UUID.randomUUID(), () -> {
+    var notYet = EntityType.of("NotYet", UUID.randomUUID(), () -> {
       throw new IllegalStateException("Transitions asked for");
     });
     var request = HttpInboxRequest.matching(m -> m.requestLine().matches("PUT /not-yet")).noContent()
@@ -1128,7 +1128,7 @@ public class HttpInboxTest {
         .build("NotYetRequest", UUID.randomUUID());
     var inbox = HttpInbox.of(List.of(request));
     assertThat(inbox.requests()).containsExactly(request);
-    assertThatThrownBy(inbox::entityModels).hasMessage("Transitions asked for");
+    assertThatThrownBy(inbox::entityTypes).hasMessage("Transitions asked for");
   }
 
   @Test
@@ -1153,7 +1153,7 @@ public class HttpInboxTest {
   /// types triggered on the group
   @Test
   public void eventTypesAreRegisteredForInboxRequestsNotForTheGroup() {
-    var eventTypes = EventTypes.eventTypesByEntityModel(stateMachine.entityModels());
+    var eventTypes = EventTypes.eventTypesByEntityType(stateMachine.entityTypes());
     assertFalse(eventTypes.containsKey(Request));
     for (HttpInboxRequest<?> request : requests)
       assertThat(eventTypes.get(request)).contains(RequestCompleted, FailedRequestCompleted, InvalidRequestCompleted);
@@ -1216,15 +1216,15 @@ public class HttpInboxTest {
   }
 
   @Test
-  public void processesOfRequestWithRollbackMustHaveTheSameEntityModel() {
+  public void processesOfRequestWithRollbackMustHaveTheSameEntityType() {
     assertThatThrownBy(() -> HttpInboxRequest.matching(_ -> true).noContent()
         .deduplicateOn(parseMessageId("(.*)", 1))
         .process(when("one", _ -> true), InternalProcessingRequested, Lamp, newEntity())
-        .process(InternalProcessingRequested, EntityModel.of("Other", UUID.randomUUID(), Map::of), newEntity())
+        .process(InternalProcessingRequested, EntityType.of("Other", UUID.randomUUID(), Map::of), newEntity())
         .rollback(Rollback.matching(_ -> false).noContent().deduplicateOn(parseMessageId("(.*)", 1)))
         .build("Invalid", UUID.randomUUID()))
         .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("must have the same entity model");
+        .hasMessageContaining("must have the same entity type");
   }
 
   /// A client using the message id of a request of one type for a request of another type gets 400 Conflict, as for
@@ -1361,7 +1361,7 @@ public class HttpInboxTest {
         .hasMessageContaining("can't have an authorizer");
   }
 
-  static final EntityModel Chime = EntityModel.of("Chime", UUID.fromString("b8d3f6a1-2e47-4c09-9b5a-6f1c8e4d2a73"), HttpInboxTest::chimeTransitions);
+  static final EntityType Chime = EntityType.of("Chime", UUID.fromString("b8d3f6a1-2e47-4c09-9b5a-6f1c8e4d2a73"), HttpInboxTest::chimeTransitions);
   static final EventType<Void, Void> BellRung = EventType.of("Bell rung", UUID.fromString("d6f2a9c4-1b85-4e37-8a0d-3c7e5f9b1a26"));
   static final EventType<Void, Void> ChimeRung = EventType.of("Chime rung", UUID.fromString("7a4c2e9f-5d18-4b63-b1e0-8f6d3a2c9e54"));
   static final ResponseEventType<String> Rang = new ResponseEventType<>(
@@ -1377,8 +1377,8 @@ public class HttpInboxTest {
   /// response, and when it is scheduled it is rung later, in another session.
   enum BellStates implements State {Rung, Polished, Scheduled}
 
-  private static EntityModel bell(boolean throughChime) {
-    return EntityModel.of("Bell", UUID.fromString("4c1e8a2f-7d36-4b95-a0f8-9e2d5b7c3a16"), () -> Map.of(
+  private static EntityType bell(boolean throughChime) {
+    return EntityType.of("Bell", UUID.fromString("4c1e8a2f-7d36-4b95-a0f8-9e2d5b7c3a16"), () -> Map.of(
         Begin, List.of(
             ring(throughChime),
             onEvent(BellPolished).to(BellStates.Polished).output(),
@@ -1406,7 +1406,7 @@ public class HttpInboxTest {
     );
   }
 
-  private static HttpInboxRequest.Builder<Void> bellRequest(EntityModel bell) {
+  private static HttpInboxRequest.Builder<Void> bellRequest(EntityType bell) {
     return HttpInboxRequest.matching(m -> m.requestLine().matches("PUT /bell")).noContent().process(BellRung, bell, newEntity());
   }
 
@@ -1414,16 +1414,16 @@ public class HttpInboxTest {
   public void responseGivenByProcessMustBeTakenByTheRequest() {
     var bell = bell(false);
     var request = bellRequest(bell).build("BellRequest", UUID.randomUUID());
-    assertThatThrownBy(() -> HttpInbox.of(List.of(request)).entityModels())
+    assertThatThrownBy(() -> HttpInbox.of(List.of(request)).entityTypes())
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("The inbox request BellRequest doesn't take the response Rang, which Bell rung on Bell triggers on Request");
   }
 
   @Test
-  public void responseGivenByEntityModelTheProcessTriggersMustBeTakenByTheRequest() {
+  public void responseGivenByEntityTypeTheProcessTriggersMustBeTakenByTheRequest() {
     var bell = bell(true);
     var request = bellRequest(bell).build("BellRequest", UUID.randomUUID());
-    assertThatThrownBy(() -> HttpInbox.of(List.of(request)).entityModels())
+    assertThatThrownBy(() -> HttpInbox.of(List.of(request)).entityTypes())
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("The inbox request BellRequest doesn't take the response Rang, which Chime rung on Chime triggers on Request");
   }
@@ -1436,7 +1436,7 @@ public class HttpInboxTest {
     var polish = HttpInboxRequest.matching(m -> m.requestLine().matches("PUT /bell/polish")).noContent()
         .process(BellPolished, bell, newEntity())
         .build("PolishRequest", UUID.randomUUID());
-    assertThat(EntityModel.reachable(HttpInbox.of(List.of(polish, ring)).entityModels())).contains(ring, polish, bell, Chime);
+    assertThat(EntityType.reachable(HttpInbox.of(List.of(polish, ring)).entityTypes())).contains(ring, polish, bell, Chime);
   }
 
   /// Ringing the bell later is in another session, which the check doesn't follow
@@ -1446,7 +1446,7 @@ public class HttpInboxTest {
     var schedule = HttpInboxRequest.matching(m -> m.requestLine().matches("PUT /bell/schedule")).noContent()
         .process(BellScheduled, bell, newEntity())
         .build("ScheduleRequest", UUID.randomUUID());
-    assertThat(EntityModel.reachable(HttpInbox.of(List.of(schedule)).entityModels())).contains(schedule, bell);
+    assertThat(EntityType.reachable(HttpInbox.of(List.of(schedule)).entityTypes())).contains(schedule, bell);
   }
 
   @Test
@@ -1454,7 +1454,7 @@ public class HttpInboxTest {
     var bell = bell(true);
     var request = bellRequest(bell).response(Rang, _ -> new HttpResponse<>(200, "OK")).build("BellRequest", UUID.randomUUID());
     // The chime is reached only through the bell
-    assertThat(EntityModel.reachable(HttpInbox.of(List.of(request)).entityModels())).contains(request, bell, Chime);
+    assertThat(EntityType.reachable(HttpInbox.of(List.of(request)).entityTypes())).contains(request, bell, Chime);
   }
 
   private HttpResponse<byte[]> onOwnedRollback(String messageId, Headers headers) throws IOException {

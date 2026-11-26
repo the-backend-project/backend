@@ -1,8 +1,8 @@
 package com.github.thxmasj.backend.core.database;
 
-import com.github.thxmasj.backend.core.EntityModel;
-import com.github.thxmasj.backend.core.IdEntityModel;
-import com.github.thxmasj.backend.core.IndexEntityModel;
+import com.github.thxmasj.backend.core.EntityType;
+import com.github.thxmasj.backend.core.IdEntityType;
+import com.github.thxmasj.backend.core.IndexEntityType;
 
 /// The types of the tables where the state machine stores entities and events, independent of how a database names
 /// them. A database module maps the tables of its schema to these, and gives the type of a table in its constraint
@@ -23,18 +23,18 @@ public enum TableType {
   /// The table of the events of the id entities, keyed by entity id and event number, and unique by type and data
   IdEvent;
 
-  /// The type of the table where the events of the entity model are stored
-  public static TableType of(EntityModel entityModel) {
-    return switch (entityModel) {
-      case IdEntityModel _ -> IdEvent;
-      case IndexEntityModel _ -> IndexEvent;
+  /// The type of the table where the events of the entity type are stored
+  public static TableType of(EntityType entityType) {
+    return switch (entityType) {
+      case IdEntityType _ -> IdEvent;
+      case IndexEntityType _ -> IndexEvent;
       default -> Event;
     };
   }
 
-  /// Whether a table of this type has the events, or the entities, of the entity model
-  public boolean stores(EntityModel entityModel) {
-    return of(entityModel) == (this == Entity ? Event : this);
+  /// Whether a table of this type has the events, or the entities, of the entity type
+  public boolean stores(EntityType entityType) {
+    return of(entityType) == (this == Entity ? Event : this);
   }
 
 }

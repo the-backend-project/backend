@@ -9,12 +9,12 @@ follow them.
 
 The model is written in the language of the domain, and nothing else goes into it:
 
-* An entity has an identity and a lifecycle, which is the states of its [entity model](entities.md) and the
+* An entity has an identity and a lifecycle, which is the states of its [entity type](entities.md) and the
   transitions between them.
 * An event records something that has happened in the domain, and is named the way the domain experts would say it,
   in the past tense, such as `Merchant suspended` (see [Naming event types](entities.md#naming-event-types)).
 * Persistence, messaging and HTTP are not part of the model. The library stores the events, and sends and receives
-  requests through [outboxes](http-outbox.md) and [inboxes](http-inbox.md) that are entity models of their own.
+  requests through [outboxes](http-outbox.md) and [inboxes](http-inbox.md) that are entity types of their own.
 * The [state diagrams](diagrams.md) are generated from the model, so developers and domain experts look at the same
   picture, and it is never out of date.
 
@@ -64,7 +64,7 @@ run:
 
 An application can be refactored without breaking what is already stored:
 
-* Entity models and event types are identified in the database by UUIDs that are fixed in the code, not by their names
+* Entity types and event types are identified in the database by UUIDs that are fixed in the code, not by their names
   or by Java class names. You can rename and restructure freely, and the old events can still be read. Once a UUID has
   been used in production, it must never change.
 * Schema creation checks an existing schema against the table definitions of the running code (see

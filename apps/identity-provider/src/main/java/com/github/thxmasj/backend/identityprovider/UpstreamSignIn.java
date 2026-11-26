@@ -1,6 +1,6 @@
 package com.github.thxmasj.backend.identityprovider;
 
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static com.github.thxmasj.backend.core.EntitySelector.entityId;
 import static com.github.thxmasj.backend.core.EntitySelector.entityIdFromSession;
 import static com.github.thxmasj.backend.core.EntitySelector.newEntityId;
@@ -21,7 +21,7 @@ import static com.github.thxmasj.backend.identityprovider.Authorizations.UserAut
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.github.thxmasj.backend.core.DataType;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.State;
 import com.github.thxmasj.backend.core.TransitionModel;
@@ -49,7 +49,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import reactor.core.publisher.Mono;
 
-/// The sign-ins with the upstream provider at the callback, an entity model of their own, `Upstream sign-in`, with an
+/// The sign-ins with the upstream provider at the callback, an entity type of their own, `Upstream sign-in`, with an
 /// entity for each return of a user from the upstream provider.
 ///
 /// A code can be redeemed only once, so it is redeemed by an at-most-once outbox request, which is sent once the
@@ -71,14 +71,14 @@ final class UpstreamSignIn {
 
   private final OpenIdConnectClient upstream;
   private final AtMostOnceDispatcher<Redemption, String> tokenRequests;
-  private final EntityModel model;
+  private final EntityType model;
 
   /// @param upstream  the client of the upstream provider, which creates the token request and verifies the ID token,
   ///                  or null for the model only, whose transitions are not taken
   /// @param forwarder the HTTP client the token requests are sent with
   UpstreamSignIn(OpenIdConnectClient upstream, HttpClient forwarder) {
     this.upstream = upstream;
-    this.model = EntityModel.of("Upstream sign-in", Id, this::transitions);
+    this.model = EntityType.of("Upstream sign-in", Id, this::transitions);
     AtMostOnce<String, Void> tokenRequest = HttpOutboxRequest.atMostOnce()
         .requestPayloadType(DataType.string())
         .responsePayloadType(DataType.string())
@@ -105,7 +105,7 @@ final class UpstreamSignIn {
     this.tokenRequests = AtMostOnceDispatcher.reactive(tokenRequest, (_, r) -> upstream.tokenRequest(r.code(), r.secret()));
   }
 
-  EntityModel model() {
+  EntityType model() {
     return model;
   }
 

@@ -5,10 +5,10 @@ import static java.util.stream.Collectors.toMap;
 
 import com.github.thxmasj.backend.core.BuiltinEventTypes;
 import com.github.thxmasj.backend.core.DataType;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EventType;
-import com.github.thxmasj.backend.core.IdEntityModel;
-import com.github.thxmasj.backend.core.IndexEntityModel;
+import com.github.thxmasj.backend.core.IdEntityType;
+import com.github.thxmasj.backend.core.IndexEntityType;
 import com.github.thxmasj.backend.core.database.DatabaseClient;
 import com.github.thxmasj.backend.core.internal.ResolvedModels;
 import java.time.LocalDateTime;
@@ -26,7 +26,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 /// Reads the entities of a state machine for the backoffice: their event logs, ids, index keys and pending triggers,
-/// and the entities related to them. Like the test API, it knows the entity models as given to the state machine,
+/// and the entities related to them. Like the test API, it knows the entity types as given to the state machine,
 /// and the event types through their transitions, and only reads.
 ///
 /// An entity refers to other entities by their entity ids in the data of its events, e.g. an inbox request to the
@@ -39,7 +39,7 @@ final class Graph {
 
   private final DatabaseClient client;
   private final String schema;
-  private final Map<UUID, EntityModel> entityModels;
+  private final Map<UUID, EntityType> entityTypes;
   private final Function<UUID, EventType<?, ?>> eventTypeMapper;
   /// The index event types whose keys are entity ids, by which entities refer to other entities
   private final List<EventType<?, ?>> referenceTypes;
@@ -48,14 +48,14 @@ final class Graph {
   /// The index event types whose keys are strings, which entities can be searched for by
   private final List<EventType<?, ?>> searchableIndexTypes;
 
-  Graph(DatabaseClient client, String schema, List<? extends EntityModel> entityModels) {
-    ResolvedModels models = ResolvedModels.of(entityModels);
+  Graph(DatabaseClient client, String schema, List<? extends EntityType> entityTypes) {
+    ResolvedModels models = ResolvedModels.of(entityTypes);
     this.client = client;
     this.schema = schema;
-    this.entityModels = models.entityModelsById();
+    this.entityTypes = models.entityTypesById();
     Map<UUID, EventType<?, ?>> eventTypesById = models.eventTypes().stream().collect(toMap(EventType::id, identity()));
     this.eventTypeMapper = eventTypesById::get;
-    var eventTypesByModel = models.eventTypesByEntityModel();
+    var eventTypesByModel = models.eventTypesByEntityType();
     var referenceTypes = new LinkedHashSet<EventType<?, ?>>();
     var idTypes = new LinkedHashSet<EventType<?, ?>>();
     var indexTypes = new LinkedHashSet<EventType<?, ?>>();
@@ -66,12 +66,12 @@ final class Graph {
             if (BuiltinEventTypes.ALL.contains(type))
               continue;
             DataType<?> dataType = type.outputDataType();
-            if (e.getKey() instanceof IndexEntityModel) {
+            if (e.getKey() instanceof IndexEntityType) {
               if (dataType instanceof DataType.UUIDDataType)
                 referenceTypes.add(type);
               else if (dataType instanceof DataType.StringDataType)
                 indexTypes.add(type);
-            } else if (e.getKey() instanceof IdEntityModel
+            } else if (e.getKey() instanceof IdEntityType
                 && (dataType instanceof DataType.UUIDDataType || dataType instanceof DataType.StringDataType)) {
               idTypes.add(type);
             }
@@ -82,11 +82,11 @@ final class Graph {
     this.searchableIndexTypes = List.copyOf(indexTypes);
   }
 
-  /// An entity, of an entity model the backoffice may not know if the entity was created by another version of the
+  /// An entity, of an entity type the backoffice may not know if the entity was created by another version of the
   /// application
   ///
-  /// @param model the entity model, or null if it is unknown
-  record Entity(UUID id, UUID modelId, EntityModel model) {
+  /// @param model the entity type, or null if it is unknown
+  record Entity(UUID id, UUID modelId, EntityType model) {
 
     String modelName() {
       return model != null ? model.name() : modelId.toString();
@@ -136,20 +136,20 @@ final class Graph {
   /// An entity listed with when it was created
   record Listed(Entity entity, LocalDateTime created, String firstEvent) {}
 
-  /// The entity models of entities, which have their own event logs, in the order of their names
-  List<EntityModel> models() {
-    return entityModels.values().stream()
-        .filter(m -> !(m instanceof IdEntityModel) && !(m instanceof IndexEntityModel))
-        .sorted(Comparator.comparing(EntityModel::name))
+  /// The entity types of entities, which have their own event logs, in the order of their names
+  List<EntityType> models() {
+    return entityTypes.values().stream()
+        .filter(m -> !(m instanceof IdEntityType) && !(m instanceof IndexEntityType))
+        .sorted(Comparator.comparing(EntityType::name))
         .toList();
   }
 
-  Optional<EntityModel> model(UUID id) {
-    return Optional.ofNullable(entityModels.get(id));
+  Optional<EntityType> model(UUID id) {
+    return Optional.ofNullable(entityTypes.get(id));
   }
 
   /// The entity with the entity id. Completes empty if there is none, also for an id or index entity, which has no
-  /// entity model stored.
+  /// entity type stored.
   Mono<Entity> entity(UUID entityId) {
     return entities(List.of(entityId)).flatMap(entities -> Mono.justOrEmpty(entities.get(entityId)));
   }
@@ -164,14 +164,14 @@ final class Graph {
     for (int i = 0; i < ids.size(); i++)
       placeholders.add(":id" + i);
     var query = client.sql(
-            "SELECT EntityId, EntityModelId FROM \"{schema}\".\"Entity\" WHERE EntityId IN ({ids})"
+            "SELECT EntityId, EntityTypeId FROM \"{schema}\".\"Entity\" WHERE EntityId IN ({ids})"
                 .replace("{schema}", schema)
                 .replace("{ids}", String.join(",", placeholders))
         )
         .name("Backoffice.Entities");
     for (int i = 0; i < ids.size(); i++)
       query = query.bind("id" + i, ids.get(i));
-    return query.map(row -> entity(row.get("EntityId", UUID.class), row.get("EntityModelId", UUID.class)))
+    return query.map(row -> entity(row.get("EntityId", UUID.class), row.get("EntityTypeId", UUID.class)))
         .all()
         .collect(LinkedHashMap::new, (map, entity) -> map.put(entity.id(), entity));
   }
@@ -188,14 +188,14 @@ final class Graph {
     ).map(t -> new View(entity, t.getT1(), t.getT2(), t.getT3(), t.getT4(), t.getT5(), t.getT6())));
   }
 
-  /// The latest entities of an entity model, created before the entity `before` if it is given. Entity ids are time
+  /// The latest entities of an entity type, created before the entity `before` if it is given. Entity ids are time
   /// ordered, so the latest have the greatest entity ids.
-  Flux<Listed> latest(EntityModel model, UUID before, int limit) {
+  Flux<Listed> latest(EntityType model, UUID before, int limit) {
     var query = client.sql(
             """
             SELECT e.EntityId, ev.Timestamp, ev.Type FROM "{schema}"."Entity" e
             JOIN "{schema}"."Event" ev ON ev.EntityId=e.EntityId AND ev.EventNumber=1
-            WHERE e.EntityModelId=:model {before}
+            WHERE e.EntityTypeId=:model {before}
             ORDER BY e.EntityId DESC
             OFFSET 0 ROWS FETCH NEXT {limit} ROWS ONLY
             """
@@ -349,7 +349,7 @@ final class Graph {
   }
 
   private Entity entity(UUID entityId, UUID modelId) {
-    return new Entity(entityId, modelId, entityModels.get(modelId));
+    return new Entity(entityId, modelId, entityTypes.get(modelId));
   }
 
   private String typeName(UUID typeId) {

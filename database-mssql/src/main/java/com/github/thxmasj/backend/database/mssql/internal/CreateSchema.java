@@ -50,7 +50,7 @@ public class CreateSchema {
         CREATE TABLE [{schema}].[Entity]
         (
             EntityId      BINARY(16)       NOT NULL,
-            EntityModelId BINARY(16)       NOT NULL,
+            EntityTypeId BINARY(16)       NOT NULL,
             CONSTRAINT [pkEntity] PRIMARY KEY (EntityId)
         );
         GRANT INSERT, SELECT ON [{schema}].[Entity] TO [{role}];
@@ -100,7 +100,7 @@ public class CreateSchema {
         CREATE TABLE [{schema}].[DelayedTrigger]
         (
             EntityId      BINARY(16)       NOT NULL,
-            EntityModelId BINARY(16)       NOT NULL,
+            EntityTypeId BINARY(16)       NOT NULL,
             EventNumber   SMALLINT         NOT NULL,
             Type          BINARY(16)       NOT NULL,
             Data          VARBINARY(MAX),
@@ -117,7 +117,7 @@ public class CreateSchema {
         (
             Id            BINARY(16)       NOT NULL,
             EntityId      BINARY(16)       NOT NULL,
-            EntityModelId BINARY(16)       NOT NULL,
+            EntityTypeId BINARY(16)       NOT NULL,
             TriggerEntityId    BINARY(16)       NOT NULL,
             TriggerEventNumber INT              NOT NULL,
             Type          BINARY(16)       NOT NULL,

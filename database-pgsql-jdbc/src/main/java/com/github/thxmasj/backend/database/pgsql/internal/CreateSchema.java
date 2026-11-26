@@ -57,7 +57,7 @@ public class CreateSchema {
         CREATE TABLE {schema}."Entity"
         (
             EntityId      UUID NOT NULL,
-            EntityModelId UUID NOT NULL,
+            EntityTypeId UUID NOT NULL,
             CONSTRAINT "pkEntity" PRIMARY KEY (EntityId)
         );
         GRANT INSERT, SELECT ON {schema}."Entity" TO {role};
@@ -100,7 +100,7 @@ public class CreateSchema {
         CREATE TABLE {schema}."DelayedTrigger"
         (
             EntityId      UUID         NOT NULL,
-            EntityModelId UUID         NOT NULL,
+            EntityTypeId UUID         NOT NULL,
             EventNumber   SMALLINT     NOT NULL,
             Type          UUID         NOT NULL,
             Data          BYTEA,
@@ -116,7 +116,7 @@ public class CreateSchema {
         (
             Id                 UUID         NOT NULL,
             EntityId           UUID         NOT NULL,
-            EntityModelId      UUID         NOT NULL,
+            EntityTypeId      UUID         NOT NULL,
             TriggerEntityId    UUID         NOT NULL,
             TriggerEventNumber INT          NOT NULL,
             Type               UUID         NOT NULL,

@@ -8,13 +8,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-public interface IndexEntityModel extends EntityModel {
+public interface IndexEntityType extends EntityType {
 
-  static IndexEntityModel of(String name, UUID id, EventType<?, ?>... eventTypes) {
+  static IndexEntityType of(String name, UUID id, EventType<?, ?>... eventTypes) {
     List<TransitionModel<?, ?>> transitions = Arrays.stream(eventTypes)
-        .map(IndexEntityModel::transition)
+        .map(IndexEntityType::transition)
         .collect(toList());
-    return new IndexEntityModel() {
+    return new IndexEntityType() {
       @Override public String name() {return name;}
       @Override public UUID id() {return id;}
       @Override public Map<State, List<TransitionModel<?, ?>>> transitions() {return Map.of(Begin, transitions);}

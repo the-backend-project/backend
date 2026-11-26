@@ -3,7 +3,7 @@ package com.github.thxmasj.backend.core.internal;
 import static java.util.stream.Collectors.toMap;
 
 import com.github.thxmasj.backend.core.BuiltinEventTypes;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.TransitionModel;
 import java.util.ArrayList;
@@ -26,14 +26,14 @@ public final class EventTypes {
     return Collections.unmodifiableList(eventTypes);
   }
 
-  /// The event types of the transitions of each entity model, including the builtin event types
-  public static Map<EntityModel, List<EventType<?, ?>>> eventTypesByEntityModel(List<EntityModel> entityModels) {
-    return entityModels.stream().collect(toMap(m -> m, m -> eventTypes(m.transitions().values())));
+  /// The event types of the transitions of each entity type, including the builtin event types
+  public static Map<EntityType, List<EventType<?, ?>>> eventTypesByEntityType(List<EntityType> entityTypes) {
+    return entityTypes.stream().collect(toMap(m -> m, m -> eventTypes(m.transitions().values())));
   }
 
-  /// The event types of the transitions of all entity models, including the builtin event types
-  public static List<EventType<?, ?>> eventTypes(List<EntityModel> entityModels) {
-    return eventTypes(entityModels.stream().flatMap(m -> m.transitions().values().stream()).toList());
+  /// The event types of the transitions of all entity types, including the builtin event types
+  public static List<EventType<?, ?>> eventTypes(List<EntityType> entityTypes) {
+    return eventTypes(entityTypes.stream().flatMap(m -> m.transitions().values().stream()).toList());
   }
 
   private static List<EventType<?, ?>> eventTypes(Collection<List<TransitionModel<?, ?>>> transitions) {

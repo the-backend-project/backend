@@ -1,10 +1,10 @@
 package com.github.thxmasj.backend.diagram;
 
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static com.github.thxmasj.backend.core.TransitionModelBuilder.WithEvent.onEvent;
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.Severity;
 import com.github.thxmasj.backend.core.State;
@@ -30,7 +30,7 @@ class PlantUMLFormatterTest {
 
   /// A formatter of a request model with the transitions
   private static PlantUMLFormatter formatter(Map<State, List<TransitionModel<?, ?>>> transitions) {
-    return new PlantUMLFormatter(EntityModel.of("Request", UUID.randomUUID(), () -> transitions));
+    return new PlantUMLFormatter(EntityType.of("Request", UUID.randomUUID(), () -> transitions));
   }
 
   @Test

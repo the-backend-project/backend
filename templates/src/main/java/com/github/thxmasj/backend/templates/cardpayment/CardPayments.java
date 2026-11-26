@@ -1,6 +1,6 @@
 package com.github.thxmasj.backend.templates.cardpayment;
 
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.State;
 import com.github.thxmasj.backend.core.TransitionModel;
 import com.github.thxmasj.backend.core.Tuples.Tuple2;
@@ -28,7 +28,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
 
-/// The card payment template: the entity models of the merchants, of the payments made to them and of their
+/// The card payment template: the entity types of the merchants, of the payments made to them and of their
 /// settlements, with the outbox requests to the acquirer and the merchants. The models are created together, as they
 /// trigger events on each other.
 ///
@@ -37,40 +37,40 @@ import java.util.function.Function;
 /// builds the outbox request with (see `processModel` of the outbox request builders).
 public final class CardPayments {
 
-  private final EntityModel merchant;
-  private final EntityModel payment;
-  private final EntityModel settlement;
+  private final EntityType merchant;
+  private final EntityType payment;
+  private final EntityType settlement;
   private final PaymentTransitions paymentTransitions;
   private final SettlementTransitions settlementTransitions;
 
   public CardPayments(
       Function<String, PaymentToken> tokenDecrypter,
-      Function<EntityModel, ? extends Dispatcher<AuthenticationData, ?>> authentication,
+      Function<EntityType, ? extends Dispatcher<AuthenticationData, ?>> authentication,
       // To acquirer
-      Function<EntityModel, ? extends DispatcherWithRollback<Tuple4<Authorisation, Merchant, AuthenticationResult, PaymentToken>, ?, Tuple2<ReversalData, Merchant>>> preauthorisation,
-      Function<EntityModel, ? extends DispatcherWithRollback<Tuple6<Authorisation, Merchant, AuthenticationResult, PaymentToken, AcquirerBatchNumber, UUID>, ?, Tuple4<ReversalData, Merchant, AcquirerBatchNumber, UUID>>> authorisation,
-      Function<EntityModel, ? extends Dispatcher<Tuple8<Authorisation, Merchant, AuthenticationResult, PaymentToken, AcquirerBatchNumber, AcquirerResponse, Capture, UUID>, ?>> capture,
-      Function<EntityModel, ? extends DispatcherWithRollback<Tuple7<Authorisation, Merchant, AuthenticationResult, PaymentToken, AcquirerBatchNumber, Refund, UUID>, ?, Tuple4<ReversalData, Merchant, AcquirerBatchNumber, UUID>>> refund,
-      Function<EntityModel, ? extends Dispatcher<Tuple5<Authorisation, Merchant, AuthenticationResult, Capture, PaymentToken>, ?>> captureRequestedTooLate,
-      Function<EntityModel, ? extends Dispatcher<Tuple4<Authorisation, Merchant, FailedAuthenticationResult, PaymentToken>, ?>> failedAuthentication,
-      Function<EntityModel, ? extends Dispatcher<Tuple3<BatchNumber, AcquirerBatchNumber, Merchant>, ?>> reconciliation,
+      Function<EntityType, ? extends DispatcherWithRollback<Tuple4<Authorisation, Merchant, AuthenticationResult, PaymentToken>, ?, Tuple2<ReversalData, Merchant>>> preauthorisation,
+      Function<EntityType, ? extends DispatcherWithRollback<Tuple6<Authorisation, Merchant, AuthenticationResult, PaymentToken, AcquirerBatchNumber, UUID>, ?, Tuple4<ReversalData, Merchant, AcquirerBatchNumber, UUID>>> authorisation,
+      Function<EntityType, ? extends Dispatcher<Tuple8<Authorisation, Merchant, AuthenticationResult, PaymentToken, AcquirerBatchNumber, AcquirerResponse, Capture, UUID>, ?>> capture,
+      Function<EntityType, ? extends DispatcherWithRollback<Tuple7<Authorisation, Merchant, AuthenticationResult, PaymentToken, AcquirerBatchNumber, Refund, UUID>, ?, Tuple4<ReversalData, Merchant, AcquirerBatchNumber, UUID>>> refund,
+      Function<EntityType, ? extends Dispatcher<Tuple5<Authorisation, Merchant, AuthenticationResult, Capture, PaymentToken>, ?>> captureRequestedTooLate,
+      Function<EntityType, ? extends Dispatcher<Tuple4<Authorisation, Merchant, FailedAuthenticationResult, PaymentToken>, ?>> failedAuthentication,
+      Function<EntityType, ? extends Dispatcher<Tuple3<BatchNumber, AcquirerBatchNumber, Merchant>, ?>> reconciliation,
       // To merchant
-      Function<EntityModel, ? extends Dispatcher<Tuple3<ReversalData, Merchant, BatchNumber>, ?>> rolledBackAuthorisation,
-      Function<EntityModel, ? extends Dispatcher<Tuple2<ReversalData, Merchant>, ?>> rolledBackPreauthorisation,
-      Function<EntityModel, ? extends Dispatcher<Tuple3<Authorisation, Merchant, AcquirerResponse>, ?>> approvedPreauthorisation,
-      Function<EntityModel, ? extends Dispatcher<Tuple2<Authorisation, Merchant>, ?>> failedAuthorisation,
-      Function<EntityModel, ? extends Dispatcher<Tuple4<Authorisation, Merchant, BatchNumber, AcquirerResponse>, ?>> approvedAuthorisation,
-      Function<EntityModel, ? extends Dispatcher<Tuple3<Authorisation, Merchant, AcquirerResponse>, ?>> declinedAuthorisation,
-      Function<EntityModel, ? extends Dispatcher<Tuple4<Authorisation, Merchant, BatchNumber, AcquirerResponse>, ?>> approvedCapture,
-      Function<EntityModel, ? extends Dispatcher<Tuple2<Authorisation, Merchant>, ?>> failedRefund,
-      Function<EntityModel, ? extends Dispatcher<Tuple5<Authorisation, Merchant, AcquirerResponse, BatchNumber, Refund>, ?>> approvedRefund,
-      Function<EntityModel, ? extends Dispatcher<Tuple3<Authorisation, Merchant, AcquirerResponse>, ?>> declinedRefund,
-      Function<EntityModel, ? extends Dispatcher<Tuple2<CutOff, ReconciliationValues>, ?>> approvedCutOff
+      Function<EntityType, ? extends Dispatcher<Tuple3<ReversalData, Merchant, BatchNumber>, ?>> rolledBackAuthorisation,
+      Function<EntityType, ? extends Dispatcher<Tuple2<ReversalData, Merchant>, ?>> rolledBackPreauthorisation,
+      Function<EntityType, ? extends Dispatcher<Tuple3<Authorisation, Merchant, AcquirerResponse>, ?>> approvedPreauthorisation,
+      Function<EntityType, ? extends Dispatcher<Tuple2<Authorisation, Merchant>, ?>> failedAuthorisation,
+      Function<EntityType, ? extends Dispatcher<Tuple4<Authorisation, Merchant, BatchNumber, AcquirerResponse>, ?>> approvedAuthorisation,
+      Function<EntityType, ? extends Dispatcher<Tuple3<Authorisation, Merchant, AcquirerResponse>, ?>> declinedAuthorisation,
+      Function<EntityType, ? extends Dispatcher<Tuple4<Authorisation, Merchant, BatchNumber, AcquirerResponse>, ?>> approvedCapture,
+      Function<EntityType, ? extends Dispatcher<Tuple2<Authorisation, Merchant>, ?>> failedRefund,
+      Function<EntityType, ? extends Dispatcher<Tuple5<Authorisation, Merchant, AcquirerResponse, BatchNumber, Refund>, ?>> approvedRefund,
+      Function<EntityType, ? extends Dispatcher<Tuple3<Authorisation, Merchant, AcquirerResponse>, ?>> declinedRefund,
+      Function<EntityType, ? extends Dispatcher<Tuple2<CutOff, ReconciliationValues>, ?>> approvedCutOff
   ) {
     // The transitions are created when the state machine first asks for them, after the models are all created
-    this.merchant = EntityModel.of("Merchant", UUID.fromString("3ece621b-2c6a-4e5a-895e-6f7b566ec26f"), this::merchantTransitions);
-    this.payment = EntityModel.of("Payment", UUID.fromString("c56dc62e-24e8-43a7-868f-b87720327ff5"), this::paymentTransitionsOfModel);
-    this.settlement = EntityModel.of("Settlement", UUID.fromString("fc1d7b4c-92c7-40b3-9f7e-68a84d8d56f1"), this::settlementTransitionsOfModel);
+    this.merchant = EntityType.of("Merchant", UUID.fromString("3ece621b-2c6a-4e5a-895e-6f7b566ec26f"), this::merchantTransitions);
+    this.payment = EntityType.of("Payment", UUID.fromString("c56dc62e-24e8-43a7-868f-b87720327ff5"), this::paymentTransitionsOfModel);
+    this.settlement = EntityType.of("Settlement", UUID.fromString("fc1d7b4c-92c7-40b3-9f7e-68a84d8d56f1"), this::settlementTransitionsOfModel);
     this.paymentTransitions = new PaymentTransitions(
         tokenDecrypter,
         merchant,
@@ -114,17 +114,17 @@ public final class CardPayments {
   }
 
   /// The merchants the payments are made to
-  public EntityModel merchant() {
+  public EntityType merchant() {
     return merchant;
   }
 
   /// The payments
-  public EntityModel payment() {
+  public EntityType payment() {
     return payment;
   }
 
   /// The settlements of the merchants, of the batches of their payments
-  public EntityModel settlement() {
+  public EntityType settlement() {
     return settlement;
   }
 
@@ -140,7 +140,7 @@ public final class CardPayments {
 
   /// The merchants, payments and settlements, to give the state machine if no inbox triggers events on them. The state
   /// machine also runs the models they trigger events on, e.g. the outbox requests and the ids.
-  public List<EntityModel> entityModels() {
+  public List<EntityType> entityTypes() {
     return List.of(merchant, payment, settlement);
   }
 

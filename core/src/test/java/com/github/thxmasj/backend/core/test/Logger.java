@@ -1,7 +1,7 @@
 package com.github.thxmasj.backend.core.test;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.Listener;
 import java.util.*;
@@ -37,8 +37,8 @@ public class Logger implements Listener {
   }
 
   @Override
-  public void transitionFailed(String correlationId, EntityModel entityModel, UUID entityId, EventType<?, ?> eventType, Throwable failure) {
-    log(header(entityId, correlationId) + " " + eventType.name() + " on " + entityModel.name() + " failed: " + failure);
+  public void transitionFailed(String correlationId, EntityType entityType, UUID entityId, EventType<?, ?> eventType, Throwable failure) {
+    log(header(entityId, correlationId) + " " + eventType.name() + " on " + entityType.name() + " failed: " + failure);
   }
 
   @Override

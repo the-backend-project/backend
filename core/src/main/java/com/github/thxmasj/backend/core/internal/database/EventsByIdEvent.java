@@ -3,7 +3,7 @@ package com.github.thxmasj.backend.core.internal.database;
 import static java.util.function.Function.identity;
 import static java.util.stream.Collectors.toMap;
 
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.Event;
 import com.github.thxmasj.backend.core.EventLog;
 import com.github.thxmasj.backend.core.EventType;
@@ -20,22 +20,22 @@ import reactor.core.publisher.Mono;
 public class EventsByIdEvent {
 
   private final DatabaseClient client;
-  private final Map<UUID, EntityModel> entityModels;
-  private final Map<EntityModel, List<EventType<?, ?>>> eventTypesByEntityModel;
+  private final Map<UUID, EntityType> entityTypes;
+  private final Map<EntityType, List<EventType<?, ?>>> eventTypesByEntityType;
   private final Clock clock;
   private final String sql;
 
-  /// @param sql the SQL selecting the events of the entity, with its entity id and entity model id on each row. It
+  /// @param sql the SQL selecting the events of the entity, with its entity id and entity type id on each row. It
   ///            selects no rows if no entity has the id.
   public EventsByIdEvent(
       DatabaseClient client,
       String sql,
-      Map<EntityModel, List<EventType<?, ?>>> eventTypesByEntityModel,
+      Map<EntityType, List<EventType<?, ?>>> eventTypesByEntityType,
       Clock clock
   ) {
     this.client = client;
-    this.entityModels = eventTypesByEntityModel.keySet().stream().collect(toMap(EntityModel::id, identity()));
-    this.eventTypesByEntityModel = eventTypesByEntityModel;
+    this.entityTypes = eventTypesByEntityType.keySet().stream().collect(toMap(EntityType::id, identity()));
+    this.eventTypesByEntityType = eventTypesByEntityType;
     this.clock = clock;
     this.sql = sql;
   }
@@ -48,14 +48,14 @@ public class EventsByIdEvent {
         .bind("data", id)
         .map(row -> {
           UUID entityId = row.get("EntityId", UUID.class);
-          UUID modelId = row.get("EntityModelId", UUID.class);
-          EntityModel model = entityModels.get(modelId);
+          UUID modelId = row.get("EntityTypeId", UUID.class);
+          EntityType model = entityTypes.get(modelId);
           if (model == null)
-            throw new IllegalStateException("Unknown entity model " + modelId + " of entity having id of type " + type.name());
+            throw new IllegalStateException("Unknown entity type " + modelId + " of entity having id of type " + type.name());
           try {
-            return new ModelEvent(model, entityId, Mappers.eventMapper(eventTypesByEntityModel.get(model), clock).apply(entityId, row));
+            return new ModelEvent(model, entityId, Mappers.eventMapper(eventTypesByEntityType.get(model), clock).apply(entityId, row));
           } catch (MappingFailure e) {
-            throw new MappingFailure("EventsByIdEvent: Failed to map row to event for entity model " + model.name(), e);
+            throw new MappingFailure("EventsByIdEvent: Failed to map row to event for entity type " + model.name(), e);
           }
         })
         .all()
@@ -68,6 +68,6 @@ public class EventsByIdEvent {
         ));
   }
 
-  private record ModelEvent(EntityModel model, UUID entityId, Event<?> event) {}
+  private record ModelEvent(EntityType model, UUID entityId, Event<?> event) {}
 
 }

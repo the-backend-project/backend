@@ -1,7 +1,7 @@
 package com.github.thxmasj.backend.http.outbox;
 
 import com.github.thxmasj.backend.core.DataType;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.TransitionModelBuilder.TransitionContext;
 import com.github.thxmasj.backend.core.Tuples.Tuple2;
@@ -65,7 +65,7 @@ public final class AtLeastOnceBuilder {
   /// Optional: the process model defaults to none, which is sufficient as long as no callback is given.
   public interface ProcessModelStep<RQ, RS> extends ContentParserStep<RQ, RS> {
 
-    ContentParserStep<RQ, RS> processModel(EntityModel processModel);
+    ContentParserStep<RQ, RS> processModel(EntityType processModel);
   }
 
   public interface ContentParserStep<RQ, RS> {
@@ -166,7 +166,7 @@ public final class AtLeastOnceBuilder {
         (_, message) -> message;
     private HttpClient forwarder;
     private Duration inflightTimeout = Duration.ofSeconds(10);
-    private EntityModel processModel;
+    private EntityType processModel;
 
     private WithPayloadTypes(
         DataType<RQ> requestPayloadType,
@@ -197,7 +197,7 @@ public final class AtLeastOnceBuilder {
     }
 
     @Override
-    public ContentParserStep<RQ, RS> processModel(EntityModel processModel) {
+    public ContentParserStep<RQ, RS> processModel(EntityType processModel) {
       this.processModel = processModel;
       return this;
     }
@@ -242,7 +242,7 @@ public final class AtLeastOnceBuilder {
     private final BiFunction<TransitionContext<Void>, HttpRequest<RQ>, HttpRequest<RQ>> repeatMessageCreator;
     private final HttpClient forwarder;
     private final Duration inflightTimeout;
-    private final EntityModel processModel;
+    private final EntityType processModel;
     private final Function<HttpResponse<byte[]>, Validated<RS>> contentParser;
     private final BiFunction<HttpRequest<RQ>, HttpResponse<byte[]>, Validated<RS>> requestAwareContentParser;
     private Callback<HttpResponse<RS>, ?> onSuccess;
@@ -261,7 +261,7 @@ public final class AtLeastOnceBuilder {
         BiFunction<TransitionContext<Void>, HttpRequest<RQ>, HttpRequest<RQ>> repeatMessageCreator,
         HttpClient forwarder,
         Duration inflightTimeout,
-        EntityModel processModel,
+        EntityType processModel,
         Function<HttpResponse<byte[]>, Validated<RS>> contentParser,
         BiFunction<HttpRequest<RQ>, HttpResponse<byte[]>, Validated<RS>> requestAwareContentParser
     ) {

@@ -11,13 +11,13 @@ import java.util.UUID;
 /// Ids of entities. An entity's ids are the events of the id entity with the same entity id, triggered like any other
 /// event. The data of an id event is unique among the events of its type, so an id event is rejected if its id is
 /// already taken.
-public interface IdEntityModel extends EntityModel {
+public interface IdEntityType extends EntityType {
 
-  static IdEntityModel of(String name, UUID id, EventType<?, ?>... eventTypes) {
+  static IdEntityType of(String name, UUID id, EventType<?, ?>... eventTypes) {
     List<TransitionModel<?, ?>> transitions = Arrays.stream(eventTypes)
-        .map(IdEntityModel::transition)
+        .map(IdEntityType::transition)
         .collect(toList());
-    return new IdEntityModel() {
+    return new IdEntityType() {
       @Override public String name() {return name;}
       @Override public UUID id() {return id;}
       @Override public Map<State, List<TransitionModel<?, ?>>> transitions() {return Map.of(Begin, transitions);}

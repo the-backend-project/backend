@@ -1,6 +1,6 @@
 package com.github.thxmasj.backend.diagram;
 
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Comparator.comparingInt;
 import static java.util.Optional.ofNullable;
@@ -8,7 +8,7 @@ import static java.util.function.Predicate.not;
 import static java.util.stream.Collectors.joining;
 
 import com.github.thxmasj.backend.core.DataType;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.Severity;
 import com.github.thxmasj.backend.core.State;
@@ -37,11 +37,11 @@ import net.sourceforge.plantuml.SourceStringReader;
 
 public class PlantUMLFormatter {
 
-  private final EntityModel model;
+  private final EntityType model;
   Map<State, List<TransitionModel<?, ?>>> transitions;
 
-  /// A state diagram of the transitions of the entity model
-  public PlantUMLFormatter(EntityModel model) {
+  /// A state diagram of the transitions of the entity type
+  public PlantUMLFormatter(EntityType model) {
     this.model = model;
     this.transitions = Map.copyOf(model.transitions());
   }
@@ -54,12 +54,12 @@ public class PlantUMLFormatter {
     return file;
   }
 
-  /// Writes the diagram as SVG into the directory, named after the package of the entity model's class and its name.
+  /// Writes the diagram as SVG into the directory, named after the package of the entity type's class and its name.
   public File formatToImage(String directory) throws IOException {
     return formatToImage(file(directory, "svg"));
   }
 
-  /// Writes the diagram as SVG to the file, e.g. for an entity model created with `EntityModel.of`, whose class is in
+  /// Writes the diagram as SVG to the file, e.g. for an entity type created with `EntityType.of`, whose class is in
   /// the core library's package rather than the application's.
   public File formatToImage(File file) throws IOException {
     //noinspection ResultOfMethodCallIgnored
@@ -370,9 +370,9 @@ public class PlantUMLFormatter {
         Stream.of(
             eventName(eventType, transition.severity()),
             eventType.inputDataType().equals(DataType.none()) && eventType.outputDataType().equals(DataType.none()) ? "" : "f: " + eventType.inputDataType().name() + " → " + eventType.outputDataType().name(),
-            transition.triggers().stream().map(t -> "<&share>" + t.eventType().name() + "@" + ofNullable(t.entityModel()).map(m -> m.name()).orElse("???")).collect(joining("\\n")),
+            transition.triggers().stream().map(t -> "<&share>" + t.eventType().name() + "@" + ofNullable(t.entityType()).map(m -> m.name()).orElse("???")).collect(joining("\\n")),
             transition.actions().stream().map(a -> "<&bolt>" + a.name()).collect(joining("\\n")),
-            transition.reverseModel() != null ? transition.reverseModel().triggers().stream().map(t -> "<&share><color:red>" + t.eventType().name() + "@" + ofNullable(t.entityModel()).map(m -> m.name()).orElse("???")).collect(joining("\\n")) : ""
+            transition.reverseModel() != null ? transition.reverseModel().triggers().stream().map(t -> "<&share><color:red>" + t.eventType().name() + "@" + ofNullable(t.entityType()).map(m -> m.name()).orElse("???")).collect(joining("\\n")) : ""
         ).filter(not(String::isEmpty)).collect(joining("\\n"))
     );
   }

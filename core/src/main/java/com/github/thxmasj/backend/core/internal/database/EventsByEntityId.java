@@ -2,7 +2,7 @@ package com.github.thxmasj.backend.core.internal.database;
 
 import static java.util.Objects.requireNonNull;
 
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.Event;
 import com.github.thxmasj.backend.core.EventLog;
 import com.github.thxmasj.backend.core.EventType;
@@ -21,25 +21,25 @@ import reactor.core.publisher.Mono;
 public class EventsByEntityId {
 
   private final DatabaseClient client;
-  private final Map<EntityModel, String> sqls;
+  private final Map<EntityType, String> sqls;
   private final Clock clock;
 
-  /// @param sql the SQL selecting the events of an entity of an entity model, in the dialect of the database
+  /// @param sql the SQL selecting the events of an entity of an entity type, in the dialect of the database
   public EventsByEntityId(
       DatabaseClient client,
-      Function<EntityModel, String> sql,
-      List<EntityModel> entityModels,
+      Function<EntityType, String> sql,
+      List<EntityType> entityTypes,
       Clock clock
   ) {
     this.client = client;
     this.clock = clock;
     this.sqls = new HashMap<>();
-    for (var entityModel : entityModels)
-      this.sqls.put(entityModel, sql.apply(entityModel));
+    for (var entityType : entityTypes)
+      this.sqls.put(entityType, sql.apply(entityType));
   }
 
-  public Mono<EventLog> execute(EntityModel entityModel, List<EventType<?, ?>> eventTypes, UUID entityId) {
-    String sqlToPrepare = requireNonNull(sqls.get(entityModel), "Unknown model " + entityModel.name());
+  public Mono<EventLog> execute(EntityType entityType, List<EventType<?, ?>> eventTypes, UUID entityId) {
+    String sqlToPrepare = requireNonNull(sqls.get(entityType), "Unknown model " + entityType.name());
     var eventMapper = Mappers.eventMapper(eventTypes, clock);
     return client.sql(sqlToPrepare)
         .name("EventsByEntityId")
@@ -48,15 +48,15 @@ public class EventsByEntityId {
           try {
             return eventMapper.apply(entityId, row);
           } catch (MappingFailure e) {
-            throw new MappingFailure("EventsByEntityId: Failed to map row to event for entity model " + entityModel.name(), e);
+            throw new MappingFailure("EventsByEntityId: Failed to map row to event for entity type " + entityType.name(), e);
           }
         })
         .all()
         .collectList()
         .map(events -> {
           if (events.isEmpty())
-            throw new UnknownEntity(entityModel, entityId);
-          return new EventLog(entityModel, entityId, Collections.unmodifiableList(events));
+            throw new UnknownEntity(entityType, entityId);
+          return new EventLog(entityType, entityId, Collections.unmodifiableList(events));
         });
   }
 

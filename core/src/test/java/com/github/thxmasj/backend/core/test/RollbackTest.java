@@ -1,7 +1,7 @@
 package com.github.thxmasj.backend.core.test;
 
 import static com.github.thxmasj.backend.core.BuiltinEventTypes.EventsRolledBack;
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static com.github.thxmasj.backend.core.EntitySelector.entityId;
 import static com.github.thxmasj.backend.core.EntitySelector.newEntityId;
 import static com.github.thxmasj.backend.core.EventTrigger.trigger;
@@ -17,7 +17,7 @@ import static com.github.thxmasj.backend.core.TransitionModelBuilder.assemble;
 
 import com.github.thxmasj.backend.core.EventType.Rollback.Data;
 import com.github.thxmasj.backend.core.DataType;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EntitySelector;
 import com.github.thxmasj.backend.core.EventLog;
 import com.github.thxmasj.backend.core.EventType;
@@ -38,8 +38,8 @@ public class RollbackTest {
   enum PacmanStates implements State {Stopped, Moving, Dead}
   enum SpeedStates implements State {Zero, Normal, Slow, Fast}
 
-  static final EntityModel Pacman = EntityModel.of("Pacman", UUID.fromString("15f23da6-19be-460d-8af4-ffdbd600fc51"), RollbackTest::pacmanTransitions);
-  static final EntityModel Speed = EntityModel.of("Speed", UUID.fromString("6adad2d0-dd57-4d6b-932c-add277eb0cae"), RollbackTest::speedTransitions);
+  static final EntityType Pacman = EntityType.of("Pacman", UUID.fromString("15f23da6-19be-460d-8af4-ffdbd600fc51"), RollbackTest::pacmanTransitions);
+  static final EntityType Speed = EntityType.of("Speed", UUID.fromString("6adad2d0-dd57-4d6b-932c-add277eb0cae"), RollbackTest::speedTransitions);
 
   /// Starting to move records the id of the created speed entity
   static EventType<Void, UUID> PacmanMovedForward = EventType.of("Pacman moved forward", UUID.fromString("0908e790-6955-4d89-b11b-c552ea8c54ac"), DataType.none(), DataType.uuid());
@@ -156,7 +156,7 @@ public class RollbackTest {
     StepVerifier.create(eventListener.onEvent(trigger(PacmanMovedForward, Pacman, unknownId)))
         .expectErrorMatches(t -> t instanceof RejectedEvent r
             && r.reason() == RejectedEvent.Reason.UnknownEntity
-            && r.entityModel() == Pacman
+            && r.entityType() == Pacman
             && r.entityId().equals(unknownId))
         .verify();
   }

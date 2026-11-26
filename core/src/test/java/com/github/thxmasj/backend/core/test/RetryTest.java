@@ -1,6 +1,6 @@
 package com.github.thxmasj.backend.core.test;
 
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static com.github.thxmasj.backend.core.EntitySelector.entityId;
 import static com.github.thxmasj.backend.core.EntitySelector.newEntityId;
 import static com.github.thxmasj.backend.core.EventTrigger.trigger;
@@ -12,11 +12,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.github.thxmasj.backend.core.Action;
 import com.github.thxmasj.backend.core.DataType;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.Event;
 import com.github.thxmasj.backend.core.EventLog;
 import com.github.thxmasj.backend.core.EventType;
-import com.github.thxmasj.backend.core.IndexEntityModel;
+import com.github.thxmasj.backend.core.IndexEntityType;
 import com.github.thxmasj.backend.core.InputEvent;
 import com.github.thxmasj.backend.core.Listener;
 import com.github.thxmasj.backend.core.State;
@@ -55,8 +55,8 @@ public class RetryTest {
   static EventType<UUID, UUID> IndexRequested = EventType.of("Index requested", UUID.fromString("4e6a8c0e-2f9b-4c5e-a3d1-3b5c7e9a1d70"), DataType.uuid());
   /// The outcome of the action, which triggers an event on the counter's index entity, which has the counter's id
   static EventType<UUID, UUID> CountIndexed = EventType.of("Count indexed", UUID.fromString("6a8c0e2a-4b1d-4e7a-b5f3-5d7e9b1c3f92"), DataType.uuid());
-  static EventType<UUID, UUID> CounterReferenced = IndexEntityModel.referenceEventType("Counter referenced", UUID.fromString("8c0e2a4c-6d3f-4a9c-87b5-7f9b1d3e5ab4"));
-  static IndexEntityModel CounterIndex = IndexEntityModel.of("Counter index", UUID.fromString("a0e2c4e6-8f5b-4c1e-99d7-9b1d3f5a7cd6"), CounterReferenced);
+  static EventType<UUID, UUID> CounterReferenced = IndexEntityType.referenceEventType("Counter referenced", UUID.fromString("8c0e2a4c-6d3f-4a9c-87b5-7f9b1d3e5ab4"));
+  static IndexEntityType CounterIndex = IndexEntityType.of("Counter index", UUID.fromString("a0e2c4e6-8f5b-4c1e-99d7-9b1d3f5a7cd6"), CounterReferenced);
   static EventType<Void, Void> Tallied = EventType.of("Tallied", UUID.fromString("0a2c4e6a-8b5d-4e1a-9f7c-9d1e3a5b7c5c"));
 
   static Action<UUID> reporting = new Action<>() {
@@ -73,8 +73,8 @@ public class RetryTest {
     }
   };
 
-  static EntityModel Counter = EntityModel.of("Counter", UUID.fromString("3f7b9d1e-5a2c-4c8e-b0f4-6e8a0c2d4f26"), RetryTest::counterTransitions);
-  static EntityModel Tally = EntityModel.of("Tally", UUID.fromString("2c4e6a8c-0d7f-4a3c-b1e9-1f3a5c7d9e6e"), () -> Map.<State, List<TransitionModel<?, ?>>>of(
+  static EntityType Counter = EntityType.of("Counter", UUID.fromString("3f7b9d1e-5a2c-4c8e-b0f4-6e8a0c2d4f26"), RetryTest::counterTransitions);
+  static EntityType Tally = EntityType.of("Tally", UUID.fromString("2c4e6a8c-0d7f-4a3c-b1e9-1f3a5c7d9e6e"), () -> Map.<State, List<TransitionModel<?, ?>>>of(
       Begin, List.of(onEvent(Tallied).to(States.Tallying).output()),
       States.Tallying, List.of(onEvent(Tallied).to(States.Tallying).output())
   ));
@@ -142,7 +142,7 @@ public class RetryTest {
     }
   }
 
-  private static List<String> events(String schema, EntityModel model, List<EventType<?, ?>> types, UUID entityId) {
+  private static List<String> events(String schema, EntityType model, List<EventType<?, ?>> types, UUID entityId) {
     EventLog log = Init.storage(schema, List.of(Counter)).eventsByEntityId().execute(model, types, entityId).block();
     return log.events().stream().map(e -> e.eventNumber() + ":" + e.typeName()).toList();
   }
