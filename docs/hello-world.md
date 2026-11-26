@@ -160,7 +160,7 @@ work around.
   makes the setting unnecessary should be checked on each Netty upgrade.
 - **Runtime dependencies the server does not use.** The HTTP modules depend on Hibernate Validator, and reactor-netty
   brings QUIC and macOS DNS support. They end up on the runtime classpath of every application, lengthening native
-  compilation. They could be optional, the way diagram generation with PlantUML is kept in the separate `diagram`
+  compilation. They could be optional, the way diagram generation is kept in the separate `diagram`
   module.
 - **No fully static executable on arm64.** Fully static executables require musl, which the GraalVM builder images only
   support on amd64. The demo links glibc dynamically and copies it into the image, which works on both architectures.

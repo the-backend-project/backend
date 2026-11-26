@@ -1,6 +1,6 @@
 # Diagrams
 
-The diagram module draws three kinds of diagrams with PlantUML:
+The diagram module draws three kinds of diagrams:
 
 - [State diagrams](#state-diagrams-of-entity-types) of the state machines of the entity types, the
   [entity models](entities.md) in the code: what can happen to an entity.
@@ -19,17 +19,17 @@ an actual payment.
 The diagrams follow the colour scheme of the page. In dark mode, their arrows and the text on them are drawn in light
 colours. Events whose transitions have a [severity](monitoring.md#severity) above `Info` are named in bold, after a
 symbol and in a colour for their severity: ⚠ in amber for `Warning`, ✖ in orange for `Error` and ‼ in red for
-`Critical`. `format()` gives the PlantUML source of a diagram, and `formatToImage(..)` writes it as SVG.
+`Critical`. `formatToImage(..)` writes a diagram as SVG, and `format()` gives its source text.
 
 The diagrams in this documentation are generated when it is built, by the `doc-diagrams` module. It is the only module
-depending on the diagram module, so PlantUML is never a dependency of the libraries or the apps. A code example in this
-documentation which creates an entity type has the state diagram of that entity type under it. The example is written
-out in `DocExamples` in `doc-diagrams`, as the documentation shows it, so the diagram is drawn from the model the
-example creates and the example is known to compile. A change to such an example is made in both places. The examples of
-the [getting started](getting-started.md) guide are taken from the hello world demo, and the diagrams of the [card
-payment template](cardpayments.md) and the [apps](apps.md) are drawn from the template and the apps themselves. A
-diagram of something else, such as how a [rollback](http-inbox.md#rollback) relates the event logs of several entities,
-is drawn by hand in the DOT language of Graphviz, in the resources of `doc-diagrams`, and rendered by
+depending on the diagram module, so the diagram module and its dependencies are never dependencies of the libraries or
+the apps. A code example in this documentation which creates an entity type has the state diagram of that entity type
+under it. The example is written out in `DocExamples` in `doc-diagrams`, as the documentation shows it, so the diagram
+is drawn from the model the example creates and the example is known to compile. A change to such an example is made in
+both places. The examples of the [getting started](getting-started.md) guide are taken from the hello world demo, and
+the diagrams of the [card payment template](cardpayments.md) and the [apps](apps.md) are drawn from the template and the
+apps themselves. A diagram of something else, such as how a [rollback](http-inbox.md#rollback) relates the event logs of
+several entities, is drawn by hand in the DOT language of Graphviz, in the resources of `doc-diagrams`, and rendered by
 `GraphvizFormatter` with `dot`.
 
 ## State diagrams of entity types
@@ -100,7 +100,7 @@ new SequenceDiagramFormatter(payment, related, inbox.entityModels()).formatToIma
 
 An event doesn't record what caused it, so the logs are replayed through the transitions of their entity types, like
 the state machine does, to find the transition each event took. This is done by `Replay` in the core library, which
-doesn't depend on PlantUML. A transition with choices stores the event of the choice it took, so the transition of an
+doesn't depend on the diagram module. A transition with choices stores the event of the choice it took, so the transition of an
 event is the path from the event triggered to the one stored, e.g. from `Request received` to `Request accepted` of an
 inbox request, and has the triggers and actions of the whole path.
 
