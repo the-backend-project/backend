@@ -19,6 +19,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.time.Instant;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -32,6 +33,9 @@ import net.sourceforge.plantuml.SourceStringReader;
 
 /// A sequence diagram of the event log of an entity, with related logs, e.g. those of its inbox and outbox requests,
 /// drawn with PlantUML from their [Replay].
+///
+/// The steps of each transaction are drawn in a group, named with its number in the diagram and its timestamp, which
+/// all its events have. The actions of a transaction follow its group, as they are run after it is committed.
 ///
 /// Each entity whose log is drawn has a lifeline, and so does each model of the deduced steps of entities which aren't
 /// stored. An event no step of the replay triggered arrives at its entity from outside the diagram. The events a
@@ -80,8 +84,20 @@ public class SequenceDiagramFormatter {
   public String format() {
     Participants participants = new Participants(replay.logs(), replay.steps());
     StringBuilder messages = new StringBuilder();
-    for (Step root : replay.roots())
-      step(root, root.outcomeOf().map(step -> participants.action(step, actionOf(step, root))).orElse(null), participants, messages);
+    List<Step> roots = replay.roots();
+    int transaction = 0;
+    for (int i = 0; i < roots.size(); ) {
+      // The roots of a transaction, whose events all have its timestamp, with the actions run after it is committed
+      Instant time = roots.get(i).event().timestamp().toInstant();
+      messages.append(String.format("group Transaction %d, %s\n", ++transaction, time));
+      StringBuilder actions = new StringBuilder();
+      for (; i < roots.size() && roots.get(i).event().timestamp().toInstant().equals(time); i++) {
+        Step root = roots.get(i);
+        String from = root.outcomeOf().map(step -> participants.action(step, actionOf(step, root))).orElse(null);
+        step(root, from, participants, messages, actions);
+      }
+      messages.append("end\n").append(actions);
+    }
     return String.format(
         """
         @startuml
@@ -93,6 +109,8 @@ public class SequenceDiagramFormatter {
         skinparam sequence {
           LifeLineBorderColor #4b5320
           LifeLineBackgroundColor #9bb08a
+          GroupBorderColor #8a9a5b
+          GroupBackgroundColor #9bb08a
         }
         hide footbox
 
@@ -105,8 +123,8 @@ public class SequenceDiagramFormatter {
   }
 
   /// Draws the step, triggered by the lifeline with the alias, or arriving from outside the diagram if it is null, with
-  /// the steps it triggered nested in it
-  private static void step(Step step, String from, Participants participants, StringBuilder messages) {
+  /// the steps it triggered nested in it, and adds its actions to those run after the transaction
+  private static void step(Step step, String from, Participants participants, StringBuilder messages, StringBuilder actions) {
     String entity = participants.of(step.log());
     String name = StateDiagramFormatter.eventName(step.event().type(), severity(step.transition()));
     if (step.isRolledBack())
@@ -119,7 +137,7 @@ public class SequenceDiagramFormatter {
     messages.append("activate ").append(entity).append('\n');
     for (Triggered triggered : step.triggered()) {
       if (triggered.step().isPresent()) {
-        step(triggered.step().get(), entity, participants, messages);
+        step(triggered.step().get(), entity, participants, messages, actions);
         continue;
       }
       EventTrigger<?, ?, ?> trigger = triggered.trigger();
@@ -136,7 +154,7 @@ public class SequenceDiagramFormatter {
           event
       ));
     }
-    step.performed().forEach(performed -> messages.append(String.format(
+    step.performed().forEach(performed -> actions.append(String.format(
         "%s ->> %s: \u26a1 %s\n",
         participants.message(entity, participants.action(step, performed.action())),
         participants.action(step, performed.action()),

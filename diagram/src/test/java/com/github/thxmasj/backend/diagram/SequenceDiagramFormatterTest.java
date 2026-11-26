@@ -182,8 +182,9 @@ class SequenceDiagramFormatterTest {
         activate P1
         P1 -> P4: Audited
         P1 -> P1: Shipped
-        P1 ->> A1: ⚡ Notify customer
         deactivate P1
+        end
+        P1 ->> A1: ⚡ Notify customer
         """
     );
   }
@@ -202,8 +203,9 @@ class SequenceDiagramFormatterTest {
         P1 -> P1: 3. Shipped
         activate P1
         deactivate P1
-        P1 ->> A1: ⚡ Notify customer
         deactivate P1
+        end
+        P1 ->> A1: ⚡ Notify customer
         """
     ).doesNotContain("[-> P1: 3.");
   }
@@ -297,12 +299,35 @@ class SequenceDiagramFormatterTest {
     event(Notified);
     assertThat(diagram()).contains(
         """
+        end
         P1 ->> A1: ⚡ Notify customer
-        deactivate P1
+        group Transaction 3, 2026-11-26T12:00:02Z
         A1 -> P1: 3. Notified
         """,
         "participant \"Notify customer\" as A1\n"
     ).doesNotContain("[-> P1: 3.");
+  }
+
+  /// The events of a transaction have its timestamp
+  @Test
+  void theStepsOfEachTransactionAreDrawnInAGroupOfTheirOwn() {
+    event(Placed);
+    nextTransaction();
+    event(Accepted);
+    event(Shipped);
+    String diagram = diagram();
+    assertThat(diagram).contains(
+        """
+        group Transaction 1, 2026-11-26T12:00:00Z
+        [-> P1: 1. Placed
+        """,
+        """
+        end
+        group Transaction 2, 2026-11-26T12:00:01Z
+        [-> P1: 2. Accepted
+        """
+    );
+    assertThat(diagram.split("group Transaction")).hasSize(3);
   }
 
   @Test
@@ -328,6 +353,8 @@ class SequenceDiagramFormatterTest {
         activate P1
         P1 -> P2: <color:#7A0000>Released</color>
         deactivate P1
+        end
+        group Transaction 3, 2026-11-26T12:00:02Z
         [-> P1: 3. Placed
         """
     );

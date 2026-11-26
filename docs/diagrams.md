@@ -126,6 +126,8 @@ the next event may as well have been triggered by another entity, e.g. an applic
 
 ### What is drawn
 
+- The steps of each transaction are drawn in a box, named with its number in the diagram and its timestamp. Everything
+  in a box was stored together, or nothing would have been.
 - Each entity whose log is drawn has a lifeline, and so has each model of the deduced entities. An event is numbered
   as in its log. A deduced event has no number, as it is never stored, and is named in italics.
 - An event triggered by an event of the replay is a synchronous message from that event's lifeline, nested in its
@@ -133,8 +135,9 @@ the next event may as well have been triggered by another entity, e.g. an applic
 - The other events a transition triggers are synchronous messages to the entity types they are triggered on. A
   conditional trigger, which is stored and fires later, is an asynchronous message. Events triggered on id and index
   entities are left out, as in the entity relationship diagram.
-- An action, which is run after the transaction is committed, is an asynchronous message to a lifeline of its own, for
-  each entity and action, from which its outcome comes back.
+- An action is an asynchronous message to a lifeline of its own, for each entity and action, after the box of its
+  transaction, as it is run after the transaction is committed. Its outcome comes back from that lifeline in a later
+  transaction.
 - A rollback is followed by the triggers of the reverse transitions of the events it rolls back, in the colour of a
   reversal, and the events rolled back are struck through.
 - The lifelines are in the order of the first message between two lifelines they take part in, so the diagram reads
@@ -143,13 +146,13 @@ the next event may as well have been triggered by another entity, e.g. an applic
 ### Example
 
 A payment of the card payment template, from the logs of its inbox request, the payment, its settlement and its two
-outbox requests, in three transactions after the settlement was opened, along the main path of the state diagram
-above:
+outbox requests, along the main path of the state diagram above:
 
-1. The request is accepted, and dispatched to a new payment, which sends an authentication request.
-2. The authentication is accepted, and the payment sends an authorisation request to the acquirer and completes the
+1. The settlement is opened, before the payment, by the cut-off of the previous one, whose log isn't given.
+2. The request is accepted, and dispatched to a new payment, which sends an authentication request.
+3. The authentication is accepted, and the payment sends an authorisation request to the acquirer and completes the
    inbox request, whose response goes back to the routing.
-3. The acquirer approves the authorisation, and the payment credits the merchant in the settlement and notifies the
+4. The acquirer approves the authorisation, and the payment credits the merchant in the settlement and notifies the
    merchant of the approval.
 
 <object data="../images/com.github.thxmasj.backend.diagram.sequence.Payment.svg" type="image/svg+xml"></object>

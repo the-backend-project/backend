@@ -82,7 +82,7 @@ public class Main {
         log(DocExamples.PaymentRequest, at(1, "Request accepted"), at(2, "Request completed")),
         log(model(models, "Authentication"), at(1, "Request dispatched"), at(2, "Request accepted")),
         log(model(models, "Authorisation"), at(2, "Request dispatched"), at(3, "Request accepted")),
-        // Opened by the merchant before the payment
+        // Opened before the payment, by the cut-off of the previous settlement
         log(DocExamples.CardPayments.settlement(), at(0, "Settlement opened"), at(3, "Merchant credited"))
     );
   }
