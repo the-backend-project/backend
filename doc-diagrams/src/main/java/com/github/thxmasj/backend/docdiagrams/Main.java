@@ -19,6 +19,7 @@ import com.github.thxmasj.backend.identityprovider.Clients;
 import com.github.thxmasj.backend.identityprovider.Inbox;
 import com.github.thxmasj.backend.identityprovider.Tokens;
 import com.github.thxmasj.backend.templates.cardpayment.DummyTransitions;
+import com.github.thxmasj.backend.templates.cardpayment.PaymentState;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
@@ -36,6 +37,7 @@ public class Main {
     httpOutbox();
     httpInbox();
     sequenceDiagrams();
+    diagramExamples();
     cardPayments();
     identityProvider();
     helloWorld();
@@ -66,18 +68,11 @@ public class Main {
     graphviz("http-inbox-rollback.dot", name + ".Rollback");
   }
 
-  /// The examples of sequence diagrams on the diagrams page, with the entity models of their state machines, from which
-  /// the routing of the inbox requests, which isn't stored, is deduced: a greeting of the hello world demo with its
-  /// inbox request, in one transaction, and a payment of the card payment template, requested from the inbox, and
-  /// authenticated and authorised by outbox requests, in three transactions
+  /// The example of a sequence diagram on the diagrams page, with the entity models of its state machine, from which the
+  /// routing of the inbox request, which isn't stored, is deduced: a payment of the card payment template, requested
+  /// from the inbox, and authenticated and authorised by outbox requests, in three transactions
   private static void sequenceDiagrams() throws IOException {
     var name = "com.github.thxmasj.backend.diagram.sequence.";
-    sequenceDiagram(
-        name + "Greeting",
-        Greetings.Inbox.entityModels(),
-        log(Greetings.Greeting, at(1, "Greeting requested")),
-        log(Greetings.GreetingRequest, at(1, "Request accepted"), at(1, "Greeting response created"))
-    );
     var models = EntityModel.reachable(DocExamples.PaymentInbox.entityModels());
     sequenceDiagram(
         name + "Payment",
@@ -90,6 +85,21 @@ public class Main {
         // Opened by the merchant before the payment
         log(DocExamples.CardPayments.settlement(), at(0, "Settlement opened"), at(3, "Merchant credited"))
     );
+  }
+
+  /// The examples of the state and entity relationship diagrams on the diagrams page, of the bounded context of the
+  /// payment of the sequence diagram example: the main path of a payment, from its request to its authorisation, and
+  /// the relations of the payments, merchants and settlements, without the inbox and outbox requests
+  private static void diagramExamples() throws IOException {
+    var name = "com.github.thxmasj.backend.diagram.";
+    var cardPayments = DocExamples.CardPayments;
+    System.out.println(new StateDiagramFormatter(cardPayments.payment())
+        .only(PaymentState.ProcessingAuthentication, PaymentState.ProcessingAuthorisation, PaymentState.Authorised)
+        .formatToImage(new File(directory, name + "state.Payment.svg")));
+    System.out.println(new EntityRelationshipDiagramFormatter(name + "cardpayment", cardPayments.entityModels())
+        .only(cardPayments.merchant(), cardPayments.payment(), cardPayments.settlement())
+        .compact()
+        .formatToImage(directory));
   }
 
   private static EntityModel model(List<EntityModel> models, String name) {

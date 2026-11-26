@@ -12,6 +12,10 @@ The diagram module draws three kinds of diagrams with PlantUML:
 
 The state and entity relationship diagrams are drawn from the transitions alone, so they are never out of date.
 
+The examples on this page are all of one bounded context, the payments, merchants and settlements of the
+[card payment template](cardpayments.md): the state diagram of a payment, how the three relate, and the event logs of
+an actual payment.
+
 The diagrams follow the colour scheme of the page. In dark mode, their arrows and the text on them are drawn in light
 colours. Events whose transitions have a [severity](monitoring.md#severity) above `Info` are named in bold, after a
 symbol and in a colour for their severity: ⚠ in amber for `Warning`, ✖ in orange for `Error` and ‼ in red for
@@ -30,16 +34,19 @@ is drawn by hand in the DOT language of Graphviz, in the resources of `doc-diagr
 
 ## State diagrams of entity types
 
-`StateDiagramFormatter` draws the state diagram of an entity type, e.g. of the client registrations of the
-[identity provider](identity-provider.md):
+`StateDiagramFormatter` draws the state diagram of an entity type. `only(..)` draws a part of it, the given states and
+the transitions to them, for an entity type too large to show in full, such as the payment of the card payment
+template, whose main path is:
 
 ```java
-new StateDiagramFormatter(ClientRegistration).formatToImage(new File("client-registration.svg"));
+new StateDiagramFormatter(cardPayments.payment())
+    .only(ProcessingAuthentication, ProcessingAuthorisation, Authorised)
+    .formatToImage(new File("payment.svg"));
 ```
 
-<object data="../images/com.github.thxmasj.backend.identityprovider.ClientRegistration.svg" type="image/svg+xml"></object>
+<object data="../images/com.github.thxmasj.backend.diagram.state.Payment.svg" type="image/svg+xml"></object>
 
-[Open the ClientRegistration diagram in full size](images/com.github.thxmasj.backend.identityprovider.ClientRegistration.svg)
+[Open the state diagram of the main path of a payment in full size](images/com.github.thxmasj.backend.diagram.state.Payment.svg)
 
 A state diagram shows the details of an event when the mouse hovers over its name: its data and the events and actions
 it triggers. An event of a type which is [not stored](entities.md#events-and-entities-not-stored) is named in italics.
@@ -48,28 +55,34 @@ To keep a state diagram small, the transitions between the same two states are d
 stacked, and the self transitions of a state as one loop. Choices with the same branches, i.e. the same events to the
 same states, are drawn as one choice. Several transitions leading to the same choice from a state are thereby one
 arrow: in the diagram of an [outbox request](http-outbox.md#atleastonce), a failed or dropped connection and a timeout
-lead to one choice between retrying the request and giving it up.
+lead to one choice between retrying the request and giving it up. A choice drawn with `only(..)` has the alternatives
+leading to the states given.
 
 ## Entity relationship diagrams of bounded contexts
 
 `EntityRelationshipDiagramFormatter` draws the entity relationship diagram of a bounded context, from the entity types
-given to its state machine and those their transitions trigger events on, e.g. of the
-[hello world demo](hello-world.md):
+given to its state machine and those their transitions trigger events on. `only(..)` draws the entity types of the
+domain, such as the payments, merchants and settlements of the card payment template, without the inbox and outbox
+requests, which relate to most of them:
 
 ```java
-new EntityRelationshipDiagramFormatter("hello-world", Inbox.entityModels()).formatToImage("diagrams");
+new EntityRelationshipDiagramFormatter("cardpayment", cardPayments.entityModels())
+    .only(cardPayments.merchant(), cardPayments.payment(), cardPayments.settlement())
+    .compact()
+    .formatToImage("diagrams");
 ```
 
-<object data="../images/com.github.thxmasj.backend.helloworld.er.svg" type="image/svg+xml"></object>
+<object data="../images/com.github.thxmasj.backend.diagram.cardpayment.er.svg" type="image/svg+xml"></object>
 
-[Open the entity relationship diagram of the hello world demo in full size](images/com.github.thxmasj.backend.helloworld.er.svg)
+[Open the entity relationship diagram of the card payments in full size](images/com.github.thxmasj.backend.diagram.cardpayment.er.svg)
 
 The entity types are related through the triggers of their transitions: an arrow from one entity type to another
-tells that an event on the first triggers an event on the other. Each entity type lists the event types it accepts,
-unless the diagram is `compact()`, which only shows the event types on the relations. A trigger on a group, such as
-`HttpInbox.Request`, relates to each entity type of the group, and triggers of reversals are red. The diagram leaves
-out [id](data-model.md#idevent) and [index](data-model.md#indexevent) entities, with the triggers of events on them, as
-they take much space and tell little about how the entities relate.
+tells that an event on the first triggers an event on the other, e.g. an approved authorisation of a payment credits
+the merchant in its settlement. Each entity type lists the event types it accepts, unless the diagram is `compact()`,
+which only shows the event types on the relations. A trigger on a group, such as `HttpInbox.Request`, relates to each
+entity type of the group, and triggers of reversals are red. The diagram leaves out [id](data-model.md#idevent) and
+[index](data-model.md#indexevent) entities, with the triggers of events on them, as they take much space and tell
+little about how the entities relate.
 
 ## Sequence diagrams of event logs
 
@@ -78,9 +91,9 @@ its [inbox](http-inbox.md) and [outbox](http-outbox.md) requests, e.g. read in a
 and the entity types of the state machine:
 
 ```java
-EventLog greeting = api.eventLog(Greeting, greetingId).block();
-EventLog request = api.eventLog(GreetingRequest, requestId).block();
-new SequenceDiagramFormatter(greeting, List.of(request), Inbox.entityModels()).formatToImage(new File("greeting.svg"));
+EventLog payment = api.eventLog(cardPayments.payment(), paymentId).block();
+List<EventLog> related = List.of(paymentRequest, authentication, authorisation, settlement);
+new SequenceDiagramFormatter(payment, related, inbox.entityModels()).formatToImage(new File("payment.svg"));
 ```
 
 ### How the logs are replayed
@@ -127,17 +140,11 @@ the next event may as well have been triggered by another entity, e.g. an applic
 - The lifelines are in the order of the first message between two lifelines they take part in, so the diagram reads
   from left to right.
 
-### Examples
+### Example
 
-A greeting of the [hello world demo](hello-world.md) with its inbox request, in one transaction: the routing of the
-request triggers it on the inbox request, which dispatches it to a new greeting, which responds to the request:
-
-<object data="../images/com.github.thxmasj.backend.diagram.sequence.Greeting.svg" type="image/svg+xml"></object>
-
-[Open the Greeting sequence diagram in full size](images/com.github.thxmasj.backend.diagram.sequence.Greeting.svg)
-
-A payment of the [card payment template](cardpayments.md), from the logs of its inbox request, the payment, its
-settlement and its two outbox requests, in three transactions after the settlement was opened:
+A payment of the card payment template, from the logs of its inbox request, the payment, its settlement and its two
+outbox requests, in three transactions after the settlement was opened, along the main path of the state diagram
+above:
 
 1. The request is accepted, and dispatched to a new payment, which sends an authentication request.
 2. The authentication is accepted, and the payment sends an authorisation request to the acquirer and completes the
@@ -149,6 +156,6 @@ settlement and its two outbox requests, in three transactions after the settleme
 
 [Open the Payment sequence diagram in full size](images/com.github.thxmasj.backend.diagram.sequence.Payment.svg)
 
-The logs of these examples are written out in `ExampleLogs` in `doc-diagrams`, by the names of their events and the
+The logs of this example are written out in `ExampleLogs` in `doc-diagrams`, by the names of their events and the
 transactions storing them. The template leaves the inbox requests to the application, so the payment request is
 `PaymentRequest` in `DocExamples`, with outbox requests calling back to the payment as an application's would.

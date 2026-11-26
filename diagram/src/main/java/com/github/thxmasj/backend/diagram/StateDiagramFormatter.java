@@ -42,11 +42,34 @@ public class StateDiagramFormatter {
 
   private final EntityModel model;
   Map<State, List<TransitionModel<?, ?>>> transitions;
+  /// The states shown, besides `Begin`, or null for all
+  private final Set<State> only;
 
   /// A state diagram of the transitions of the entity model
   public StateDiagramFormatter(EntityModel model) {
+    this(model, null);
+  }
+
+  private StateDiagramFormatter(EntityModel model, Set<State> only) {
     this.model = model;
     this.transitions = Map.copyOf(model.transitions());
+    this.only = only;
+  }
+
+  /// This formatter with only the states and the transitions between them, e.g. the main path of an entity model too
+  /// large to show in full. A transition with choices is shown with the alternatives leading to the states.
+  public StateDiagramFormatter only(State... states) {
+    return new StateDiagramFormatter(model, Set.of(states));
+  }
+
+  /// Whether the transition from the state is shown: one to a shown state, or a choice with an alternative which is
+  private boolean shown(State ownerState, TransitionModel<?, ?> transition) {
+    if (only == null)
+      return true;
+    if (!transition.filters().isEmpty())
+      return transition.filters().stream().anyMatch(filter -> shown(ownerState, filter.alternative().model()));
+    State target = transition.toState() != null ? transition.toState() : ownerState;
+    return target.equals(Begin) || only.contains(target);
   }
 
   public File formatToFile(String directory) throws IOException {
@@ -220,6 +243,7 @@ public class StateDiagramFormatter {
       """,
       // States, declared in the order the transitions reach them, as the layout depends on the declaration order
       transitions.keySet().stream()
+          .filter(state -> only == null || state.equals(Begin) || only.contains(state))
           .filter(state -> !state.name().equals("Intermediate"))
           .sorted(comparingInt(state -> firstOccurrence(transitionLines, state)))
           .map(state -> state(state))
@@ -278,6 +302,7 @@ public class StateDiagramFormatter {
   private String choiceBranches(State ownerState, TransitionModel<?, ?> transition) {
     State choice = new Choice("?");
     return transition.filters().stream()
+        .filter(filter -> shown(ownerState, filter.alternative().model()))
         .map(filter -> {
           TransitionModel<?, ?> alternative = filter.alternative().model();
           if (!alternative.filters().isEmpty())
@@ -296,6 +321,7 @@ public class StateDiagramFormatter {
     List<TransitionModel<?, ?>> transitionsForState = this.transitions.get(state);
     if (transitionsForState == null) throw new IllegalStateException(state.toString());
     for (TransitionModel<?, ?> transition : transitionsForState) {
+      if (!shown(state, transition)) continue;
       s.append(traverseForChoices(state, transition, visited));
     }
     return s.toString();
@@ -313,6 +339,7 @@ public class StateDiagramFormatter {
         return "";
       s.append(String.format("state %s <<choice>>\n", choiceName));
       for (var filter : transition.filters()) {
+        if (!shown(ownerState, filter.alternative().model())) continue;
         s.append(traverseForChoices(ownerState, filter.alternative().model(), visited));
       }
     } else {
@@ -331,6 +358,7 @@ public class StateDiagramFormatter {
     System.out.println("Formatting transitions from " + sourceState.name());
     StringBuilder s = new StringBuilder();
     for (TransitionModel<?, ?> transition : transitionsFromState) {
+      if (!shown(sourceState, transition)) continue;
       s.append(formatTransitionTree(sourceState, sourceState, visited, transition));
     }
     return s.toString();
@@ -351,6 +379,7 @@ public class StateDiagramFormatter {
       // The branches of a choice shared by several transitions are drawn once
       if (formattedChoices.add(choiceName)) {
         for (var filter : transition.filters()) {
+          if (!shown(ownerState, filter.alternative().model())) continue;
           s.append(formatTransitionTree(ownerState, choiceState, visited, filter.alternative().model()));
         }
       }

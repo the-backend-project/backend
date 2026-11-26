@@ -53,6 +53,27 @@ class StateDiagramFormatterTest {
     assertThat(diagram).contains("Choice1 --> " + refusedId + ": Refused\\nWithdrawn\n");
   }
 
+  /// Like the main path of an entity model too large to show in full
+  @Test
+  void onlyTheStatesGivenAndTheTransitionsAndAlternativesToThemAreShown() {
+    Map<State, List<TransitionModel<?, ?>>> transitions = Map.of(
+        Begin, List.of(onEvent(Requested).to(States.Waiting).output()),
+        States.Waiting, List.of(
+            onEvent(Accepted).to(States.Waiting).assembleInput()
+                .when(_ -> false).then(onEvent(Refused).to(States.Refused).output())
+                .otherwise(onEvent(Accepted).to(States.Accepted).output()),
+            onEvent(Withdrawn).to(States.Failed).output()
+        ),
+        States.Accepted, List.of(),
+        States.Refused, List.of(),
+        States.Failed, List.of()
+    );
+    String diagram = formatter(transitions).only(States.Waiting, States.Accepted).format();
+    String acceptedId = States.Accepted.name() + States.Accepted.hashCode();
+    assertThat(diagram).contains("Choice1 --> " + acceptedId + ": Accepted\n", "state \"Accepted\"")
+        .doesNotContain("Refused", "Withdrawn", "Failed");
+  }
+
   /// Like the retry of an outbox request after a timeout or a dropped connection, the choices of several transitions
   /// with the same branches are one choice, with the transitions into it on one arrow and its branches drawn once
   @Test

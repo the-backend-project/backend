@@ -119,6 +119,14 @@ class EntityRelationshipDiagramFormatterTest {
     assertThat(new EntityRelationshipDiagramFormatter("Test", model()).format()).doesNotContain("Ids", "Name claimed", "E4");
   }
 
+  /// Like the domain entities of a bounded context, without its inbox and outbox requests
+  @Test
+  void onlyTheEntitiesGivenAndTheRelationsBetweenThemAreShown() {
+    String diagram = new EntityRelationshipDiagramFormatter("Test", model()).only(Car, Speed).format();
+    assertThat(diagram).contains("entity \"Car\"", "entity \"Speed\"", "Car started ↪ Speed increased")
+        .doesNotContain("Engine", "Car stopped ↪ Car stopped");
+  }
+
   @Test
   void compactDiagramOmitsTheEventTypesOfTheEntities() {
     String diagram = new EntityRelationshipDiagramFormatter("Test", model()).compact().format();

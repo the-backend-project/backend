@@ -37,29 +37,39 @@ public class EntityRelationshipDiagramFormatter {
   private final String name;
   private final List<EntityModel> entityModels;
   private final boolean compact;
+  /// The entity models shown, or null for all but id and index entities
+  private final Set<EntityModel> only;
 
   /// @param name the name of the model, used for the names of the files the diagram is written to
   /// @param entityModels the entity models given to the state machine, which with those their transitions trigger events
   ///                     on are the entities of the diagram
   public EntityRelationshipDiagramFormatter(String name, List<? extends EntityModel> entityModels) {
-    this(name, EntityModel.reachable(entityModels), false);
+    this(name, EntityModel.reachable(entityModels), false, null);
   }
 
 
   private EntityRelationshipDiagramFormatter(
       String name,
       List<EntityModel> entityModels,
-      boolean compact
+      boolean compact,
+      Set<EntityModel> only
   ) {
     this.name = name;
     this.entityModels = entityModels;
     this.compact = compact;
+    this.only = only;
   }
 
   /// This formatter without the event types of the entities, for models with many entities or event types. The event
   /// types involved in the triggers are still shown on the relations.
   public EntityRelationshipDiagramFormatter compact() {
-    return new EntityRelationshipDiagramFormatter(name, entityModels, true);
+    return new EntityRelationshipDiagramFormatter(name, entityModels, true, only);
+  }
+
+  /// This formatter with only the entity models, and the relations between them, e.g. those of the domain, without the
+  /// inbox and outbox requests, which relate to most of them
+  public EntityRelationshipDiagramFormatter only(EntityModel... entityModels) {
+    return new EntityRelationshipDiagramFormatter(name, this.entityModels, compact, Set.of(entityModels));
   }
 
   public File formatToFile(String directory) throws IOException {
@@ -90,7 +100,7 @@ public class EntityRelationshipDiagramFormatter {
     Map<EntityModel, Set<EventType<?, ?>>> eventTypes = new LinkedHashMap<>();
     Set<Relation> relations = new LinkedHashSet<>();
     entityModels.stream()
-        .filter(EntityRelationshipDiagramFormatter::shown)
+        .filter(this::shown)
         .sorted(comparing(EntityModel::name))
         .forEach(model -> {
           eventTypes.computeIfAbsent(model, _ -> new LinkedHashSet<>());
@@ -184,7 +194,9 @@ public class EntityRelationshipDiagramFormatter {
         .toList();
   }
 
-  private static boolean shown(EntityModel entity) {
+  private boolean shown(EntityModel entity) {
+    if (only != null)
+      return only.contains(entity);
     return !(entity instanceof IdEntityModel) && !(entity instanceof IndexEntityModel);
   }
 
