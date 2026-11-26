@@ -900,8 +900,8 @@ public class TransitionModelBuilder<I, T, O> {
     )))));
   }
 
-  /// The event of the transition with the output, masked when stored if the mask isn't null. The event of a transition
-  /// which chose another one isn't stored, so it isn't masked: the event of the chosen one is stored, with its own mask.
+  /// The event of the transition with the output, masked when stored if the mask isn't null. A transition which
+  /// chooses another one has no event of its own, as it ends in the chosen one's, with that one's mask.
   private Event<O> event(TransitionStep<T> step, O output, UnaryOperator<O> mask) {
     if (output == null)
       throw new IllegalStateException(String.format(
@@ -913,7 +913,7 @@ public class TransitionModelBuilder<I, T, O> {
     UUID entityId = inputStep.log().entityId();
     int number = inputStep.log().lastEventNumber() + 1;
     // Marshalled when the transition is calculated, after its mask, see TransitionModel#calculate
-    return mask == null || step instanceof ChoiceStep<?> ?
+    return mask == null ?
         Event.marshalledWhenAskedFor(entityId, number, modelContext.eventType(), inputStep.timestamp(), output) :
         new Event<>(entityId, number, modelContext.eventType(), inputStep.timestamp(), output, mask);
   }

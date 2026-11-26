@@ -229,16 +229,17 @@ transitions they can choose. That has these consequences:
   the choices. Reverse models are compared by identity, so transitions with a reverse model are only alike if they
   share it.
 * **The severity is the one of the chosen transition.** The [severity](monitoring.md#severity) declared on the
-  choosing transition is that of its own event, which is not stored when it chooses another transition.
+  choosing transition has no effect, as its own event is never stored.
 * **So is the mask.** An event is stored with the mask of the chosen transition, if it has one (see
   [masked events](entities.md#events-and-entities-not-stored)).
-* **Data the choosing transition calculates is kept only through the chosen transition.** The output of the choosing
-  transition is never stored, so anything it assembles, e.g. from another system, has to be passed on to the chosen
-  transition, by `f`, and be in that transition's output to be read from the log later.
-* **The result of the transition is the event of the choosing transition.** A transition triggering the event, and the
-  caller of `StateMachine.onEvent`, get the event of the choosing transition, with its output and the number of the
-  stored event, while the log has the chosen one. Its output is calculated, and must not be null, but it isn't masked
-  or marshalled, as it isn't stored.
+* **Data the choosing transition calculates is kept only through the chosen transition.** The choosing transition has
+  no output, so anything it assembles, e.g. from another system, has to be passed on to the chosen transition, by
+  `f`, and be in that transition's output to be read from the log later.
+* **The result of the transition is that of the chosen one.** The choosing transition has no output of its own: it
+  ends in a `Completed` result, which refers to the result of the chosen transition, and to the number of the event
+  stored. A transition triggering the event can act on it with `isCompleted()`, and finds the stored event by
+  `completed().entityId()` and `completed().eventNumber()`. The caller of `StateMachine.onEvent` gets the events
+  stored, so the chosen one.
 
 ## Collecting the changes
 
