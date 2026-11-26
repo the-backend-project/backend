@@ -33,21 +33,16 @@ class Traverser {
   /// stored creates otherwise
   private final boolean hasEntitiesOfTheSessionOnly;
 
-  public Traverser(Map<State, List<TransitionModel<?, ?>>> transitions) {
-    this(transitions, true);
-  }
-
-  /// @param stored whether the entities are stored (see [EntityModel#stored()]), so that an event which is not
-  ///               stored must not change their state
-  public Traverser(Map<State, List<TransitionModel<?, ?>>> transitions, boolean stored) {
-    this(transitions, stored, null);
-  }
-
-  /// @param model the entity model of the transitions, by which a trigger on the model is told from one on another, or
-  ///              null if not known, when a trigger of an event type of the model is taken to be on it
-  public Traverser(Map<State, List<TransitionModel<?, ?>>> transitions, boolean stored, EntityModel model) {
-    this.transitions = transitions;
+  /// Checks the transitions of the entity model, and fails with all the refusals of them
+  ///
+  /// @param model the entity model whose transitions are checked. Whether its entities are stored (see
+  ///              [EntityModel#stored()]) tells whether an event which is not stored may change their state, and its
+  ///              id tells a trigger on the model from one on another.
+  /// @throws IllegalArgumentException with the refusals of the transitions
+  public Traverser(EntityModel model) {
+    this.transitions = model.transitions();
     this.model = model;
+    boolean stored = model.stored();
     this.hasEntitiesOfTheSessionOnly = !stored || transitions.getOrDefault(Begin, List.of()).stream()
         .flatMap(transition -> leaves(transition).stream())
         .anyMatch(leaf -> !leaf.eventType().stored());
@@ -216,10 +211,10 @@ class Traverser {
       requireNoIdOrIndex(filter.alternative().model());
   }
 
-  /// Whether the trigger is on the entity model of the transitions, or may be: on a group which includes it, or on any
-  /// model if the model isn't known
+  /// Whether the trigger is on the entity model of the transitions, or may be: on a group which includes it, or without
+  /// a model of its own, as a delayed trigger, which is on the entity of its transition
   private boolean isOnTheModel(EventTrigger<?, ?, ?> trigger) {
-    if (model == null || trigger.entityModel() == null)
+    if (trigger.entityModel() == null)
       return true;
     return trigger.entityModel().id().equals(model.id())
         || trigger.entityModel() instanceof EntityModelGroup group && group.includes(model);
