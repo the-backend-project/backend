@@ -33,7 +33,6 @@ import com.github.thxmasj.backend.core.database.UnknownEntity;
 import com.github.thxmasj.backend.core.internal.ActionTrigger;
 import com.github.thxmasj.backend.core.internal.Transaction;
 import com.github.thxmasj.backend.core.internal.Debug;
-import com.github.thxmasj.backend.core.internal.EntityModels;
 import com.github.thxmasj.backend.core.internal.DelayedEvent;
 import com.github.thxmasj.backend.core.internal.TransitionStep;
 import com.github.thxmasj.backend.core.internal.ResolvedModels;
@@ -69,7 +68,6 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -167,9 +165,8 @@ public class StateMachine implements AutoCloseable {
       Listener listener,
       boolean withResolving
   ) {
-    var failures = new LinkedHashMap<EntityModel, RuntimeException>();
-    List<EntityModel> models = EntityModels.resolve(entityModels, failures);
-    this.traversers = checkedTraversers(models, failures);
+    List<EntityModel> models = EntityModelChecks.check(entityModels);
+    this.traversers = traversers(models);
     ResolvedModels resolved = ResolvedModels.ofResolved(models);
     this.models = resolved;
     Debug.log("Supported entity models:\n" + models.stream().map(EntityModel::name).collect(joining("\n")));
@@ -220,34 +217,11 @@ public class StateMachine implements AutoCloseable {
     client.close();
   }
 
-  /// The traversers of the transitions of the models, which check them. Fails with the refusals of every model, and the
-  /// failures of the models whose transitions can't be created or checked, each named, so that the models are fixed in
-  /// one go. The failures are kept as suppressed exceptions of the one thrown, with their stack traces.
-  ///
-  /// @param failures the models whose transitions failed as they were resolved, with what they failed with
-  private static Map<EntityModel, Traverser> checkedTraversers(List<EntityModel> models, Map<EntityModel, RuntimeException> failures) {
+  /// The traversers of the transitions of the models, which are checked
+  private static Map<EntityModel, Traverser> traversers(List<EntityModel> models) {
     var traversers = new HashMap<EntityModel, Traverser>();
-    var refusals = new ArrayList<String>();
-    var causes = new ArrayList<RuntimeException>();
-    failures.forEach((model, e) -> {
-      refusals.add("The transitions of entity model " + model.name() + " can't be created: " + e);
-      causes.add(e);
-    });
-    for (var model : models) {
-      try {
-        traversers.put(model, new Traverser(model));
-      } catch (IllegalArgumentException e) {
-        refusals.add("The transitions of entity model " + model.name() + " are refused: " + e.getMessage());
-      } catch (RuntimeException e) {
-        refusals.add("The transitions of entity model " + model.name() + " can't be checked: " + e);
-        causes.add(e);
-      }
-    }
-    if (!refusals.isEmpty()) {
-      var e = new IllegalArgumentException(String.join("\n", refusals));
-      causes.forEach(e::addSuppressed);
-      throw e;
-    }
+    for (var model : models)
+      traversers.put(model, new Traverser(model));
     return traversers;
   }
 

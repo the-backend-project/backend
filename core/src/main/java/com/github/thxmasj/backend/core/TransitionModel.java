@@ -1,6 +1,7 @@
 package com.github.thxmasj.backend.core;
 
 import static com.github.thxmasj.backend.core.TransitionModelBuilder.log;
+import static java.util.Collections.unmodifiableList;
 
 import com.github.thxmasj.backend.core.BasicEventType.Rollback.Data;
 import com.github.thxmasj.backend.core.TransitionModelBuilder.Filter;
@@ -11,6 +12,7 @@ import com.github.thxmasj.backend.core.Tuples.Tuple4;
 import com.github.thxmasj.backend.core.internal.TransitionStep.ChoiceStep;
 import com.github.thxmasj.backend.core.internal.TransitionStep.InputStep;
 import com.github.thxmasj.backend.core.internal.TransitionStep.OutputStep;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -117,6 +119,20 @@ public class TransitionModel<I, O> {
 
   public List<Filter<?,?,?>> filters() {
     return modelContext.filters();
+  }
+
+  /// The transitions whose events the transition may store: its own if it has no choices, or else those it may choose,
+  /// which are all its outcomes, as a transition with choices always ends in `otherwise`, and its own event is never
+  /// stored
+  List<TransitionModel<?, ?>> leaves() {
+    ArrayList<TransitionModel<?, ?>> leaves = new ArrayList<>();
+    if (filters().isEmpty()) {
+      // transition is a leaf
+      leaves.add(this);
+    } else {
+      filters().stream().map(f -> f.alternative().model()).forEach(alternativeModel -> leaves.addAll(alternativeModel.leaves()));
+    }
+    return unmodifiableList(leaves);
   }
 
   public List<EventTrigger<?, ?, ?>> triggers() {

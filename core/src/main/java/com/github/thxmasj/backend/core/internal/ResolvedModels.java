@@ -29,7 +29,7 @@ public record ResolvedModels(
     return ofResolved(EntityModels.resolve(entityModels));
   }
 
-  /// The models already resolved by [EntityModels#resolve(List, Map)], without failures
+  /// The models already resolved, e.g. by `EntityModelChecks`, which checks them too
   public static ResolvedModels ofResolved(List<EntityModel> resolved) {
     return new ResolvedModels(
         resolved,

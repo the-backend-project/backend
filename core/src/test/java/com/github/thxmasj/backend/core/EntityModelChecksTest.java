@@ -5,6 +5,7 @@ import static com.github.thxmasj.backend.core.TransitionModelBuilder.WithEvent.o
 import static com.github.thxmasj.backend.core.TransitionModelBuilder.assemble;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -14,7 +15,7 @@ import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
-public class TraverserTest {
+public class EntityModelChecksTest {
 
   enum States implements State {Requested, Accepted, Rejected}
 
@@ -24,18 +25,18 @@ public class TraverserTest {
       Accepted = BasicEventType.of("Accepted", UUID.fromString("2c5f0a4e-8d1b-4f6a-9c3e-7b2d1e0f4a03")),
       Rejected = BasicEventType.of("Rejected", UUID.fromString("2c5f0a4e-8d1b-4f6a-9c3e-7b2d1e0f4a04"));
 
-  /// The model whose transitions are checked, for a trigger on it. The one checked is created by [#traverser(Map)]
-  /// with its id.
+  /// The model whose transitions are checked, for a trigger on it. The one checked is created by [#check(Map)] with
+  /// its id.
   static final EntityModel Self = EntityModel.of("Self", UUID.fromString("2c5f0a4e-8d1b-4f6a-9c3e-7b2d1e0f4a00"), Map::of);
 
-  /// The traverser of the transitions of a stored model with the id of [#Self]
-  static Traverser traverser(Map<State, List<TransitionModel<?, ?>>> transitions) {
-    return traverser(transitions, true);
+  /// Checks the transitions of a stored model with the id of [#Self]
+  static void check(Map<State, List<TransitionModel<?, ?>>> transitions) {
+    check(transitions, true);
   }
 
-  /// The traverser of the transitions of a model with the id of [#Self], stored or not
-  static Traverser traverser(Map<State, List<TransitionModel<?, ?>>> transitions, boolean stored) {
-    return new Traverser(stored
+  /// Checks the transitions of a model with the id of [#Self], stored or not
+  static void check(Map<State, List<TransitionModel<?, ?>>> transitions, boolean stored) {
+    EntityModelChecks.check(stored
         ? EntityModel.of(Self.name(), Self.id(), () -> transitions)
         : EntityModel.notStored(Self.name(), Self.id(), () -> transitions));
   }
@@ -56,7 +57,7 @@ public class TraverserTest {
 
   @Test
   public void uniquePathsAreAccepted() {
-    assertDoesNotThrow(() -> traverser(Map.of(
+    assertDoesNotThrow(() -> check(Map.of(
         Begin, List.of(choosing(Requested, reject(States.Rejected))),
         States.Accepted, List.of(reject(States.Rejected))
     )));
@@ -65,21 +66,21 @@ public class TraverserTest {
   @Test
   public void sameTransitionByTwoPathsIsAccepted() {
     var rejection = reject(States.Rejected);
-    assertDoesNotThrow(() -> traverser(Map.of(
+    assertDoesNotThrow(() -> check(Map.of(
         Begin, List.of(choosing(Requested, rejection), choosing(Retried, rejection))
     )));
   }
 
   @Test
   public void alikeTransitionsBuiltSeparatelyAreAccepted() {
-    assertDoesNotThrow(() -> traverser(Map.of(
+    assertDoesNotThrow(() -> check(Map.of(
         Begin, List.of(choosing(Requested, reject(States.Rejected)), choosing(Retried, reject(States.Rejected)))
     )));
   }
 
   @Test
   public void twoChoicesOfTheSameEventTypeAreRejected() {
-    var e = assertThrows(IllegalArgumentException.class, () -> traverser(Map.of(
+    var e = assertThrows(IllegalArgumentException.class, () -> check(Map.of(
         Begin, List.of(choosing(Requested, reject(States.Rejected)), choosing(Retried, reject(States.Requested)))
     )));
     assertTrue(e.getMessage().startsWith("Event type Rejected has transitions from Begin "), e.getMessage());
@@ -91,14 +92,14 @@ public class TraverserTest {
         .assembleInput()
         .reversible(assemble((_, _) -> null))
         .output();
-    assertThrows(IllegalArgumentException.class, () -> traverser(Map.of(
+    assertThrows(IllegalArgumentException.class, () -> check(Map.of(
         Begin, List.of(choosing(Requested, reject(States.Rejected)), choosing(Retried, reversibleRejection))
     )));
   }
 
   @Test
   public void choiceOfAnEventTypeTransitionedOnDirectlyIsRejected() {
-    assertThrows(IllegalArgumentException.class, () -> traverser(Map.of(
+    assertThrows(IllegalArgumentException.class, () -> check(Map.of(
         Begin, List.of(choosing(Requested, reject(States.Rejected)), reject(States.Requested))
     )));
   }
@@ -107,11 +108,11 @@ public class TraverserTest {
 
   @Test
   public void anEventNotStoredStayingInItsStateIsAccepted() {
-    assertDoesNotThrow(() -> traverser(Map.of(
+    assertDoesNotThrow(() -> check(Map.of(
         Begin, List.of(acceptance),
         States.Accepted, List.of(onEvent(Viewed).toSelf().output())
     )));
-    assertDoesNotThrow(() -> traverser(Map.of(
+    assertDoesNotThrow(() -> check(Map.of(
         Begin, List.of(acceptance),
         States.Accepted, List.of(onEvent(Viewed).to(States.Accepted).output())
     )));
@@ -119,7 +120,7 @@ public class TraverserTest {
 
   @Test
   public void anEventNotStoredChangingTheStateOfAStoredEntityIsRejected() {
-    var e = assertThrows(IllegalArgumentException.class, () -> traverser(Map.of(
+    var e = assertThrows(IllegalArgumentException.class, () -> check(Map.of(
         Begin, List.of(acceptance),
         States.Accepted, List.of(onEvent(Retried).toSelf().assembleInput().when(_ -> true).then(onEvent(Viewed).to(States.Rejected).output()).otherwise(reject(States.Rejected)))
     )));
@@ -130,7 +131,7 @@ public class TraverserTest {
   @Test
   public void aTransitionWithTwoDelayedTriggersIsRejected() {
     var twice = onEvent(Retried).toSelf().trigger(Accepted).after(_ -> Duration.ofMinutes(1)).trigger(Rejected).after(_ -> Duration.ofMinutes(2)).output();
-    var e = assertThrows(IllegalArgumentException.class, () -> traverser(Map.of(Begin, List.of(acceptance), States.Accepted, List.of(twice))));
+    var e = assertThrows(IllegalArgumentException.class, () -> check(Map.of(Begin, List.of(acceptance), States.Accepted, List.of(twice))));
     assertTrue(e.getMessage().startsWith("The transition on Retried triggers 2 delayed events"), e.getMessage());
   }
 
@@ -144,7 +145,7 @@ public class TraverserTest {
         .when(_ -> false).then(acceptance, _ -> null)
         .when(_ -> false).then(reject(States.Rejected), _ -> null)
         .otherwise(onEvent(Requested).to(States.Requested).output(), _ -> null);
-    var e = assertThrows(IllegalArgumentException.class, () -> traverser(Map.of(Begin, List.of(acceptance), States.Accepted, List.of(twiceChoosing))));
+    var e = assertThrows(IllegalArgumentException.class, () -> check(Map.of(Begin, List.of(acceptance), States.Accepted, List.of(twiceChoosing))));
     assertEquals(
         "The transition on Retried triggers 2 delayed events, but an entity has at most one pending delayed trigger, so " +
             "the second would replace the first",
@@ -160,7 +161,7 @@ public class TraverserTest {
         .trigger(Accepted).after(_ -> Duration.ofMinutes(1))
         .when(_ -> false).then(acceptance, _ -> null)
         .otherwise(onEvent(Rejected).to(States.Rejected).trigger(Requested).after(_ -> Duration.ofMinutes(2)).output(), _ -> null);
-    var e = assertThrows(IllegalArgumentException.class, () -> traverser(Map.of(Begin, List.of(acceptance), States.Accepted, List.of(delayedChoosing))));
+    var e = assertThrows(IllegalArgumentException.class, () -> check(Map.of(Begin, List.of(acceptance), States.Accepted, List.of(delayedChoosing))));
     assertTrue(e.getMessage().startsWith("The transition on Rejected triggers 2 delayed events, with the transitions choosing it, "), e.getMessage());
   }
 
@@ -175,26 +176,26 @@ public class TraverserTest {
         .trigger(QuietlyRetried).on(Self).identifiedBy(_ -> null)
         .output();
     var quiet = onEvent(QuietlyRetried).toSelf().trigger(Rejected).after(_ -> Duration.ofMinutes(2)).output();
-    var e = assertThrows(IllegalArgumentException.class, () -> traverser(Map.of(Begin, List.of(acceptance), States.Accepted, List.of(delayedThenQuiet, quiet))));
+    var e = assertThrows(IllegalArgumentException.class, () -> check(Map.of(Begin, List.of(acceptance), States.Accepted, List.of(delayedThenQuiet, quiet))));
     assertTrue(e.getMessage().startsWith("The transition on Retried triggers Quietly retried, which isn't stored and has a delayed trigger"), e.getMessage());
     var quietWithoutDelay = onEvent(QuietlyRetried).toSelf().output();
-    assertDoesNotThrow(() -> traverser(Map.of(Begin, List.of(acceptance), States.Accepted, List.of(delayedThenQuiet, quietWithoutDelay))));
+    assertDoesNotThrow(() -> check(Map.of(Begin, List.of(acceptance), States.Accepted, List.of(delayedThenQuiet, quietWithoutDelay))));
     // On another model, the two delayed triggers are on different entities
     Map<State, List<TransitionModel<?, ?>>> transitions = Map.of(Begin, List.of(acceptance), States.Accepted, List.of(delayedThenQuiet, quiet));
-    assertDoesNotThrow(() -> new Traverser(EntityModel.of("Another", UUID.randomUUID(), () -> transitions)));
+    assertDoesNotThrow(() -> EntityModelChecks.check(EntityModel.of("Another", UUID.randomUUID(), () -> transitions)));
     // On a group which includes the model, it may be the same entity
     var onGroup = onEvent(Retried).toSelf()
         .trigger(Accepted).after(_ -> Duration.ofMinutes(1))
         .trigger(QuietlyRetried).on(EntityModelGroup.of("Group", UUID.randomUUID(), m -> m.id().equals(Self.id()))).identifiedBy(_ -> null)
         .output();
-    assertThrows(IllegalArgumentException.class, () -> traverser(Map.of(Begin, List.of(acceptance), States.Accepted, List.of(onGroup, quiet))));
+    assertThrows(IllegalArgumentException.class, () -> check(Map.of(Begin, List.of(acceptance), States.Accepted, List.of(onGroup, quiet))));
   }
 
   /// All the refusals of a model are reported together, so it is fixed in one go
   @Test
   public void allRefusalsAreReportedTogether() {
     var twice = onEvent(Retried).toSelf().trigger(Accepted).after(_ -> Duration.ofMinutes(1)).trigger(Rejected).after(_ -> Duration.ofMinutes(2)).output();
-    var e = assertThrows(IllegalArgumentException.class, () -> traverser(Map.of(
+    var e = assertThrows(IllegalArgumentException.class, () -> check(Map.of(
         Begin, List.of(acceptance),
         States.Accepted, List.of(twice),
         States.Rejected, List.of(onEvent(Retried).to(States.Requested).output())
@@ -215,7 +216,7 @@ public class TraverserTest {
         .when(_ -> false).then(reject(States.Rejected), _ -> null)
         .otherwise(onEvent(Requested).to(States.Requested).output(), _ -> null);
     var quiet = onEvent(QuietlyRetried).toSelf().trigger(Rejected).after(_ -> Duration.ofMinutes(2)).output();
-    var e = assertThrows(IllegalArgumentException.class, () -> traverser(Map.of(
+    var e = assertThrows(IllegalArgumentException.class, () -> check(Map.of(
         Begin, List.of(acceptance),
         States.Accepted, List.of(delayedThenQuietChoosing, quiet),
         States.Rejected, List.of(quiet),
@@ -235,7 +236,7 @@ public class TraverserTest {
     var retriedChoosingQuiet = onEvent(Retried).toSelf()
         .assembleInput()
         .otherwise(onEvent(QuietlyRetried).toSelf().trigger(Accepted).after(_ -> Duration.ofMinutes(2)).output(), d -> d);
-    assertThrows(IllegalArgumentException.class, () -> traverser(Map.of(Begin, List.of(acceptance), States.Accepted, List.of(delayedThenRetried, retriedChoosingQuiet))));
+    assertThrows(IllegalArgumentException.class, () -> check(Map.of(Begin, List.of(acceptance), States.Accepted, List.of(delayedThenRetried, retriedChoosingQuiet))));
     // An event not stored which chooses a stored one, with a delayed trigger, is numbered after it
     var quietChoosingStored = onEvent(QuietlyRetried).toSelf()
         .assembleInput()
@@ -244,13 +245,13 @@ public class TraverserTest {
         .trigger(Accepted).after(_ -> Duration.ofMinutes(1))
         .trigger(QuietlyRetried).on(Self).identifiedBy(_ -> null)
         .output();
-    assertDoesNotThrow(() -> traverser(Map.of(Begin, List.of(acceptance), States.Accepted, List.of(delayedThenQuiet, quietChoosingStored))));
+    assertDoesNotThrow(() -> check(Map.of(Begin, List.of(acceptance), States.Accepted, List.of(delayedThenQuiet, quietChoosingStored))));
   }
 
   /// A transition from `Begin` creates the entity, so it can't stay in `Begin`
   @Test
   public void aTransitionFromBeginStayingInBeginIsRejected() {
-    var e = assertThrows(IllegalArgumentException.class, () -> traverser(Map.of(Begin, List.of(onEvent(Accepted).toSelf().output()))));
+    var e = assertThrows(IllegalArgumentException.class, () -> check(Map.of(Begin, List.of(onEvent(Accepted).toSelf().output()))));
     assertTrue(e.getMessage().startsWith("The transition on Accepted from Begin stays in Begin"), e.getMessage());
   }
 
@@ -258,11 +259,11 @@ public class TraverserTest {
   /// is refused
   @Test
   public void aStateNotReachedFromBeginIsRejected() {
-    var noBegin = assertThrows(IllegalArgumentException.class, () -> traverser(Map.of(
+    var noBegin = assertThrows(IllegalArgumentException.class, () -> check(Map.of(
         States.Accepted, List.of(onEvent(Viewed).to(States.Rejected).output())
     )));
     assertTrue(noBegin.getMessage().startsWith("The model has transitions, but none from Begin"), noBegin.getMessage());
-    var unreached = assertThrows(IllegalArgumentException.class, () -> traverser(Map.of(
+    var unreached = assertThrows(IllegalArgumentException.class, () -> check(Map.of(
         Begin, List.of(acceptance),
         States.Accepted, List.of(),
         States.Rejected, List.of(onEvent(Viewed).to(States.Requested).output())
@@ -272,17 +273,48 @@ public class TraverserTest {
 
   @Test
   public void anEventNotStoredCreatingAnEntityOrOnAnEntityNotStoredMayChangeItsState() {
-    assertDoesNotThrow(() -> traverser(Map.of(Begin, List.of(onEvent(Viewed).to(States.Accepted).output()))));
+    assertDoesNotThrow(() -> check(Map.of(Begin, List.of(onEvent(Viewed).to(States.Accepted).output()))));
     // The entities of a stored model created by an event not stored are of the session only, so the states only they
     // reach may be left by events not stored
-    assertDoesNotThrow(() -> traverser(Map.of(
+    assertDoesNotThrow(() -> check(Map.of(
         Begin, List.of(onEvent(Viewed).to(States.Requested).output()),
         States.Requested, List.of(onEvent(Viewed).to(States.Accepted).output())
     )));
-    assertDoesNotThrow(() -> traverser(Map.of(
+    assertDoesNotThrow(() -> check(Map.of(
         Begin, List.of(acceptance),
         States.Accepted, List.of(onEvent(Viewed).to(States.Rejected).output())
     ), false));
   }
 
+  /// A model whose transitions supplier fails doesn't hide the refusals of another model, so both are fixed in one go
+  @Test
+  public void aFailingSupplierAndARefusedModelAreBothReported() {
+    var failure = new IllegalStateException("Not configured");
+    var failing = EntityModel.of("Failing", UUID.randomUUID(), () -> {throw failure;});
+    var refused = EntityModel.of("Refused", UUID.randomUUID(), () -> Map.of(
+        Begin, List.of(onEvent(Requested).to(States.Requested)
+            .trigger(Accepted).after(_ -> Duration.ofMinutes(1))
+            .trigger(Rejected).after(_ -> Duration.ofMinutes(2))
+            .output())
+    ));
+    var e = assertThrows(IllegalArgumentException.class, () -> EntityModelChecks.check(List.of(failing, refused)));
+    assertEquals(
+        "The transitions of entity model Failing can't be created: java.lang.IllegalStateException: Not configured\n" +
+            "The transitions of entity model Refused are refused: The transition on Requested triggers 2 delayed events, " +
+            "but an entity has at most one pending delayed trigger, so the second would replace the first",
+        e.getMessage()
+    );
+    assertSame(failure, e.getSuppressed()[0]);
+  }
+
+  /// Two instances of a model with the same id are refused, as they may differ
+  @Test
+  public void twoModelsWithTheSameIdAreRefused() {
+    var id = UUID.randomUUID();
+    var e = assertThrows(IllegalArgumentException.class, () -> EntityModelChecks.check(List.of(
+        EntityModel.of("First", id, Map::of),
+        EntityModel.of("Second", id, Map::of)
+    )));
+    assertTrue(e.getMessage().startsWith("Entity models First and Second have the same id"), e.getMessage());
+  }
 }
