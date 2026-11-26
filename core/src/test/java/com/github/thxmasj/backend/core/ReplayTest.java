@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.github.thxmasj.backend.core.Replay.Step;
+import java.time.Duration;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
@@ -16,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import reactor.core.publisher.Mono;
 
 class ReplayTest {
 
@@ -116,6 +118,53 @@ class ReplayTest {
     EventLog submission = new EventLog(Submission, id, List.of(new Event<>(id, 1, Accepted, time)));
     Step root = Replay.of(submission).roots().getFirst();
     assertSame(submission, root.log());
+  }
+
+  enum OutboxStates implements State {Waiting, Done}
+
+  static final EventType<Void, Void> Sent = BasicEventType.of("Sent", UUID.randomUUID());
+  static final EventType<Void, Void> Replied = BasicEventType.of("Replied", UUID.randomUUID());
+  static final EventType<Void, Void> Expired = BasicEventType.of("Expired", UUID.randomUUID());
+
+  static final Action<Void> Forward = new Action<>() {
+    @Override public String name() {return "Forward";}
+    @Override public Mono<InputEvent<?>> execute(Void data) {return Mono.just(new InputEvent<>(Replied, null));}
+  };
+
+  /// Sends a request by an action, whose outcome is Replied, and expires by a delayed trigger, like an outbox request
+  static final EntityModel Outbox = EntityModel.of("Outbox", UUID.randomUUID(), () -> Map.of(
+      Begin, List.<TransitionModel<?, ?>>of(
+          onEvent(Sent).to(OutboxStates.Waiting).assembleInput()
+              .trigger(Expired).with(d -> d).after(_ -> Duration.ofSeconds(5))
+              .trigger(Forward).with(_ -> null)
+              .output()
+      ),
+      OutboxStates.Waiting, List.<TransitionModel<?, ?>>of(
+          onEvent(Replied).to(OutboxStates.Done).output(),
+          onEvent(Expired).to(OutboxStates.Done).output()
+      ),
+      OutboxStates.Done, List.of()
+  ));
+
+  private static EventLog outbox(EventType<Void, Void> outcome) {
+    UUID id = UUID.randomUUID();
+    return new EventLog(Outbox, id, List.of(new Event<>(id, 1, Sent, time), new Event<>(id, 2, outcome, time.plusSeconds(1))));
+  }
+
+  @Test
+  void anEventNoTransitionTriggersInALaterTransactionIsTheOutcomeOfAnAction() {
+    Replay replay = Replay.of(outbox(Replied));
+    Step sent = replay.steps().getFirst();
+    Step replied = replay.steps().getLast();
+    assertSame(sent, replied.outcomeOf().orElseThrow());
+    assertSame(replied, sent.performed().getFirst().outcome().orElseThrow());
+  }
+
+  @Test
+  void aDelayedEventIsNotTheOutcomeOfAnAction() {
+    Replay replay = Replay.of(outbox(Expired));
+    assertTrue(replay.steps().getLast().outcomeOf().isEmpty());
+    assertTrue(replay.steps().getFirst().performed().getFirst().outcome().isEmpty());
   }
 
   @Test

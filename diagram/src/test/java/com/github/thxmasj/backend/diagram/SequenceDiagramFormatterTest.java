@@ -54,6 +54,7 @@ class SequenceDiagramFormatterTest {
   static final EventType<Void, Void> Answered = BasicEventType.of("Answered", UUID.randomUUID());
   static final EventType<Void, Void> Arrived = BasicEventType.of("Arrived", UUID.randomUUID());
   static final EventType<Void, Void> Responded = BasicEventType.of("Responded", UUID.randomUUID());
+  static final EventType<Void, Void> Notified = BasicEventType.of("Notified", UUID.randomUUID());
   static final EventType<UUID, UUID> Indexed = BasicEventType.of("Indexed", UUID.randomUUID(), DataType.uuid());
 
   static final EntityModel Stock = EntityModel.of("Stock", UUID.randomUUID(), Map::of);
@@ -102,7 +103,8 @@ class SequenceDiagramFormatterTest {
                     .trigger(Shipped).on(Order).identifiedBy(entityIdFromSession())
                     .output(), _ -> null)
         ),
-        States.Accepted, List.<TransitionModel<?, ?>>of(onEvent(Shipped).toSelf().output()),
+        // Notified is the outcome of the action notifying the customer, which no transition triggers
+        States.Accepted, List.<TransitionModel<?, ?>>of(onEvent(Shipped).toSelf().output(), onEvent(Notified).toSelf().output()),
         States.Refused, List.of()
     );
   }
@@ -180,7 +182,7 @@ class SequenceDiagramFormatterTest {
         activate P1
         P1 -> P4: Audited
         P1 -> P1: Shipped
-        P1 ->>] : ⚡ Notify customer
+        P1 ->> A1: ⚡ Notify customer
         deactivate P1
         """
     );
@@ -200,7 +202,7 @@ class SequenceDiagramFormatterTest {
         P1 -> P1: 3. Shipped
         activate P1
         deactivate P1
-        P1 ->>] : ⚡ Notify customer
+        P1 ->> A1: ⚡ Notify customer
         deactivate P1
         """
     ).doesNotContain("[-> P1: 3.");
@@ -284,6 +286,23 @@ class SequenceDiagramFormatterTest {
         new Event<>(requestId, 2, Answered, transaction)
     ));
     assertThat(new SequenceDiagramFormatter(request).format()).doesNotContain("Indexed", "\"Index\"");
+  }
+
+  @Test
+  void theOutcomeOfAnActionComesBackFromTheLifelineOfTheAction() {
+    event(Placed);
+    nextTransaction();
+    event(Accepted);
+    nextTransaction();
+    event(Notified);
+    assertThat(diagram()).contains(
+        """
+        P1 ->> A1: ⚡ Notify customer
+        deactivate P1
+        A1 -> P1: 3. Notified
+        """,
+        "participant \"Notify customer\" as A1\n"
+    ).doesNotContain("[-> P1: 3.");
   }
 
   @Test

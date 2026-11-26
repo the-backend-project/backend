@@ -7,9 +7,11 @@ import com.github.thxmasj.backend.core.BasicEventType.Rollback;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Stream;
 
 /// Event logs replayed through the transitions of their entity models, for drawing them, e.g. as a sequence diagram: the
@@ -34,6 +36,13 @@ import java.util.stream.Stream;
 /// from their logs, which can be given. An event with neither is a root of the replay, e.g. one given to the state
 /// machine from outside, or triggered by an entity whose log isn't given.
 ///
+/// The outcome of an action, such as the response to an outbox request forwarded, is given back to the entity which ran
+/// it, in a later transaction. Which event it is isn't declared, but an event which no transition of the models
+/// triggers, neither at once, conditionally nor delayed, can only be the outcome of an action or be given from outside.
+/// Such an event is taken to be the outcome of the first action of the latest earlier transaction of its entity whose
+/// outcome isn't found yet. The models are those of the logs, those given, and those their transitions trigger events
+/// on.
+///
 /// A rollback takes the reverse transitions of the events it rolls back, latest first, whose triggers are those of the
 /// rollback.
 public final class Replay {
@@ -51,6 +60,9 @@ public final class Replay {
   /// @param reversal whether it is triggered by the reverse transition of an event rolled back
   public record Triggered(EventTrigger<?, ?, ?> trigger, boolean reversal, Optional<Step> step) {}
 
+  /// An action run after the transaction of a step, and the step of its outcome if it is in the replay
+  public record Performed(Action<?> action, Optional<Step> outcome) {}
+
   /// An event of a log, or a deduced one of an entity which isn't stored, with the path of transitions it took, the
   /// events they triggered, and the step whose transition triggered it, if it is in the replay
   public static final class Step {
@@ -61,7 +73,9 @@ public final class Replay {
     private final List<Step> rolledBack;
     private final boolean deduced;
     private final List<Triggered> triggered = new ArrayList<>();
+    private final List<Performed> performed = new ArrayList<>();
     private Step cause;
+    private Step outcomeOf;
     private boolean isRolledBack;
 
     private Step(EventLog log, Event<?> event, List<TransitionModel<?, ?>> path, List<Step> rolledBack, boolean deduced) {
@@ -71,6 +85,7 @@ public final class Replay {
       this.rolledBack = rolledBack;
       this.deduced = deduced;
       path.forEach(t -> t.triggers().forEach(trigger -> triggered.add(new Triggered(trigger, false, Optional.empty()))));
+      path.forEach(t -> t.actions().forEach(action -> performed.add(new Performed(action, Optional.empty()))));
       for (Step reversed : rolledBack) {
         TransitionModel<?, ?> reverse = reversed.transition().reverseModel();
         if (reverse != null)
@@ -110,9 +125,9 @@ public final class Replay {
       return unmodifiableList(triggered);
     }
 
-    /// The actions of the transitions of the path
-    public List<Action<?>> actions() {
-      return path.stream().flatMap(t -> t.actions().stream()).toList();
+    /// The actions of the transitions of the path, run after the transaction, with the steps of their outcomes
+    public List<Performed> performed() {
+      return unmodifiableList(performed);
     }
 
     /// For a rollback, the steps of the events it rolled back, latest first
@@ -128,6 +143,11 @@ public final class Replay {
     /// The step whose transition triggered the event, if it is in the replay
     public Optional<Step> cause() {
       return Optional.ofNullable(cause);
+    }
+
+    /// The step whose action the event is the outcome of, if it is in the replay
+    public Optional<Step> outcomeOf() {
+      return Optional.ofNullable(outcomeOf);
     }
 
     /// The type of the event triggered to take the path
@@ -187,6 +207,14 @@ public final class Replay {
       }
       all.add(step);
     }
+    Set<EventType<?, ?>> triggeredTypes = triggeredTypes(
+        Stream.concat(allLogs.stream().map(EventLog::entityModel), entityModels.stream()).distinct().toList()
+    );
+    for (int i = 0; i < all.size(); i++) {
+      Step step = all.get(i);
+      if (step.cause == null && !step.deduced && !triggeredTypes.contains(step.triggeredType()))
+        matchOutcome(step, all.subList(0, i));
+    }
     return new Replay(List.copyOf(allLogs), unmodifiableList(all));
   }
 
@@ -201,7 +229,8 @@ public final class Replay {
     return steps;
   }
 
-  /// The steps no step of the replay triggered, in order
+  /// The steps no step of the replay triggered, in order, including the outcomes of actions, which come in
+  /// transactions of their own
   public List<Step> roots() {
     return steps.stream().filter(step -> step.cause == null).toList();
   }
@@ -234,6 +263,38 @@ public final class Replay {
       }
     }
     return false;
+  }
+
+  /// Takes the step to be the outcome of the first action of the latest step before it, of the same entity in an earlier
+  /// transaction, with an action whose outcome isn't found yet
+  private static void matchOutcome(Step step, List<Step> before) {
+    for (Step candidate : before.reversed()) {
+      if (candidate.log() != step.log() || !candidate.time().isBefore(step.time()))
+        continue;
+      for (int i = 0; i < candidate.performed.size(); i++) {
+        Performed performed = candidate.performed.get(i);
+        if (performed.outcome().isEmpty()) {
+          candidate.performed.set(i, new Performed(performed.action(), Optional.of(step)));
+          step.outcomeOf = candidate;
+          return;
+        }
+      }
+    }
+  }
+
+  /// The types of the events the transitions of the models, and of those they trigger events on, trigger at once,
+  /// conditionally, delayed or when reversed
+  private static Set<EventType<?, ?>> triggeredTypes(List<EntityModel> models) {
+    Set<EventType<?, ?>> types = new HashSet<>();
+    for (EntityModel model : EntityModel.reachable(models)) {
+      model.transitions().values().stream().flatMap(List::stream).flatMap(Replay::paths).flatMap(List::stream).forEach(t -> {
+        t.triggers().forEach(trigger -> types.add(trigger.eventType()));
+        types.addAll(t.delayedEventTypes());
+        if (t.reverseModel() != null)
+          t.reverseModel().triggers().forEach(trigger -> types.add(trigger.eventType()));
+      });
+    }
+    return types;
   }
 
   /// The step of an entity of a model which isn't stored that triggered the step, if exactly one transition of such a

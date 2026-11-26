@@ -69,8 +69,12 @@ outside the diagram.
   they are stored in the same transaction. A conditional trigger, which is stored and fires later, is an asynchronous
   message. Events triggered on [id](data-model.md#idevent) and [index](data-model.md#indexevent) entities are left out,
   as in the ER diagram.
-- The actions of a transition, such as forwarding an outbox request, leave the diagram, as they are run after the
-  transaction is committed. What they get back arrives from outside in a later transaction.
+- An action of a transition, such as forwarding an outbox request, is an asynchronous message to a lifeline of its
+  own, as it is run after the transaction is committed. The state machine gives its outcome, e.g. the response, back
+  to the entity which ran it, in a transaction of its own, but which event that is isn't declared. An event no
+  transition of the models triggers, neither at once, conditionally nor delayed, can only be the outcome of an action
+  or be given from outside, so it is drawn as coming back from the action of the latest earlier transaction of its
+  entity whose outcome isn't found yet.
 - A rollback is followed by the triggers of the reverse transitions of the events it rolls back, in the colour of a
   reversal, and the events rolled back are struck through.
 - The lifelines are in the order of the first message between two lifelines they take part in, so the diagram reads

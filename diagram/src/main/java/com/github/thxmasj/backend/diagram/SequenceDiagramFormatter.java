@@ -3,6 +3,7 @@ package com.github.thxmasj.backend.diagram;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.stream.Collectors.joining;
 
+import com.github.thxmasj.backend.core.Action;
 import com.github.thxmasj.backend.core.EntityModel;
 import com.github.thxmasj.backend.core.EntityModelGroup;
 import com.github.thxmasj.backend.core.EventLog;
@@ -36,9 +37,10 @@ import net.sourceforge.plantuml.SourceStringReader;
 /// stored. An event no step of the replay triggered arrives at its entity from outside the diagram. The events a
 /// transition triggers are synchronous messages, as they are stored in the same transaction: to the entity of the
 /// event, nested in the transition, if it is in the replay, and else to a lifeline of the entity model triggered on.
-/// A conditional trigger, which is stored and fires later, is an asynchronous message. The actions leave the diagram,
-/// as they are run after the transaction is committed. The triggers of the reverse transitions of a rollback are drawn
-/// in the colour of a reversal, and the events rolled back are struck through.
+/// A conditional trigger, which is stored and fires later, is an asynchronous message. An action, which is run after the
+/// transaction is committed, is an asynchronous message to a lifeline of its own, from which its outcome, e.g. the
+/// response to an outbox request, comes back in a later transaction if it is in the replay. The triggers of the reverse
+/// transitions of a rollback are drawn in the colour of a reversal, and the events rolled back are struck through.
 ///
 /// Events triggered on [id][IdEntityModel] and [index][IndexEntityModel] entities are left out, as in the ER diagram,
 /// as they take much space and tell little about how the entities relate.
@@ -76,10 +78,10 @@ public class SequenceDiagramFormatter {
 
   /// The PlantUML source of the diagram
   public String format() {
-    Participants participants = new Participants(replay.logs());
+    Participants participants = new Participants(replay.logs(), replay.steps());
     StringBuilder messages = new StringBuilder();
     for (Step root : replay.roots())
-      step(root, null, participants, messages);
+      step(root, root.outcomeOf().map(step -> participants.action(step, actionOf(step, root))).orElse(null), participants, messages);
     return String.format(
         """
         @startuml
@@ -134,8 +136,22 @@ public class SequenceDiagramFormatter {
           event
       ));
     }
-    step.actions().forEach(action -> messages.append(String.format("%s ->>] : \u26a1 %s\n", entity, action.name())));
+    step.performed().forEach(performed -> messages.append(String.format(
+        "%s ->> %s: \u26a1 %s\n",
+        participants.message(entity, participants.action(step, performed.action())),
+        participants.action(step, performed.action()),
+        performed.action().name()
+    )));
     messages.append("deactivate ").append(entity).append('\n');
+  }
+
+  /// The action of the step whose outcome is the other step
+  private static Action<?> actionOf(Step step, Step outcome) {
+    return step.performed().stream()
+        .filter(performed -> performed.outcome().orElse(null) == outcome)
+        .findFirst()
+        .orElseThrow()
+        .action();
   }
 
   /// The severity of the transition, or Info for the built-in transitions, which have none
@@ -157,10 +173,14 @@ public class SequenceDiagramFormatter {
     private final Set<String> ordered = new LinkedHashSet<>();
     private final Map<EventLog, String> logs = new IdentityHashMap<>();
     private final Map<String, String> models = new LinkedHashMap<>();
+    /// The lifelines of the actions, by the lifeline of the entity running them and their names
+    private final Map<String, String> actions = new LinkedHashMap<>();
+    /// The lifelines of the entities running an action, by its name
+    private final Map<String, Set<String>> runners = new LinkedHashMap<>();
 
     /// The logs of the deduced steps have no entity ids, and the entities of a model of them have one lifeline, of
     /// the model, as nothing tells them apart
-    Participants(List<EventLog> logs) {
+    Participants(List<EventLog> logs, List<Step> steps) {
       for (EventLog log : logs) {
         if (log.entityId() == null) {
           this.logs.put(log, model(log.entityModel().name()));
@@ -174,6 +194,21 @@ public class SequenceDiagramFormatter {
             : log.entityModel().name());
         this.logs.put(log, alias);
       }
+      for (Step step : steps)
+        step.performed().forEach(p -> runners.computeIfAbsent(p.action().name(), _ -> new LinkedHashSet<>()).add(of(step.log())));
+    }
+
+    /// The lifeline of an action run by the entity of the step, which is where its outcome comes from: one for each
+    /// entity and name, named after the action, and the entity's lifeline if several run an action of the name
+    String action(Step step, Action<?> action) {
+      String entity = of(step.log());
+      return actions.computeIfAbsent(entity + "/" + action.name(), _ -> {
+        String alias = "A" + (actions.size() + 1);
+        names.put(alias, runners.getOrDefault(action.name(), Set.of()).size() > 1
+            ? action.name() + " (" + names.get(entity) + ")"
+            : action.name());
+        return alias;
+      });
     }
 
     private String model(String name) {
