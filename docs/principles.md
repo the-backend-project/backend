@@ -15,7 +15,7 @@ The model is written in the language of the domain, and nothing else goes into i
   in the past tense, such as `Merchant suspended` (see [Naming event types](entities.md#naming-event-types)).
 * Persistence, messaging and HTTP are not part of the model. The library stores the events, and sends and receives
   requests through [outboxes](http-outbox.md) and [inboxes](http-inbox.md) that are entity models of their own.
-* The [state diagrams](diagrams.md) are generated from the model, so developers and domain experts look at the same
+* The [state diagrams](diagrams.md#state-diagrams-of-entity-models) are generated from the model, so developers and domain experts look at the same
   picture, and it is never out of date.
 
 ## The event log is the source of truth
@@ -78,7 +78,7 @@ the data they assemble and the events they trigger (see [Transition models](tran
 the declarations rather than running them as opaque procedures, so a model can be:
 
 * reviewed as a whole, state by state,
-* drawn as [state diagrams](diagrams.md), and
+* drawn as [state diagrams](diagrams.md#state-diagrams-of-entity-models), and
 * tested through its behaviour, with the [test API](testing.md) instead of the tables.
 
 ## Observability built into the model
