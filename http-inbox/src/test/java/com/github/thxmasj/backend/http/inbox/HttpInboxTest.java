@@ -679,24 +679,24 @@ public class HttpInboxTest {
   @Test
   public void whenCustomCorrelationIdHeaderOverHttpThenResponseHasSameCorrelationId() throws IOException {
     HttpResponse<byte[]> response = exchangeOverHttp(
-        new HttpInboxListener(stateMachine, inbox.correlationIdHeader("TID")),
-        Headers.of("TID", "tid-123", "X-Correlation-Id", "ignored")
+        new HttpInboxListener(stateMachine, inbox.correlationIdHeader("CorrelationId")),
+        Headers.of("CorrelationId", "correlation-123", "X-Correlation-Id", "ignored")
     );
-    assertEquals("tid-123", response.headerValue("X-Correlation-Id"));
+    assertEquals("correlation-123", response.headerValue("X-Correlation-Id"));
   }
 
   @Test
   public void whenCorrelationIdHeaderWithoutListenerThenResponseHasSameCorrelationId() {
     var request = internalRequest(UUID.randomUUID().toString(), "t0ken");
-    var withHeader = new HttpRequest<>(request.method(), request.uri(), request.headers().plus("TID", "tid-456"), request.body());
+    var withHeader = new HttpRequest<>(request.method(), request.uri(), request.headers().plus("CorrelationId", "correlation-456"), request.body());
     HttpResponse<byte[]> response = HttpResponse.raw(
-        stateMachine.onEvent(inbox.correlationIdHeader("TID").trigger(), withHeader)
+        stateMachine.onEvent(inbox.correlationIdHeader("CorrelationId").trigger(), withHeader)
             .skip(1)
             .next()
             .block(Duration.ofSeconds(5))
             .getUnmarshalledData()
     );
-    assertEquals("tid-456", response.headerValue("X-Correlation-Id"));
+    assertEquals("correlation-456", response.headerValue("X-Correlation-Id"));
   }
 
   @Test

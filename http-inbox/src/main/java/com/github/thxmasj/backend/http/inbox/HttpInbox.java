@@ -231,8 +231,8 @@ public interface HttpInbox {
   /// without the header gets a generated correlation id prefixed with `SYS-`.
   EventTrigger.Immediate<HttpRequest<byte[]>, HttpRequest<byte[]>, ?> trigger();
 
-  /// Returns the inbox with the correlation id of a request taken from the given header, e.g. `TID`, instead of
-  /// `X-Correlation-Id`. The returned inbox has the same entity models, so a state machine created with the entity
+  /// Returns the inbox with the correlation id of a request taken from the given header, e.g. `CorrelationId`, instead
+  /// of `X-Correlation-Id`. The returned inbox has the same entity models, so a state machine created with the entity
   /// models of either runs both.
   HttpInbox correlationIdHeader(String correlationIdHeader);
 
