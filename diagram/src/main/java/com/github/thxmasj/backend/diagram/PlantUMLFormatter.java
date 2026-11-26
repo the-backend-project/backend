@@ -370,9 +370,9 @@ public class PlantUMLFormatter {
         Stream.of(
             eventName(eventType, transition.severity()),
             eventType.inputDataType().equals(DataType.none()) && eventType.outputDataType().equals(DataType.none()) ? "" : "f: " + eventType.inputDataType().name() + " → " + eventType.outputDataType().name(),
-            transition.triggers().stream().map(t -> "<&share>" + t.eventSpec().eventType().name() + "@" + ofNullable(t.entityModel()).map(m -> m.name()).orElse("???")).collect(joining("\\n")),
+            transition.triggers().stream().map(t -> "<&share>" + t.eventType().name() + "@" + ofNullable(t.entityModel()).map(m -> m.name()).orElse("???")).collect(joining("\\n")),
             transition.actions().stream().map(a -> "<&bolt>" + a.name()).collect(joining("\\n")),
-            transition.reverseModel() != null ? transition.reverseModel().triggers().stream().map(t -> "<&share><color:red>" + t.eventSpec().eventType().name() + "@" + ofNullable(t.entityModel()).map(m -> m.name()).orElse("???")).collect(joining("\\n")) : ""
+            transition.reverseModel() != null ? transition.reverseModel().triggers().stream().map(t -> "<&share><color:red>" + t.eventType().name() + "@" + ofNullable(t.entityModel()).map(m -> m.name()).orElse("???")).collect(joining("\\n")) : ""
         ).filter(not(String::isEmpty)).collect(joining("\\n"))
     );
   }

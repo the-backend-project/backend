@@ -173,7 +173,7 @@ public class CutOffReconciliationTest {
 
   private static Event<?> request(Application application, String path) {
     var message = new HttpRequest<>(POST, URI.create(path), Headers.of(), "{}".getBytes());
-    return application.machine().onEvent(UUID.randomUUID().toString(), application.inbox().trigger(), message)
+    return application.machine().onEvent(application.inbox().trigger(), message)
         .switchIfEmpty(Mono.error(new RuntimeException("No response to " + path)))
         // First event is the triggered event, second is the response event
         .skip(1)

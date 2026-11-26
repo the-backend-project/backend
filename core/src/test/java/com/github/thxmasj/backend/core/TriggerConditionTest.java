@@ -9,7 +9,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
 public class TriggerConditionTest {
@@ -36,8 +36,8 @@ public class TriggerConditionTest {
         .identifiedBy(_ -> entityId(indexKey))
         .output();
 
-    EventTrigger<?, ?, ?> trigger = model.triggers().getFirst();
-    assertSame(BananaRipened, trigger.eventSpec().eventType());
+    var trigger = assertInstanceOf(EventTrigger.Conditional.class, model.triggers().getFirst());
+    assertSame(BananaRipened, trigger.eventType());
     assertEquals(BatchReferenced, trigger.condition().referenceType());
     assertEquals(List.of(BananaAccepted), trigger.condition().lastTypes());
     assertEquals(indexKey, trigger.condition().indexKey().apply(null));
@@ -52,7 +52,7 @@ public class TriggerConditionTest {
         .identifiedBy(_ -> entityId(UUID.randomUUID()))
         .output();
 
-    assertNull(model.triggers().getFirst().condition());
+    assertInstanceOf(EventTrigger.Immediate.class, model.triggers().getFirst());
   }
 
 }

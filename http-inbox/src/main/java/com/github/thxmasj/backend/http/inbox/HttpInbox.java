@@ -226,8 +226,15 @@ public interface HttpInbox {
   ///                                  checked the first time they are asked for (see [#of(List)])
   List<EntityModel> entityModels();
 
-  /// Triggers a received request on a new entity of [#requestRouting()]
-  EventTrigger<HttpRequest<byte[]>, HttpRequest<byte[]>, ?> trigger();
+  /// Triggers a received request on a new entity of [#requestRouting()]. The correlation id of the events it triggers
+  /// is taken from the request header `X-Correlation-Id`, or the one given by [#correlationIdHeader(String)]. A request
+  /// without the header gets a generated correlation id prefixed with `SYS-`.
+  EventTrigger.Immediate<HttpRequest<byte[]>, HttpRequest<byte[]>, ?> trigger();
+
+  /// Returns the inbox with the correlation id of a request taken from the given header, e.g. `CorrelationId`, instead
+  /// of `X-Correlation-Id`. The returned inbox has the same entity models, so a state machine created with the entity
+  /// models of either runs both.
+  HttpInbox correlationIdHeader(String correlationIdHeader);
 
   static <T> Function<HttpRequest<byte[]>, Validated<T>> jsonParser(Class<T> contentType) {
     return new JsonRequestValidator<>(contentType, true);

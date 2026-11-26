@@ -1,5 +1,9 @@
 package com.github.thxmasj.backend.core;
 
+import com.github.thxmasj.backend.core.EventTrigger.ByConditional;
+import com.github.thxmasj.backend.core.EventTrigger.ByDelayed;
+import com.github.thxmasj.backend.core.EventTrigger.Conditional;
+import com.github.thxmasj.backend.core.EventTrigger.Immediate;
 import static com.github.thxmasj.backend.core.Tuples.tuple;
 import static java.time.Duration.ofHours;
 import static java.time.Duration.ofMinutes;
@@ -239,8 +243,17 @@ public class StateMachine implements AutoCloseable {
 
   enum ResolverStatus {Ok, Empty, Error}
 
-  private <T> InputEvent<T> inputEvent(DelayedTrigger<T> delayedTrigger) {
-    return new InputEvent<>(delayedTrigger.eventType(), delayedTrigger.data());
+  /// Fires the delayed trigger on the entity of the event log. The trigger is deleted with the change of its event.
+  private <T> Mono<ProcessResult<?>> fire(DelayedTrigger<T> delayedTrigger, EventLog eventLog) {
+    var trigger = new ByDelayed<>(
+        delayedTrigger.eventType(),
+        delayedTrigger.data(),
+        delayedTrigger.entityId(),
+        delayedTrigger.entityModel(),
+        delayedTrigger.correlationId()
+    );
+    Debug.log("resolveState with: " + trigger.eventType().name());
+    return onEvent(trigger.correlationId(null), trigger.eventType(), trigger.data().apply(null), eventLog, null, TriggerType.DELAYED, null, null);
   }
 
   /**
@@ -267,9 +280,7 @@ public class StateMachine implements AutoCloseable {
           if (currentState == null)
             return Mono.error(new RuntimeException(
                 "Invalid event log: " + eventLog.events().stream().map(Event::typeName).collect(joining(","))));
-          InputEvent<?> event = inputEvent(delayedTrigger);
-          Debug.log("resolveState with: " + event);
-          return firedByDelayedTrigger(delayedTrigger.correlationId(), event, eventLog)
+          return fire(delayedTrigger, eventLog)
               .flatMap(processResult -> switch (processResult) {
                     // State is resolved and delayed trigger already deleted by the change triggered by this event.
                     case Accepted<?> _ -> Mono.just(ResolverStatus.Ok);
@@ -436,25 +447,19 @@ public class StateMachine implements AutoCloseable {
     return storage.eventsByEntityId().execute(entityModel, eventTypesByEntityModel.get(entityModel), entityId);
   }
 
-  public <O> Flux<Event<?>> onEvent(EventTrigger<Void, Void, O> eventTrigger) {
-    return onEvent(UUID.randomUUID().toString(), eventTrigger);
+  /// Triggers the event of a trigger without input, as [#onEvent(Immediate, Object)]
+  public <O> Flux<Event<?>> onEvent(Immediate<Void, Void, O> eventTrigger) {
+    return onEvent(eventTrigger, null);
   }
 
-  public <O> Flux<Event<?>> onEvent(String correlationId, EventTrigger<Void, Void, O> eventTrigger) {
-    return onEvent(correlationId, eventTrigger, null);
-  }
-
-  public <I, O> Flux<Event<?>> onEvent(EventTrigger<I, I, O> eventTrigger, I input) {
-    return onEvent(UUID.randomUUID().toString(), eventTrigger, input);
-  }
-
-  /// Fails with an [IllegalArgumentException] if the state machine doesn't run the entity model triggered on, the
-  /// same instance (see [#runs(EntityModel)]).
-  public <T, I, O> Flux<Event<?>> onEvent(String correlationId, EventTrigger<T, I, O> eventTrigger, T input) {
+  /// Triggers the event with the correlation id the trigger gives the input (see
+  /// [EventTrigger#correlationId(Object)]). Fails with an [IllegalArgumentException] if the state machine doesn't run
+  /// the entity model triggered on, the same instance (see [#runs(EntityModel)]).
+  public <T, I, O> Flux<Event<?>> onEvent(Immediate<T, I, O> eventTrigger, T input) {
     EntityModel target = eventTrigger.entityModel();
     if (target != null && !(target instanceof EntityModelGroup) && !runs(target))
       return Flux.error(models.notRun(target, "the state machine"));
-    return onEvent(correlationId, eventTrigger, input, null);
+    return Flux.defer(() -> onEvent(eventTrigger.correlationId(input), eventTrigger, input, null));
   }
 
   /// Whether the state machine runs the entity model, the same instance as it was given or found. Another instance
@@ -470,8 +475,15 @@ public class StateMachine implements AutoCloseable {
       T input,
       @Nullable EventReference triggerEvent
   ) {
-    Debug.log("onEvent " + correlationId + " " + eventTrigger.eventSpec().eventType().name());
-    I adaptedInput = eventTrigger.eventSpec().inputAdapter().apply(input);
+    Debug.log("onEvent " + correlationId + " " + eventTrigger.eventType().name());
+    I adaptedInput = eventTrigger.data().apply(input);
+    // A fired stored trigger is deleted by the change of its event
+    TriggerType triggerType = switch (eventTrigger) {
+      case ByDelayed<?, ?> _ -> TriggerType.DELAYED;
+      case ByConditional<?, ?> _ -> TriggerType.CONDITIONAL;
+      case Immediate<?, ?, ?> _, Conditional<?, ?, ?> _ -> null;
+    };
+    UUID triggerId = eventTrigger instanceof ByConditional<?, ?> byConditional ? byConditional.id() : null;
     // Each attempt reads the event log again, so an attempt which failed on the event number, as another instance
     // appended an event to the entity first, is calculated again from the new event log. Each has a response sink of
     // its own too. A failed attempt emits nothing to its sink today, as events are emitted only once they are stored,
@@ -479,9 +491,9 @@ public class StateMachine implements AutoCloseable {
     return Flux.defer(() -> {
           Many<Event<?>> responseSink = Sinks.many().unicast().onBackpressureBuffer();
           return eventLog(eventTrigger, input, null)
-              .onErrorMap(UnknownEntity.class, e -> new RejectedEvent(eventTrigger.eventSpec().eventType(), e))
+              .onErrorMap(UnknownEntity.class, e -> new RejectedEvent(eventTrigger.eventType(), e))
               .flatMapMany(log ->
-                  onEvent(correlationId, eventTrigger.eventSpec().eventType(), adaptedInput, log, null, eventTrigger.triggerType(), eventTrigger.triggerId(), triggerEvent)
+                  onEvent(correlationId, eventTrigger.eventType(), adaptedInput, log, null, triggerType, triggerId, triggerEvent)
                       .contextWrite(ctx -> ctx.put("RS/" + log.entityId(), responseSink))
                       .thenMany(responseSink.asFlux())
               );
@@ -506,11 +518,6 @@ public class StateMachine implements AutoCloseable {
       TransitionStep<?> requestStep
   ) {
     return onEvent(correlationId, inputEvent.eventType(), inputEvent.data(), eventLog, requestStep, null, null, null);
-  }
-
-  /// The event of a delayed trigger, whose trigger is deleted with the change of the event
-  private <I> Mono<ProcessResult<?>> firedByDelayedTrigger(String correlationId, InputEvent<I> event, EventLog eventLog) {
-    return onEvent(correlationId, event.eventType(), event.data(), eventLog, null, TriggerType.DELAYED, null, null);
   }
 
   /// The changes to store, collected from the last step to the first. A delayed event is numbered after the event of
@@ -697,7 +704,7 @@ public class StateMachine implements AutoCloseable {
   private <I, O> TransitionStep<ProcessResult<O>> idExists(EventTrigger<?, I, O> eventTrigger, TransitionStep<?> tail, I data) {
     if (!(eventTrigger.entityModel() instanceof IdEntityModel))
       return null;
-    EventType<I, O> type = eventTrigger.eventSpec().eventType();
+    EventType<I, O> type = eventTrigger.eventType();
     return tail.inputStep().transaction().existingIds().stream()
         .filter(existing -> existing.idEvent().type().id().equals(type.id())
             && Arrays.equals(existing.idEvent().getMarshalledData(), type.inputDataType().marshal(data)))
@@ -755,18 +762,16 @@ public class StateMachine implements AutoCloseable {
       ConditionalTrigger<T> conditionalTrigger,
       EventType<T, O> eventType
   ) {
-    var eventTrigger = new EventTrigger<Void, T, O>(
-        new EventTrigger.EventSpec<>(eventType, _ -> conditionalTrigger.data()),
-        // The target entity may not exist yet, in which case it is created by the fired event
-        List.of(_ -> new ById(conditionalTrigger.entityId(), EntitySelector.CreationMode.CreateIfNotExists)),
+    var eventTrigger = new ByConditional<>(
+        conditionalTrigger.id(),
+        eventType,
+        conditionalTrigger.data(),
+        conditionalTrigger.entityId(),
         conditionalTrigger.entityModel(),
-        false,
-        null,
-        TriggerType.CONDITIONAL,
-        conditionalTrigger.id()
+        conditionalTrigger.correlationId()
     );
     // The conditional trigger is deleted together with the change of the fired event
-    return onEvent(conditionalTrigger.correlationId(), eventTrigger, null, conditionalTrigger.triggerEvent())
+    return onEvent(eventTrigger.correlationId(null), eventTrigger, null, conditionalTrigger.triggerEvent())
         .contextWrite(Correlation.contextOf(conditionalTrigger.correlationId()));
   }
 
@@ -799,11 +804,7 @@ public class StateMachine implements AutoCloseable {
       T inputData,
       TransitionStep<?> transitionStep
   ) {
-    if (eventTrigger.createEntity() && eventTrigger.entityModel() instanceof EntityModelGroup)
-      throw new IllegalArgumentException("An entity can't be created in the group " + eventTrigger.entityModel().name());
-    return eventTrigger.createEntity() ?
-        Mono.just(emptyEventLog(eventTrigger.entityModel())) :
-        eventLog(eventTrigger.entitySelectors().getFirst().apply(inputData), eventTrigger.entityModel(), transitionStep);
+    return eventLog(eventTrigger.entitySelector().apply(inputData), eventTrigger.entityModel(), transitionStep);
   }
 
   private <I> Mono<EventLog> eventLog(
@@ -1124,7 +1125,7 @@ public class StateMachine implements AutoCloseable {
       boolean skipCircularCheck,
       EventReference triggerEvent
   ) {
-    I adaptedData = eventTrigger.eventSpec().inputAdapter() != null ? eventTrigger.eventSpec().inputAdapter().apply(data) : null;
+    I adaptedData = eventTrigger.data() != null ? eventTrigger.data().apply(data) : null;
     // The step results in the input step the event is calculated from, or in the step of its id existing
     return tail.inputStep().transaction()
         .step(tail, () -> triggered(eventTrigger, tail, data, adaptedData, skipCircularCheck, triggerEvent))
@@ -1157,7 +1158,7 @@ public class StateMachine implements AutoCloseable {
           // The entity model of the entity, which for a trigger on a group is the model of the session's entity
           EntityModel entityModel = eventTrigger.entityModel();
           UUID entityId = null;
-          switch (eventTrigger.entitySelectors().getFirst().apply(data)) {
+          switch (eventTrigger.entitySelector().apply(data)) {
             case ByIdFromSession _ -> {
               try {
                 EventLog sessionLog = logFromSteps(tail, entityModel);
@@ -1172,17 +1173,17 @@ public class StateMachine implements AutoCloseable {
             default -> {}
           }
           if (!skipCircularCheck && entityId != null) {
-            checkCircular(tail, entityModel, entityId, new InputEvent<>(eventTrigger.eventSpec().eventType(), adaptedData));
+            checkCircular(tail, entityModel, entityId, new InputEvent<>(eventTrigger.eventType(), adaptedData));
           }
           return Mono.just(ctx);
         }
     ).flatMap(_ -> eventLog(eventTrigger, data, tail)
-            .map(eventLog -> transitionModel(eventLog, eventTrigger.eventSpec().eventType()))
+            .map(eventLog -> transitionModel(eventLog, eventTrigger.eventType()))
             .map(tuple -> {
               if (tuple.t2() != null)
                 return tuple;
               throw new RejectedEvent(
-                  eventTrigger.eventSpec().eventType(),
+                  eventTrigger.eventType(),
                   tuple.t1(),
                   tuple.t3()
               );

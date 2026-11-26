@@ -75,6 +75,12 @@ with 400 Bad Request, and not stored either. The inbox request validates the req
 authorization and the entity it selects. If it is valid, the inbox request triggers the event on the application's
 entity and waits for the application to respond.
 
+The inbox gives every request a correlation id, which the events and transactions of the request are logged with (see
+[monitoring](monitoring.md)). Its `trigger()` takes it from the request header `X-Correlation-Id`, or from the header
+given with `inbox.correlationIdHeader("CorrelationId")`, and generates one prefixed with `SYS-` for a request without
+the header. The inbox `correlationIdHeader` returns has the same entity models, so it can be given to a listener of a
+state machine created with the models of the first.
+
 The application responds by triggering an event of a `ResponseEventType` on the inbox request, e.g. `RequestCompleted`,
 which responds 201 Created, `InvalidRequestCompleted` (400) or `FailedRequestCompleted` (500), or one the inbox request
 has a `response` for. It doesn't know which inbox request triggered it, since several can trigger the same event, so

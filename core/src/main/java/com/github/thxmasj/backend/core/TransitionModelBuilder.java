@@ -5,7 +5,8 @@ import static java.util.Objects.requireNonNull;
 
 import com.github.thxmasj.backend.core.BasicEventType.Rollback.Data;
 import com.github.thxmasj.backend.core.EventTrigger.EventCondition;
-import com.github.thxmasj.backend.core.EventTrigger.EventSpec;
+import com.github.thxmasj.backend.core.EventTrigger.Conditional;
+import com.github.thxmasj.backend.core.EventTrigger.Immediate;
 import com.github.thxmasj.backend.core.StateMachine.CircularChange;
 import com.github.thxmasj.backend.core.StateMachine.ProcessResult;
 import com.github.thxmasj.backend.core.StateMachine.RejectedEvent;
@@ -378,15 +379,16 @@ public class TransitionModelBuilder<I, T, O> {
 
     public record ConditionalWithEntity<I, T, O, I1, O1>(ConditionalWithEventTypeAndData<I, T, O, I1, O1> eventTypeAndData, EntityModel entityModel) {
 
-      @SafeVarargs
-      public final TransitionModelBuilder<I, T, O> identifiedBy(Function<T, ? extends EntitySelector>... entitySelector) {
+      /// @param entitySelector the entity, which may be selected by a fallback if the selector finds none, e.g. with
+      ///                       [EntitySelector#idEvent(EventType, Object, EntitySelector)]
+      public TransitionModelBuilder<I, T, O> identifiedBy(Function<T, ? extends EntitySelector> entitySelector) {
         var eventType = eventTypeAndData.eventType();
         return eventType.builder().triggerConditional(
-            new EventTrigger<>(
-                new EventSpec<>(eventType.eventType(), eventTypeAndData.dataAdapter()),
-                List.of(entitySelector),
+            new Conditional<>(
+                eventType.eventType(),
+                eventTypeAndData.dataAdapter(),
+                entitySelector,
                 entityModel,
-                false,
                 eventType.condition()
             ),
             eventTypeAndData.reactiveDataAdapter()
@@ -421,7 +423,7 @@ public class TransitionModelBuilder<I, T, O> {
 
     }
 
-    public record WithIdentifier<I, T, O, I1, O1>(WithEntity<I, T, O, I1, O1> entity, List<Function<T, ? extends EntitySelector>> entitySelectors) {
+    public record WithIdentifier<I, T, O, I1, O1>(WithEntity<I, T, O, I1, O1> entity, Function<T, ? extends EntitySelector> entitySelector) {
 
       public <I2, O2> WithEventType<I, Tuple2<T, ProcessResult<O1>>, O, I2, O2> trigger(EventType<I2, O2> eventType) {
         return new WithEventType<>(complete(), eventType);
@@ -445,30 +447,24 @@ public class TransitionModelBuilder<I, T, O> {
 
       private TransitionModelBuilder<I, Tuple2<T, ProcessResult<O1>>, O> complete() {
         return this.entity.eventTypeAndData.eventType.builder.trigger(
-            new EventTrigger<>(
-                new EventSpec<>(
-                    this.entity.eventTypeAndData.eventType.eventType,
-                    this.entity.eventTypeAndData.dataAdapter
-                ),
-                this.entitySelectors,
-                this.entity.entityModel,
-                false // TODO: Support create entity
+            new Immediate<>(
+                this.entity.eventTypeAndData.eventType.eventType,
+                this.entity.eventTypeAndData.dataAdapter,
+                this.entitySelector,
+                this.entity.entityModel
             ),
             this.entity.eventTypeAndData.reactiveDataAdapter
         );
-      }
-
-      public WithIdentifier<I, T, O, I1, O1> identifiedBy(Function<T, ? extends EntitySelector> entitySelector) {
-        return new WithIdentifier<>(entity, List.of(entitySelector));
       }
 
     }
 
     public record WithEntity<I, T, O, I1, O1>(WithEventTypeAndData<I, T, O, I1, O1> eventTypeAndData, EntityModel entityModel) {
 
-      @SafeVarargs
-      public final TransitionModelBuilder<I, Tuple2<T, ProcessResult<O1>>, O> identifiedBy(Function<T, ? extends EntitySelector>... entitySelector) {
-        return new WithIdentifier<>(this, List.of(entitySelector)).complete();
+      /// @param entitySelector the entity, which may be selected by a fallback if the selector finds none, e.g. with
+      ///                       [EntitySelector#idEvent(EventType, Object, EntitySelector)]
+      public TransitionModelBuilder<I, Tuple2<T, ProcessResult<O1>>, O> identifiedBy(Function<T, ? extends EntitySelector> entitySelector) {
+        return new WithIdentifier<>(this, entitySelector).complete();
       }
 
     }
@@ -757,14 +753,14 @@ public class TransitionModelBuilder<I, T, O> {
                         RejectedEvent.class,
                         e -> step(c, () -> Mono.just(new RejectedStep<>(
                             c,
-                            ProcessResult.rejected(eventTrigger.eventSpec().eventType(), e)
+                            ProcessResult.rejected(eventTrigger.eventType(), e)
                         )))
                     )
                     .onErrorResume(
                         UnknownEntity.class,
                         e -> step(c, () -> Mono.just(new UnknownIdStep<>(
                             c,
-                            ProcessResult.unknownId(eventTrigger.eventSpec().eventType(), e)
+                            ProcessResult.unknownId(eventTrigger.eventType(), e)
                         )))
                     )
                 .flatMap(output -> step(c, () -> Mono.just(new TriggerStep<>(output, c, eventTrigger))))
@@ -800,7 +796,7 @@ public class TransitionModelBuilder<I, T, O> {
   }
 
   private <I1, O1> TransitionModelBuilder<I, T, O> triggerConditional(
-      EventTrigger<T, I1, O1> conditionalTrigger,
+      Conditional<T, I1, O1> conditionalTrigger,
       Function<T, Mono<I1>> reactiveDataAdapter
   ) {
     Function<Mono<TransitionStep<T>>, Mono<TransitionStep<T>>> f =
@@ -808,7 +804,7 @@ public class TransitionModelBuilder<I, T, O> {
             // The event is always stored as a ConditionalTrigger. If its condition is already met it is fired right after
             // the triggering change is committed, otherwise it is fired by the poller once the condition is met.
             .flatMap(c -> step(c, () -> withData(conditionalTrigger, reactiveDataAdapter, c).map(eventTrigger -> {
-              var condition = eventTrigger.condition();
+              var condition = conditionalTrigger.condition();
               return new ConditionalTriggerStep<>(
                   c,
                   new ConditionalTrigger<>(
@@ -819,8 +815,8 @@ public class TransitionModelBuilder<I, T, O> {
                       ),
                       eventTrigger.entityModel(),
                       conditionalEntityId(eventTrigger, c),
-                      eventTrigger.eventSpec().eventType(),
-                      eventTrigger.eventSpec().inputAdapter().apply(c.stepOutput()),
+                      eventTrigger.eventType(),
+                      eventTrigger.data().apply(c.stepOutput()),
                       c.inputStep().timestamp(),
                       condition.referenceType(),
                       condition.lastTypes(),
@@ -844,15 +840,15 @@ public class TransitionModelBuilder<I, T, O> {
       TransitionStep<T> c
   ) {
     if (reactiveDataAdapter == null) {
-      var inputAdapter = eventTrigger.eventSpec().inputAdapter();
-      I1 data = inputAdapter != null ? inputAdapter.apply(c.stepOutput()) : null;
-      return Mono.just(eventTrigger.withInputAdapter(_ -> data));
+      var dataAdapter = eventTrigger.data();
+      I1 data = dataAdapter != null ? dataAdapter.apply(c.stepOutput()) : null;
+      return Mono.just(eventTrigger.withData(_ -> data));
     }
     return reactiveDataAdapter.apply(c.stepOutput())
         .switchIfEmpty(Mono.error(() -> new IllegalStateException(
-            "No data created for " + eventTrigger.eventSpec().eventType().name()
+            "No data created for " + eventTrigger.eventType().name()
         )))
-        .map(data -> eventTrigger.withInputAdapter(_ -> data));
+        .map(data -> eventTrigger.withData(_ -> data));
   }
 
   /// The data adapter of an event whose data is created reactively, which is never applied.
@@ -863,7 +859,7 @@ public class TransitionModelBuilder<I, T, O> {
   }
 
   private static <T> UUID conditionalEntityId(EventTrigger<T, ?, ?> eventTrigger, TransitionStep<T> c) {
-    var selector = eventTrigger.entitySelectors().getFirst().apply(c.stepOutput());
+    var selector = eventTrigger.entitySelector().apply(c.stepOutput());
     if (selector instanceof EntitySelector.ById byId) {
       return byId.id();
     }
