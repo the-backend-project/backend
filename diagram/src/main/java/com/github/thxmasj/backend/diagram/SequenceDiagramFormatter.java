@@ -1,0 +1,302 @@
+package com.github.thxmasj.backend.diagram;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.stream.Collectors.joining;
+
+import com.github.thxmasj.backend.core.Action;
+import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityModelGroup;
+import com.github.thxmasj.backend.core.EventLog;
+import com.github.thxmasj.backend.core.EventTrigger;
+import com.github.thxmasj.backend.core.IdEntityModel;
+import com.github.thxmasj.backend.core.IndexEntityModel;
+import com.github.thxmasj.backend.core.Replay;
+import com.github.thxmasj.backend.core.Replay.Step;
+import com.github.thxmasj.backend.core.Replay.Triggered;
+import com.github.thxmasj.backend.core.Severity;
+import com.github.thxmasj.backend.core.TransitionModel;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Stream;
+import net.sourceforge.plantuml.FileFormat;
+import net.sourceforge.plantuml.FileFormatOption;
+import net.sourceforge.plantuml.SourceStringReader;
+
+/// A sequence diagram of the event log of an entity, with related logs, e.g. those of its inbox and outbox requests,
+/// drawn with PlantUML from their [Replay].
+///
+/// The steps of each transaction are drawn in a group, named with its number in the diagram and its timestamp, which
+/// all its events have. The actions of a transaction follow its group, as they are run after it is committed. The
+/// transactions of a session of several are drawn in a group of the session, with the actions between them, unless a
+/// transaction of another session comes between them, as groups must nest. A transaction which isn't drawn in a group
+/// of its session, such as the only one of a session, is named with the number of its session instead, so that every
+/// transaction tells its session.
+///
+/// Each entity whose log is drawn has a lifeline, and so does each model of the deduced steps of entities which aren't
+/// stored. An event no step of the replay triggered arrives at its entity from outside the diagram. The events a
+/// transition triggers are synchronous messages, as they are stored in the same transaction: to the entity of the
+/// event, nested in the transition, if it is in the replay, and else to a lifeline of the entity model triggered on.
+/// A conditional trigger, which is stored and fires later, is an asynchronous message. An action, which is run after the
+/// transaction is committed, is an asynchronous message to a lifeline of its own, from which its outcome, e.g. the
+/// response to an outbox request, comes back in a later transaction if it is in the replay. The triggers of the reverse
+/// transitions of a rollback are drawn in the colour of a reversal, and the events rolled back are struck through.
+///
+/// Events triggered on [id][IdEntityModel] and [index][IndexEntityModel] entities are left out, as in the ER diagram,
+/// as they take much space and tell little about how the entities relate.
+public class SequenceDiagramFormatter {
+
+  private final Replay replay;
+
+  /// A sequence diagram of the log alone
+  public SequenceDiagramFormatter(EventLog log) {
+    this(log, List.of());
+  }
+
+  /// A sequence diagram of the log and the related logs
+  public SequenceDiagramFormatter(EventLog log, List<EventLog> related) {
+    this(log, related, List.of());
+  }
+
+  /// A sequence diagram of the log and the related logs, with the steps of entities which aren't stored deduced from
+  /// the transitions of the entity models, e.g. those given to the state machine (see [Replay])
+  public SequenceDiagramFormatter(EventLog log, List<EventLog> related, List<? extends EntityModel> entityModels) {
+    this.replay = Replay.of(log, related, entityModels);
+  }
+
+  /// Writes the diagram as SVG to the file
+  public File formatToImage(File file) throws IOException {
+    //noinspection ResultOfMethodCallIgnored
+    file.getAbsoluteFile().getParentFile().mkdirs();
+    var svg = new ByteArrayOutputStream();
+    new SourceStringReader(format()).outputImage(svg, new FileFormatOption(FileFormat.SVG));
+    try (var out = new FileOutputStream(file)) {
+      out.write(DiagramColours.addSequenceStyle(svg.toString(UTF_8)).getBytes(UTF_8));
+    }
+    return file;
+  }
+
+  /// The PlantUML source of the diagram
+  public String format() {
+    Participants participants = new Participants(replay.logs(), replay.steps());
+    StringBuilder messages = new StringBuilder();
+    List<Step> roots = replay.roots();
+    Map<Integer, List<Integer>> transactionsOfSessions = new LinkedHashMap<>();
+    for (Step step : replay.steps()) {
+      List<Integer> transactions = transactionsOfSessions.computeIfAbsent(step.session(), _ -> new ArrayList<>());
+      if (!transactions.contains(step.transaction()))
+        transactions.add(step.transaction());
+    }
+    for (int i = 0; i < roots.size(); ) {
+      int transaction = roots.get(i).transaction();
+      int session = roots.get(i).session();
+      List<Integer> transactionsOfSession = transactionsOfSessions.get(session);
+      boolean several = transactionsOfSession.size() > 1;
+      // A session is boxed if no transaction of another session comes between its own, as boxes must nest
+      boolean boxed = several
+          && transactionsOfSession.getLast() - transactionsOfSession.getFirst() + 1 == transactionsOfSession.size();
+      if (boxed && transaction == transactionsOfSession.getFirst())
+        messages.append(String.format("group Session %d\n", session));
+      messages.append(String.format(
+          "group Transaction %d%s, %s\n",
+          transaction,
+          boxed ? "" : ", session " + session,
+          roots.get(i).event().timestamp().toInstant()
+      ));
+      // The roots of the transaction, with the actions run after it is committed
+      StringBuilder actions = new StringBuilder();
+      for (; i < roots.size() && roots.get(i).transaction() == transaction; i++) {
+        Step root = roots.get(i);
+        String from = root.outcomeOf().map(step -> participants.action(step, actionOf(step, root))).orElse(null);
+        step(root, from, participants, messages, actions);
+      }
+      messages.append("end\n").append(actions);
+      if (boxed && transaction == transactionsOfSession.getLast())
+        messages.append("end\n");
+    }
+    return String.format(
+        """
+        @startuml
+        skinparam backgroundColor transparent
+        skinparam participant {
+          BackgroundColor #9bb08a
+          BorderColor #4b5320
+        }
+        skinparam sequence {
+          LifeLineBorderColor #4b5320
+          LifeLineBackgroundColor #9bb08a
+          GroupBorderColor #8a9a5b
+          GroupBackgroundColor #9bb08a
+        }
+        hide footbox
+
+        %s
+        %s@enduml
+        """,
+        participants.declarations(),
+        messages
+    );
+  }
+
+  /// Draws the step, triggered by the lifeline with the alias, or arriving from outside the diagram if it is null, with
+  /// the steps it triggered nested in it, and adds its actions to those run after the transaction
+  private static void step(Step step, String from, Participants participants, StringBuilder messages, StringBuilder actions) {
+    String entity = participants.of(step.log());
+    String name = StateDiagramFormatter.eventName(step.event().type(), severity(step.transition()));
+    if (step.isRolledBack())
+      name = "<s>" + name + "</s>";
+    String arrival = from == null ? "[->" : participants.message(from, entity) + " ->";
+    // A deduced step is never stored, so it has no event number
+    messages.append(step.isDeduced()
+        ? String.format("%s %s: <i>%s</i>\n", arrival, entity, name)
+        : String.format("%s %s: %d. %s\n", arrival, entity, step.event().eventNumber(), name));
+    messages.append("activate ").append(entity).append('\n');
+    for (Triggered triggered : step.triggered()) {
+      if (triggered.step().isPresent()) {
+        step(triggered.step().get(), entity, participants, messages, actions);
+        continue;
+      }
+      EventTrigger<?, ?, ?> trigger = triggered.trigger();
+      if (trigger.entityModel() instanceof IdEntityModel || trigger.entityModel() instanceof IndexEntityModel)
+        continue;
+      String event = trigger.eventType().name();
+      if (triggered.reversal())
+        event = "<color:" + DiagramColours.REVERSAL.light() + ">" + event + "</color>";
+      messages.append(String.format(
+          "%s %s %s: %s\n",
+          participants.message(entity, participants.of(trigger.entityModel())),
+          trigger instanceof EventTrigger.Conditional<?, ?, ?> ? "->>" : "->",
+          participants.of(trigger.entityModel()),
+          event
+      ));
+    }
+    step.performed().forEach(performed -> actions.append(String.format(
+        "%s ->> %s: \u26a1 %s\n",
+        participants.message(entity, participants.action(step, performed.action())),
+        participants.action(step, performed.action()),
+        performed.action().name()
+    )));
+    messages.append("deactivate ").append(entity).append('\n');
+  }
+
+  /// The action of the step whose outcome is the other step
+  private static Action<?> actionOf(Step step, Step outcome) {
+    return step.performed().stream()
+        .filter(performed -> performed.outcome().orElse(null) == outcome)
+        .findFirst()
+        .orElseThrow()
+        .action();
+  }
+
+  /// The severity of the transition, or Info for the built-in transitions, which have none
+  private static Severity severity(TransitionModel<?, ?> transition) {
+    return transition.severity() != null ? transition.severity() : Severity.Info;
+  }
+
+  /// The lifelines of the diagram: those of the entities of the logs, of the models of the deduced steps, and of the
+  /// other entity models events are triggered on. They are declared in the order of the first message between two
+  /// lifelines they take part in, so that the diagram reads from left to right, e.g. from the routing of a request to
+  /// its inbox request and on to the entity it was processed on. A message from outside the diagram doesn't count, so
+  /// that an entity which only receives such messages early on, e.g. one created by an entity whose log isn't given,
+  /// doesn't come first. Lifelines with no messages between them come last.
+  private static final class Participants {
+
+    /// The names of the lifelines by their aliases
+    private final Map<String, String> names = new LinkedHashMap<>();
+    /// The aliases of the lifelines in the order of the first message between two lifelines they take part in
+    private final Set<String> ordered = new LinkedHashSet<>();
+    private final Map<EventLog, String> logs = new IdentityHashMap<>();
+    private final Map<String, String> models = new LinkedHashMap<>();
+    /// The lifelines of the actions, by the lifeline of the entity running them and their names
+    private final Map<String, String> actions = new LinkedHashMap<>();
+    /// The lifelines of the entities running an action, by its name
+    private final Map<String, Set<String>> runners = new LinkedHashMap<>();
+
+    /// The logs of the deduced steps have no entity ids, and the entities of a model of them have one lifeline, of
+    /// the model, as nothing tells them apart
+    Participants(List<EventLog> logs, List<Step> steps) {
+      for (EventLog log : logs) {
+        if (log.entityId() == null) {
+          this.logs.put(log, model(log.entityModel().name()));
+          continue;
+        }
+        String alias = "P" + (names.size() + 1);
+        long sameModel = logs.stream().filter(l -> l.entityId() != null && l.entityModel().equals(log.entityModel())).count();
+        // Entities of the same model are told apart by the start of their entity ids
+        names.put(alias, sameModel > 1
+            ? log.entityModel().name() + " " + log.entityId().toString().substring(0, 8)
+            : log.entityModel().name());
+        this.logs.put(log, alias);
+      }
+      for (Step step : steps)
+        step.performed().forEach(p -> runners.computeIfAbsent(p.action().name(), _ -> new LinkedHashSet<>()).add(of(step.log())));
+    }
+
+    /// The lifeline of an action run by the entity of the step, which is where its outcome comes from: one for each
+    /// entity and name, named after the action, and the entity's lifeline if several run an action of the name
+    String action(Step step, Action<?> action) {
+      String entity = of(step.log());
+      return actions.computeIfAbsent(entity + "/" + action.name(), _ -> {
+        String alias = "A" + (actions.size() + 1);
+        names.put(alias, runners.getOrDefault(action.name(), Set.of()).size() > 1
+            ? action.name() + " (" + names.get(entity) + ")"
+            : action.name());
+        return alias;
+      });
+    }
+
+    private String model(String name) {
+      return models.computeIfAbsent(name, _ -> {
+        String alias = "P" + (names.size() + 1);
+        names.put(alias, name);
+        return alias;
+      });
+    }
+
+    String of(EventLog log) {
+      return logs.get(log);
+    }
+
+    /// The lifeline of an entity model triggered on: of the entity of the logs if there is one entity of it, or a
+    /// group of it, and else one of the model, which is unknown for a trigger on an entity model selected when the
+    /// trigger fires
+    String of(EntityModel model) {
+      if (model != null) {
+        List<String> entities = logs.entrySet().stream()
+            .filter(e -> EntityModelGroup.targets(model, e.getKey().entityModel()))
+            .map(Map.Entry::getValue)
+            .distinct()
+            .toList();
+        if (entities.size() == 1)
+          return entities.getFirst();
+      }
+      return model(model != null ? model.name() : "?");
+    }
+
+    /// Records a message from one lifeline to another, and gives the alias of the first
+    String message(String from, String to) {
+      ordered.add(from);
+      ordered.add(to);
+      return from;
+    }
+
+    /// The declarations of the lifelines, in the order of their first messages between lifelines, and then those
+    /// with none
+    String declarations() {
+      return Stream.concat(ordered.stream(), names.keySet().stream())
+          .distinct()
+          .map(alias -> String.format("participant \"%s\" as %s\n", names.get(alias), alias))
+          .collect(joining());
+    }
+  }
+
+}

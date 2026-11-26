@@ -91,7 +91,7 @@ can break or go out of date. See the [design principles](principles.md) for the 
   failure can be understood from what happened, not guessed at from what is left.
 * **All or nothing.** Everything an event leads to is stored in one transaction or not at all. When concurrent changes
   conflict, the event is processed again from the new state rather than overwriting the other change.
-* **Diagrams that are never out of date.** The [state diagrams](diagrams.md) are generated from the models, so the
+* **Diagrams that are never out of date.** The [state diagrams](diagrams.md#state-diagrams-of-entity-types) are generated from the models, so the
   documentation of the domain always matches the code that runs.
 
 ## A taste of it
