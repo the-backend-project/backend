@@ -232,8 +232,7 @@ public class StateMachine implements AutoCloseable {
     return traversers;
   }
 
-
-    private EventLog emptyEventLog(EntityModel entityModel) {
+  private EventLog emptyEventLog(EntityModel entityModel) {
     return new EventLog(entityModel, Identifiers.newId(), List.of());
   }
 
