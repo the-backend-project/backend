@@ -1,16 +1,16 @@
 package com.github.thxmasj.backend.database.pgsql.internal;
 
-import com.github.thxmasj.backend.core.database.Stored;
+import com.github.thxmasj.backend.core.database.TableType;
 import java.util.Arrays;
 
-/// The tables of the schema where the state machine stores entities and events
+/// The names of the tables of the schema, by their type
 final class Tables {
 
   private Tables() {}
 
-  /// The name of the table where it is stored
-  static String table(Stored stored) {
-    return switch (stored) {
+  /// The name of the table of the type
+  static String table(TableType tableType) {
+    return switch (tableType) {
       case Entity -> "Entity";
       case Event -> "Event";
       case IndexEvent -> "IndexEvent";
@@ -18,9 +18,9 @@ final class Tables {
     };
   }
 
-  /// What is stored in the table of the name, or null if it has no entities or events
-  static Stored stored(String table) {
-    return Arrays.stream(Stored.values()).filter(stored -> table(stored).equals(table)).findFirst().orElse(null);
+  /// The type of the table of the name, or null if it has no entities or events
+  static TableType tableType(String table) {
+    return Arrays.stream(TableType.values()).filter(tableType -> table(tableType).equals(table)).findFirst().orElse(null);
   }
 
 }

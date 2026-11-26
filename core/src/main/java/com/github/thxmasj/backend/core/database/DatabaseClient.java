@@ -245,27 +245,27 @@ public interface DatabaseClient extends AutoCloseable {
 
   class DataIntegrityViolation extends DatabaseException {
 
-    private final Stored stored;
+    private final TableType tableType;
 
-    public DataIntegrityViolation(String queryName, EntityModel model, Stored stored, String message, Throwable t) {
+    public DataIntegrityViolation(String queryName, EntityModel model, TableType tableType, String message, Throwable t) {
       super(queryName, model, message, t);
-      this.stored = stored;
+      this.tableType = tableType;
     }
 
-    public DataIntegrityViolation(String queryName, EntityModel model, Stored stored, Throwable e) {
+    public DataIntegrityViolation(String queryName, EntityModel model, TableType tableType, Throwable e) {
       super(queryName, model, e);
-      this.stored = stored;
+      this.tableType = tableType;
     }
 
-    /// What the state machine stores where the violation is, as the database module maps its tables to it, or null if
-    /// it is none of it
-    public Stored stored() {
-      return stored;
+    /// The type of the table of the violation, as the database module maps its tables to them, or null if the state
+    /// machine stores no entities or events in it
+    public TableType tableType() {
+      return tableType;
     }
 
   }
 
-  /// A primary key violation, whose duplicate key has the values of the key of what is stored (see [Stored]),
+  /// A primary key violation, whose duplicate key has the values of the key of its table type (see [TableType]),
   /// separated by commas
   class PrimaryKeyConstraintViolation extends DataIntegrityViolation {
 
@@ -276,11 +276,11 @@ public interface DatabaseClient extends AutoCloseable {
         String queryName,
         EntityModel model,
         String duplicateKey,
-        Stored stored,
+        TableType tableType,
         String constraintName,
         Throwable cause
     ) {
-      super(queryName, model, stored, "Primary key constraint " + constraintName + " violated", cause);
+      super(queryName, model, tableType, "Primary key constraint " + constraintName + " violated", cause);
       this.constraintName = constraintName;
       this.duplicateKey = duplicateKey;
     }
@@ -304,11 +304,11 @@ public interface DatabaseClient extends AutoCloseable {
         String queryName,
         EntityModel model,
         String duplicateKey,
-        Stored stored,
+        TableType tableType,
         String indexName,
         Throwable cause
     ) {
-      super(queryName, model, stored, cause);
+      super(queryName, model, tableType, cause);
       this.duplicateKey = duplicateKey;
       this.indexName = indexName;
     }

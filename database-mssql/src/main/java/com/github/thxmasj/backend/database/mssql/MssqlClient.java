@@ -84,14 +84,14 @@ class MssqlClient extends JDBCClient {
       case SQLServerException e when e.getSQLServerError().getErrorNumber() == 2627 -> {
         Matcher primaryKeyViolationMatcher = primaryKeyViolationPattern.matcher(e.getMessage());
         if (primaryKeyViolationMatcher.matches())
-          yield new PrimaryKeyConstraintViolation(queryName, null, withUuid(primaryKeyViolationMatcher.group(4)), Tables.stored(primaryKeyViolationMatcher.group(3)), primaryKeyViolationMatcher.group(1), e);
+          yield new PrimaryKeyConstraintViolation(queryName, null, withUuid(primaryKeyViolationMatcher.group(4)), Tables.tableType(primaryKeyViolationMatcher.group(3)), primaryKeyViolationMatcher.group(1), e);
         else
           yield new DataIntegrityViolation(queryName, null, null, errorMessage, e);
       }
       case SQLServerException f when f.getSQLServerError().getErrorNumber() == 2601 -> {
         Matcher duplicateKeyRowMatcher = duplicateKeyRowPattern.matcher(f.getMessage());
         if (duplicateKeyRowMatcher.matches())
-          yield new UniqueIndexConstraintViolation(queryName, null, withUuid(duplicateKeyRowMatcher.group(4)), Tables.stored(duplicateKeyRowMatcher.group(2)), duplicateKeyRowMatcher.group(3), f);
+          yield new UniqueIndexConstraintViolation(queryName, null, withUuid(duplicateKeyRowMatcher.group(4)), Tables.tableType(duplicateKeyRowMatcher.group(2)), duplicateKeyRowMatcher.group(3), f);
         else
           yield new DataIntegrityViolation(queryName, null, null, errorMessage, f);
       }

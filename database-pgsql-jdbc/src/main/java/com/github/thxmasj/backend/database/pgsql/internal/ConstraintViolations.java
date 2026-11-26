@@ -34,8 +34,8 @@ public final class ConstraintViolations {
       return new DataIntegrityViolation(queryName, null, null, errorMessage, error);
     // Primary keys are named with a "pk" prefix, see CreateSchema
     else if (constraint.startsWith("pk"))
-      return new PrimaryKeyConstraintViolation(queryName, null, duplicateKeyMatcher.group(1), Tables.stored(table), constraint, error);
+      return new PrimaryKeyConstraintViolation(queryName, null, duplicateKeyMatcher.group(1), Tables.tableType(table), constraint, error);
     else
-      return new UniqueIndexConstraintViolation(queryName, null, duplicateKeyMatcher.group(1), Tables.stored(table), constraint, error);
+      return new UniqueIndexConstraintViolation(queryName, null, duplicateKeyMatcher.group(1), Tables.tableType(table), constraint, error);
   }
 }

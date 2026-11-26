@@ -13,7 +13,7 @@ import com.github.thxmasj.backend.core.database.DatabaseClient;
 import com.github.thxmasj.backend.core.database.DatabaseClient.PrimaryKeyConstraintViolation;
 import com.github.thxmasj.backend.core.database.DatabaseClient.Query.Builder;
 import com.github.thxmasj.backend.core.database.DatabaseClient.UniqueIndexConstraintViolation;
-import com.github.thxmasj.backend.core.database.Stored;
+import com.github.thxmasj.backend.core.database.TableType;
 import com.github.thxmasj.backend.core.internal.DelayedEvent;
 import java.time.Clock;
 import java.time.ZonedDateTime;
@@ -274,14 +274,14 @@ public abstract class ChangeState {
   protected abstract String duplicateKey(Event<?> idEvent);
 
   /// The conflict with what another transaction stored which the failure to store the changes is, or null if it is
-  /// none. A primary key violation where entities or events are stored (see [Stored]) is an [EventAlreadyExists] of the
+  /// none. A primary key violation on a table of entities or events (see [TableType]) is an [EventAlreadyExists] of the
   /// change whose event exists, and a violation of the unique index of the id events an [IdEventAlreadyExists] of the
   /// id event whose id is taken.
   private Throwable conflict(Throwable failure, List<Change> changes) {
     return switch (failure) {
-      case PrimaryKeyConstraintViolation violation when violation.stored() != null ->
+      case PrimaryKeyConstraintViolation violation when violation.tableType() != null ->
           eventAlreadyExists(violation, changes);
-      case UniqueIndexConstraintViolation violation when violation.stored() == Stored.IdEvent ->
+      case UniqueIndexConstraintViolation violation when violation.tableType() == TableType.IdEvent ->
           changes.stream()
               .filter(change -> change.entityModel() instanceof IdEntityModel && change.newEvent() != null)
               .map(Change::newEvent)
@@ -294,22 +294,22 @@ public abstract class ChangeState {
   }
 
   /// The event which exists, of the change storing the event of the entity id and number of the key, of an entity
-  /// model whose events are stored where the violation is. The id and index entities of an entity have its entity id,
+  /// model whose events are stored in a table of the type of the violation's. The id and index entities of an entity have its entity id,
   /// so where it is tells them apart.
   private static EventAlreadyExists eventAlreadyExists(
       PrimaryKeyConstraintViolation violation,
       List<Change> changes
   ) {
-    Stored stored = violation.stored();
+    TableType tableType = violation.tableType();
     try {
       String[] key = violation.duplicateKey().split(",");
       UUID entityId = UUID.fromString(key[0].trim());
-      int eventNumber = stored == Stored.Entity ? 1 : Integer.parseInt(key[1].trim());
+      int eventNumber = tableType == TableType.Entity ? 1 : Integer.parseInt(key[1].trim());
       return changes.stream()
           .filter(change -> change.newEvent() != null
               && entityId.equals(change.entityId())
               && change.newEvent().eventNumber() == eventNumber
-              && stored.stores(change.entityModel()))
+              && tableType.stores(change.entityModel()))
           .findFirst()
           .map(change -> new EventAlreadyExists(change, changes, violation))
           .orElseGet(() -> new EventAlreadyExists(violation));
