@@ -380,7 +380,7 @@ public class PlantUMLFormatter {
   // Events of transitions with a severity above Info are named in bold, after a symbol for their severity, in the colour
   // of their severity. The symbols have a text presentation by default, so they are drawn in that colour rather than as
   // emoji. Events of types which are not stored are named in italics.
-  private static String eventName(EventType<?, ?> eventType, Severity severity) {
+  static String eventName(EventType<?, ?> eventType, Severity severity) {
     String name = eventType.stored() ? eventType.name() : "<i>" + eventType.name() + "</i>";
     String symbol = switch (severity) {
       case Info -> null;

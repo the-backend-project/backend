@@ -5,9 +5,11 @@ import static com.github.thxmasj.backend.templates.cardpayment.Identifiers.Ids;
 
 import com.github.thxmasj.backend.backoffice.Backoffice;
 import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EventLog;
 import com.github.thxmasj.backend.diagram.ERDiagramFormatter;
 import com.github.thxmasj.backend.diagram.GraphvizFormatter;
 import com.github.thxmasj.backend.diagram.PlantUMLFormatter;
+import com.github.thxmasj.backend.diagram.SequenceDiagramFormatter;
 import com.github.thxmasj.backend.helloworld.Greetings;
 import com.github.thxmasj.backend.http.inbox.HttpInbox;
 import com.github.thxmasj.backend.identityprovider.Authorizations;
@@ -31,6 +33,7 @@ public class Main {
   static void main() throws IOException {
     httpOutbox();
     httpInbox();
+    sequenceDiagrams();
     cardPayments();
     identityProvider();
     helloWorld();
@@ -59,6 +62,22 @@ public class Main {
     stateDiagram(name + ".RequestRouting", HttpInbox.of(List.of(withRollback)).requestRouting());
     stateDiagram(MessageIds);
     graphviz("http-inbox-rollback.dot", name + ".Rollback");
+  }
+
+  /// The examples of sequence diagrams on the diagrams page, of event logs of the inbox and outbox examples: an order
+  /// placed by a request to the inbox, and an authorisation whose outcome is unknown, as its response never came, which
+  /// is rolled back by a reversal
+  private static void sequenceDiagrams() throws IOException {
+    var name = "com.github.thxmasj.backend.diagram.sequence.";
+    sequenceDiagram(name + "PlaceOrder", ExampleLogs.log(DocExamples.PlaceOrder, "Request accepted", "Request completed"));
+    sequenceDiagram(
+        name + "Authorisation",
+        ExampleLogs.log(DocExamples.Authorisation, "Request dispatched", "Timeout expired", "Rollback dispatched")
+    );
+  }
+
+  private static void sequenceDiagram(String fileName, EventLog log) throws IOException {
+    System.out.println(new SequenceDiagramFormatter(log).formatToImage(new File(directory, fileName + ".svg")));
   }
 
   private static void cardPayments() throws IOException {
