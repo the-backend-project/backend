@@ -47,12 +47,12 @@ public class SeverityTest {
         .assembleInput()
         .trigger(ReceiptReminded).with(d -> d).after(_ -> Duration.ofHours(1))
         .trigger(notify).with(d -> d)
-        .when(d -> d.isEmpty()).then(onEvent(ParcelReturned).to(States.Returned).assembleInput().output(d -> d))
         .reversible(TransitionModelBuilder.assemble((_, _) -> ""))
         .trigger(ParcelWeighed).with(d -> d).on(Parcel).identifiedBy(entityIdFromSession())
         .trigger(ParcelReturned).when(ParcelReferenced, _ -> UUID.randomUUID()).is(ParcelWeighed)
             .with(d -> d.t1()).on(Parcel).identifiedBy(entityIdFromSession())
-        .output(d -> d.t1());
+        .when(d -> d.t1().isEmpty()).then(onEvent(ParcelReturned).to(States.Returned).assembleInput().output(d -> d), d -> d.t1())
+        .otherwise(onEvent(ParcelDelivered).to(States.Delivered).assembleInput().output(d -> d), d -> d.t1());
 
     assertEquals(Severity.Critical, transition.severity());
   }

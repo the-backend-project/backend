@@ -430,7 +430,7 @@ public class TransitionModelBuilder<I, T, O> {
       }
 
       public WithFilter<I, Tuple2<T, ProcessResult<O1>>, O> when(Predicate<Tuple2<T, ProcessResult<O1>>> filter) {
-        return new WithFilter<>(complete(), filter);
+        return complete().when(filter);
       }
 
       public TransitionModelBuilder<I, Tuple2<T, ProcessResult<O1>>, O> reversible(TransitionModelBuilder<Data, ?, Data> reverseModel) {
@@ -524,88 +524,113 @@ public class TransitionModelBuilder<I, T, O> {
     return new WithAction<>(this, action);
   }
 
-  public TransitionModelBuilder<I, T, O> when(Map<Predicate<T>, TransitionModel<T, ?>> choices) {
-    var builder = this;
-    for (var entry : choices.entrySet()) {
-      builder = builder.when(entry.getKey()).then(entry.getValue());
-    }
-    return builder;
+  /// Chooses the transition of the first choice whose predicate holds. The choices are followed by more of them or by
+  /// `otherwise`, as a transition with choices always ends in one of them.
+  public Choices<I, T, O> when(Map<Predicate<T>, TransitionModel<T, ?>> choices) {
+    return new Choices<>(this).when(choices);
   }
 
-  public <I1> TransitionModelBuilder<I, T, O> choice(List<GuardedTransition<T, I1, ?>> guardedTransitions) {
-    TransitionModelBuilder<I, T, O> builder = this;
-    for (var guardedTransition : guardedTransitions) {
-      builder = builder.when(guardedTransition);
-    }
-    return builder;
+  /// Chooses the transition of the first guarded transition whose guard holds. The choices are followed by more of
+  /// them or by `otherwise`, as a transition with choices always ends in one of them.
+  public <I1> Choices<I, T, O> choice(List<GuardedTransition<T, I1, ?>> guardedTransitions) {
+    return new Choices<>(this).choice(guardedTransitions);
   }
 
-  public <I1, O1> TransitionModelBuilder<I, T, O> when(GuardedTransition<T, I1, O1> guardedTransition) {
-    return when(guardedTransition.guard()).then(guardedTransition.then(), guardedTransition.dataAdapter());
+  public <I1, O1> Choices<I, T, O> when(GuardedTransition<T, I1, O1> guardedTransition) {
+    return new Choices<>(this).when(guardedTransition);
   }
 
+  /// Chooses the transition if the predicate holds, given by [WithFilter#then]. The choice is followed by more of
+  /// them or by `otherwise`, as a transition with choices always ends in one of them.
   public WithFilter<I, T, O> when(Predicate<T> filter) {
     return new WithFilter<>(this, filter);
   }
 
+  /// Chooses the transition unconditionally. The event of this transition isn't stored, but the one of the chosen.
   public <O1> TransitionModel<I, O> otherwise(TransitionModel<T, O1> transitionModel) {
-    return new WithFilter<>(this, _ -> true).then(transitionModel).complete();
+    return new Choices<>(this).otherwise(transitionModel);
   }
 
+  /// Chooses the transition unconditionally, with the input given by the data adapter. The event of this transition
+  /// isn't stored, but the one of the chosen.
   public <I1, O1> TransitionModel<I, O> otherwise(TransitionModel<I1, O1> transitionModel, Function<T, I1> dataAdapter) {
-    return new WithFilter<>(this, _ -> true).then(transitionModel, dataAdapter).complete();
+    return new Choices<>(this).otherwise(transitionModel, dataAdapter);
   }
 
+  /// A choice of a transition, the alternative, when the predicate holds
   public record Filter<T, I1, O1>(Predicate<T> predicate, Alternative<T, I1, O1> alternative) {}
+
+  /// The transitions chosen by a transition so far, which is followed by more of them or by `otherwise`. A transition
+  /// with choices always ends in one of them: only the event of the chosen transition is stored, never the one of the
+  /// transition choosing, so the compiler refuses a transition which would otherwise fall through to its own output
+  /// when none of its predicates holds.
+  public static final class Choices<I, T, O> {
+
+    private final TransitionModelBuilder<I, T, O> builder;
+
+    private Choices(TransitionModelBuilder<I, T, O> builder) {
+      this.builder = builder;
+    }
+
+    /// Chooses the transition if the predicate holds, and the ones before it don't
+    public WithFilter<I, T, O> when(Predicate<T> filter) {
+      return new WithFilter<>(builder, filter);
+    }
+
+    public Choices<I, T, O> when(Map<Predicate<T>, TransitionModel<T, ?>> choices) {
+      var result = this;
+      for (var entry : choices.entrySet()) {
+        result = result.when(entry.getKey()).then(entry.getValue());
+      }
+      return result;
+    }
+
+    public <I1> Choices<I, T, O> choice(List<GuardedTransition<T, I1, ?>> guardedTransitions) {
+      var result = this;
+      for (var guardedTransition : guardedTransitions) {
+        result = result.when(guardedTransition);
+      }
+      return result;
+    }
+
+    public <I1, O1> Choices<I, T, O> when(GuardedTransition<T, I1, O1> guardedTransition) {
+      return when(guardedTransition.guard()).then(guardedTransition.then(), guardedTransition.dataAdapter());
+    }
+
+    /// Chooses the transition when none of the ones before it is chosen
+    public <O1> TransitionModel<I, O> otherwise(TransitionModel<T, O1> transitionModel) {
+      return otherwise(transitionModel, Function.identity());
+    }
+
+    /// Chooses the transition, with the input given by the data adapter, when none of the ones before it is chosen
+    public <I1, O1> TransitionModel<I, O> otherwise(TransitionModel<I1, O1> transitionModel, Function<T, I1> dataAdapter) {
+      return new WithFilter<>(builder, _ -> true).then(transitionModel, dataAdapter).builder.complete();
+    }
+
+  }
 
   public static final class WithFilter<I, T, O> {
 
-    public record Alternative<T, I1, O1>(Predicate<T> predicate, TransitionModel<I1, O1> model, Function<T, I1> dataAdapter) {
-      public static <T, I1, O1> Alternative<T, I1, O1> then(Function<T, I1> dataAdapter, TransitionModel<I1, O1> model) {
-        return new Alternative<>(_ -> true, model, dataAdapter);
-      }
-      public static <T, O1> Alternative<T, T, O1> then(TransitionModel<T, O1> model) {
-        return new Alternative<>(_ -> true, model, Function.identity());
-      }
-    }
+    /// The transition chosen, with the data adapter giving its input
+    public record Alternative<T, I1, O1>(TransitionModel<I1, O1> model, Function<T, I1> dataAdapter) {}
 
     private final TransitionModelBuilder<I, T, O> builder;
     private final Predicate<T> predicate;
 
-    public WithFilter(TransitionModelBuilder<I, T, O> builder, Predicate<T> predicate) {
+    private WithFilter(TransitionModelBuilder<I, T, O> builder, Predicate<T> predicate) {
       this.builder = builder;
       this.predicate = predicate;
     }
 
-    public <O1> TransitionModelBuilder<I, T, O> then(TransitionModel<T, O1> transitionModel) {
-      return then(new Alternative<>(_ -> true, transitionModel, Function.identity()));
+    public <O1> Choices<I, T, O> then(TransitionModel<T, O1> transitionModel) {
+      return then(transitionModel, Function.identity());
     }
 
-    public <I1, O1> TransitionModelBuilder<I, T, O> then(TransitionModel<I1, O1> transitionModel, Function<T, I1> dataAdapter) {
-      return then(new Alternative<>(_ -> true, transitionModel, dataAdapter));
+    public <I1, O1> Choices<I, T, O> then(TransitionModel<I1, O1> transitionModel, Function<T, I1> dataAdapter) {
+      return new Choices<>(complete(new Filter<>(this.predicate, new Alternative<>(transitionModel, dataAdapter))));
     }
 
-    public <I1, O1> TransitionModelBuilder<I, T, O> then(Alternative<T, I1, O1> alternative) {
-      return complete(new Filter<>(this.predicate, alternative));
-    }
-
-    public <I1, O1> TransitionModelBuilder<I, T, O> orElse(Predicate<T> altPredicate, TransitionModel<I1, O1> transitionModel, Function<T, I1> dataAdapter) {
-      return complete(new Filter<>(this.predicate.negate(), new Alternative<>(altPredicate, transitionModel, dataAdapter)));
-    }
-
-    public <I1, O1> TransitionModelBuilder<I, T, O> orElse(TransitionModel<I1, O1> transitionModel, Function<T, I1> dataAdapter) {
-      return complete(new Filter<>(this.predicate.negate(), new Alternative<>(_ -> true, transitionModel, dataAdapter)));
-    }
-
-    public <O1> TransitionModelBuilder<I, T, O> orElse(Predicate<T> altPredicate, TransitionModel<String, O1> transitionModel, String eventInput) {
-      return complete(new Filter<>(this.predicate.negate(), new Alternative<>(altPredicate, transitionModel, _ -> eventInput)));
-    }
-
-    public <O1> TransitionModelBuilder<I, T, O> orElse(TransitionModel<String, O1> transitionModel, String eventInput) {
-      return complete(new Filter<>(this.predicate.negate(), new Alternative<>(_ -> true, transitionModel, _ -> eventInput)));
-    }
-
-    public <I1, O1> TransitionModelBuilder<I, T, O> complete(Filter<T, I1, O1> filter) {
+    private <I1, O1> TransitionModelBuilder<I, T, O> complete(Filter<T, I1, O1> filter) {
       var modelContext = this.builder.modelContext.withFilters(join(this.builder.modelContext.filters, filter));
       return new TransitionModelBuilder<>(
           modelContext,
@@ -684,8 +709,19 @@ public class TransitionModelBuilder<I, T, O> {
   }
 
   public TransitionModelBuilder<I, T, O> reversible(TransitionModelBuilder<Data, ?, Data> reverseModel) {
+    return reversible(reverseModel.complete());
+  }
+
+  /// The transition reversed by a reverse model with choices, which ends in `otherwise`, e.g.
+  /// `assemble(...).when(p).then(m).otherwise(n)`
+  public TransitionModelBuilder<I, T, O> reversible(TransitionModel<Data, Data> reverseModel) {
+    if (!reverseModel.modelContext().reversal())
+      throw new IllegalArgumentException(
+          "The reverse model " + reverseModel + " isn't built as one, by assemble(...) or assembleReactive(...) of " +
+              "TransitionModelBuilder"
+      );
     return new TransitionModelBuilder<>(
-        modelContext.withReverseModel(reverseModel.complete()),
+        modelContext.withReverseModel(reverseModel),
         builderFunction
     );
   }
@@ -860,8 +896,8 @@ public class TransitionModelBuilder<I, T, O> {
     )))));
   }
 
-  /// The event of the transition with the output, masked when stored if the mask isn't null. The event of a transition
-  /// which chose another one isn't stored, so it isn't masked: the event of the chosen one is stored, with its own mask.
+  /// The event of the transition with the output, masked when stored if the mask isn't null. A transition which
+  /// chooses another one has no event of its own, as it ends in the chosen one's, with that one's mask.
   private Event<O> event(TransitionStep<T> step, O output, UnaryOperator<O> mask) {
     if (output == null)
       throw new IllegalStateException(String.format(
@@ -873,7 +909,7 @@ public class TransitionModelBuilder<I, T, O> {
     UUID entityId = inputStep.log().entityId();
     int number = inputStep.log().lastEventNumber() + 1;
     // Marshalled when the transition is calculated, after its mask, see TransitionModel#calculate
-    return mask == null || step instanceof ChoiceStep<?> ?
+    return mask == null ?
         Event.marshalledWhenAskedFor(entityId, number, modelContext.eventType(), inputStep.timestamp(), output) :
         new Event<>(entityId, number, modelContext.eventType(), inputStep.timestamp(), output, mask);
   }

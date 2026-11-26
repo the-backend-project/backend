@@ -556,7 +556,8 @@ interface TransitionModels {
                 new EventReference(d.t2().accepted().event().entityId(), d.t2().accepted().event().eventNumber())
             )
         )
-        .output();
+        // The rollback on the application is pending, or its entity isn't known: the rollback request is stored
+        .otherwise(onEvent(RollbackRequestReceived).to(RollingBack).output(), d -> d.t1().t1().request());
   }
 
   /// Whether the rollback is equal to the first one with the same message id after normalizing, as for requests
