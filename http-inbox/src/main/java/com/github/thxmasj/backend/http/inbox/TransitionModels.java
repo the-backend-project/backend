@@ -556,7 +556,8 @@ interface TransitionModels {
                 new EventReference(d.t2().accepted().event().entityId(), d.t2().accepted().event().eventNumber())
             )
         )
-        .output();
+        // The rollback on the application is pending, or its entity isn't known: the rollback request is stored
+        .otherwise(onEvent(RollbackRequestReceived).to(RollingBack).output(), d -> d.t1().t1().request());
   }
 
   /// Whether the rollback is equal to the first one with the same message id after normalizing, as for requests
@@ -662,7 +663,7 @@ interface TransitionModels {
       for (var transition : taken) {
         for (var trigger : immediateTriggers(transition)) {
           EntityModel target = trigger.entityModel() != null ? trigger.entityModel() : event.entityModel();
-          EventType<?, ?> triggered = trigger.eventSpec().eventType();
+          EventType<?, ?> triggered = trigger.eventType();
           if (target instanceof EntityModelGroup group && group.includes(request))
             given.add(new Given(event, triggered));
           else if (!(target instanceof EntityModelGroup) && !isInboxModel(target))
@@ -683,7 +684,7 @@ interface TransitionModels {
   private static List<EventTrigger<?, ?, ?>> immediateTriggers(TransitionModel<?, ?> transition) {
     var triggers = new ArrayList<EventTrigger<?, ?, ?>>();
     for (var trigger : transition.triggers()) {
-      if (trigger.condition() == null)
+      if (!(trigger instanceof EventTrigger.Conditional<?, ?, ?>))
         triggers.add(trigger);
     }
     for (var filter : transition.filters())

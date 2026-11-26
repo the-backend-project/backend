@@ -116,7 +116,7 @@ public sealed interface TransitionStep<T> {
     }
 
     @Override public String toString() {
-      return "Trigger: " + eventTrigger.eventSpec().eventType().name() + "@" + eventTrigger.entityModel().name();
+      return "Trigger: " + eventTrigger.eventType().name() + "@" + eventTrigger.entityModel().name();
     }
 
   }

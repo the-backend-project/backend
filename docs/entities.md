@@ -87,7 +87,7 @@ The state machine reads the event log of the selected entity, finds the transiti
 event's type, and follows the triggers of the transition from entity to entity. The new events of all the entities
 involved are stored in one transaction, together with the triggers to be fired later. If another instance has
 appended an event to one of the entities in the meantime, the transaction fails on the event number, and the event is
-retried on the new event log.
+retried on the new event logs.
 
 A transition has four kinds of triggers:
 
@@ -111,24 +111,8 @@ Since side effects only happen after the events causing them are stored, an enti
 If the instance stops before an action completes, a delayed trigger stored with the action, such as the timeout of an
 outbox request, moves the entity on.
 
-## Sessions
-
-A session is all the state machine does for an event entering it through `StateMachine.onEvent`, e.g. a request to the
-[inbox](http-inbox.md). It is one or more transactions. A transaction is the transitions taken for one event, with the
-events they trigger on other entities, whose changes are stored together, in one database transaction. If it can't be
-stored, as another instance has stored an event on one of its entities in the meantime, or an id it claims is
-[taken](existing-ids.md), it is calculated again and stored in another.
-
-1. The event entering the state machine is the event of the first transaction.
-2. The actions of the changes stored run, e.g. sending an [outbox request](http-outbox.md). The event an action gives,
-   e.g. the response of the outbox request, is the event of a transaction of its own, which follows the one which ran
-   the action. Its actions continue the session in the same way.
-
-Every transaction of a session finds the entities of the earlier ones, e.g. `entityIdFromSession()` the entity the
-session started on, so an outbox request's response can answer the request to the inbox. The events of the entity
-the session started on, in all its transactions, go to the one who triggered the event, e.g. the listener of the
-inbox, which sends the response. A delayed or conditional trigger fires in a session of its own, after the session
-which stored it, even if that hasn't ended.
+[Transitions, transactions and sessions](sessions.md) describes how an event is processed in transitions, stored in a
+transaction, and followed by the transactions of the outcomes of its actions, in one session.
 
 ## Events and entities not stored
 
@@ -150,7 +134,7 @@ tested, drawn in the state diagrams and told the [monitoring](monitoring.md), wi
 * **An entity of the session only** is created by an event which is not stored, i.e. one from `Begin`, or is of an
   entity model whose `stored()` is false, e.g. one of `EntityModel.notStored(name, id, transitions)`. None of its
   events are stored, whatever their types, so its transitions may go to any state, also on events not stored. The
-  [session](#sessions) finds it among the events of its transactions, but no other session does, so it can't have
+  [session](sessions.md#sessions) finds it among the events of its transactions, but no other session does, so it can't have
   delayed or conditional triggers, which fire in a session of their own: the change fails if it has one. Nor can its
   transitions trigger events on an id or index model (`IdEntityModel`, `IndexEntityModel`), which would point to an
   entity which doesn't exist, and claim an id for good. The state machine refuses both when it is created. An inbox
@@ -160,7 +144,7 @@ tested, drawn in the state diagrams and told the [monitoring](monitoring.md), wi
   as it is stored, which must not be null. A transition without an output has nothing to mask, so `.output()` without
   a data adapter, and a transition which chooses another one, can't be masked. The event in the transaction has the whole output, which its triggers, the one who triggered
   it and the transitions of the same transaction see, while the event log has the masked one. A later transaction, also
-  one of the same [session](#sessions), reads a stored entity from the event log, masked. The [inbox](http-inbox.md#masking) masks the credentials of the requests it stores this way.
+  one of the same [session](sessions.md#sessions), reads a stored entity from the event log, masked. The [inbox](http-inbox.md#masking) masks the credentials of the requests it stores this way.
   The data of a delayed or conditional trigger is not masked: it is the input of the event the trigger fires later, in
   a session of its own, so it is stored whole until then. Keep secrets out of it, and pass what the later transition
   needs by a reference, e.g. an id or a hash, rather than the secret itself, which no later session can have.

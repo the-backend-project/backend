@@ -6,6 +6,7 @@ import com.github.thxmasj.backend.core.internal.Memoized;
 import com.github.thxmasj.backend.http.HttpRequest;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 
 /// The entity models of an inbox. The responses of the requests are checked when the entity models are first asked
 /// for, e.g. by the state machine, rather than when the inbox is created, which asks for no transitions, so that the
@@ -15,17 +16,49 @@ final class InboxModels implements HttpInbox {
   private final EntityModel requestRouting;
   private final List<HttpInboxRequest<?>> requests;
   private final Memoized<List<EntityModel>> entityModels;
-  private final EventTrigger<HttpRequest<byte[]>, HttpRequest<byte[]>, ?> trigger;
+  private final String correlationIdHeader;
+  private final EventTrigger.Immediate<HttpRequest<byte[]>, HttpRequest<byte[]>, ?> trigger;
 
   private InboxModels(List<HttpInboxRequest<?>> requests) {
     this.requestRouting = new RequestRoutingModel(requests);
     this.requests = List.copyOf(requests);
     this.entityModels = new Memoized<>(this::checkedEntityModels, "entity models of the inbox");
-    this.trigger = EventTrigger.trigger(RequestReceived, requestRouting);
+    this.correlationIdHeader = "X-Correlation-Id";
+    this.trigger = trigger(requestRouting, correlationIdHeader);
+  }
+
+  /// The inbox with the entity models of the other, the same instances, so that a state machine running the one runs
+  /// the other
+  private InboxModels(InboxModels other, String correlationIdHeader) {
+    this.requestRouting = other.requestRouting;
+    this.requests = other.requests;
+    this.entityModels = other.entityModels;
+    this.correlationIdHeader = correlationIdHeader;
+    this.trigger = trigger(requestRouting, correlationIdHeader);
   }
 
   static InboxModels of(List<HttpInboxRequest<?>> requests) {
     return new InboxModels(requests);
+  }
+
+  private static EventTrigger.Immediate<HttpRequest<byte[]>, HttpRequest<byte[]>, ?> trigger(
+      EntityModel requestRouting,
+      String correlationIdHeader
+  ) {
+    return EventTrigger.trigger(RequestReceived, requestRouting)
+        .withCorrelationId(request -> correlationId(request, correlationIdHeader));
+  }
+
+  private static String correlationId(HttpRequest<byte[]> request, String correlationIdHeader) {
+    String correlationId = request.headerValue(correlationIdHeader);
+    if (correlationId == null || correlationId.isBlank())
+      return "SYS-" + ThreadLocalRandom.current().nextLong(1000000000000000000L, Long.MAX_VALUE);
+    return correlationId;
+  }
+
+  @Override
+  public HttpInbox correlationIdHeader(String correlationIdHeader) {
+    return new InboxModels(this, correlationIdHeader);
   }
 
   @Override
@@ -45,7 +78,7 @@ final class InboxModels implements HttpInbox {
   }
 
   @Override
-  public EventTrigger<HttpRequest<byte[]>, HttpRequest<byte[]>, ?> trigger() {
+  public EventTrigger.Immediate<HttpRequest<byte[]>, HttpRequest<byte[]>, ?> trigger() {
     return trigger;
   }
 

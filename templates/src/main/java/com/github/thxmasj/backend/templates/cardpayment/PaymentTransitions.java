@@ -661,8 +661,7 @@ public class PaymentTransitions {
                                 AcquirerBatchNumberClaimed,
                                 new AcquirerBatchNumber(d.t1().merchantId(), d.t3().batchNumber()),
                                 lastIndexed(BatchIndexed, d.t1().merchantId(), CreateIfNotExists)
-                            ),
-                            d -> lastIndexed(BatchIndexed, d.t1().merchantId(), CreateIfNotExists)
+                            )
                         )
                     .trigger(MerchantCredited).with(d -> d.t1().t3().amount()).on(settlement)
                         .identifiedBy(d -> entityId(d.t2().accepted().event().entityId()))
@@ -894,8 +893,7 @@ public class PaymentTransitions {
                             AcquirerBatchNumberClaimed,
                             new AcquirerBatchNumber(d.t2().id(), d.t3().batchNumber()),
                             lastIndexed(BatchIndexed, d.t2().id())
-                        ),
-                        d -> lastIndexed(BatchIndexed, d.t2().id())
+                        )
                     )
                 .trigger(MerchantDebited).with(d -> d.t1().t3().amount()).on(settlement)
                     .identifiedBy(d -> entityId(d.t2().accepted().event().entityId()))

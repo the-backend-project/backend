@@ -90,7 +90,7 @@ class Traverser {
   /// A conditional trigger refers to the event of its transition, so the transition, and every transition it may
   /// choose, must be of an event which is stored
   private void requireStoredEventOfConditionalTrigger(TransitionModel<?, ?> transition) {
-    if (transition.triggers().stream().anyMatch(trigger -> trigger.condition() != null)) {
+    if (transition.triggers().stream().anyMatch(trigger -> trigger instanceof EventTrigger.Conditional<?, ?, ?>)) {
       for (var leaf : leaves(transition)) {
         if (!leaf.eventType().stored())
           refuse(String.format(
@@ -173,13 +173,13 @@ class Traverser {
       if (delayed == 0)
         return;
       for (var trigger : triggers)
-        if (trigger.condition() == null && delayingNotStored.contains(trigger.eventSpec().eventType()) && isOnTheModel(trigger))
+        if (!(trigger instanceof EventTrigger.Conditional<?, ?, ?>) && delayingNotStored.contains(trigger.eventType()) && isOnTheModel(trigger))
           refuse(String.format(
               "The transition on %s has a delayed trigger, and triggers %s, which isn't stored and has a delayed trigger " +
                   "too. On the same entity, the two would have the same number, but an entity has at most one pending " +
                   "delayed trigger",
               transition.eventType().name(),
-              trigger.eventSpec().eventType().name()
+              trigger.eventType().name()
           ));
     }
     for (var filter : transition.filters())
@@ -196,7 +196,7 @@ class Traverser {
             "The transition on %s may be of an entity of the session only, which is never stored, so it can't trigger %s " +
                 "on the %s model %s, which would point to an entity which doesn't exist",
             transition.eventType().name(),
-            trigger.eventSpec().eventType().name(),
+            trigger.eventType().name(),
             trigger.entityModel() instanceof IdEntityModel ? "id" : "index",
             trigger.entityModel().name()
         ));
@@ -216,7 +216,7 @@ class Traverser {
   /// An entity of the session only is not found after its session, so its transitions, and those they may choose, can't
   /// have delayed or conditional triggers, which fire in a session of their own
   private void requireNoLaterTrigger(TransitionModel<?, ?> transition) {
-    boolean conditional = transition.triggers().stream().anyMatch(trigger -> trigger.condition() != null);
+    boolean conditional = transition.triggers().stream().anyMatch(trigger -> trigger instanceof EventTrigger.Conditional<?, ?, ?>);
     if (conditional || !transition.delayedEventTypes().isEmpty())
       refuse(String.format(
           "The transition on %s may be of an entity of the session only, which is not found after its session, so it " +
@@ -268,15 +268,10 @@ class Traverser {
         ));
   }
 
-  /// The states the transition may lead to: those of the transitions it may choose, and its own, as a choice without
-  /// `otherwise` falls through to it (see #315)
-  private static List<State> targets(TransitionModel<?, ?> transition) {
-    var targets = new ArrayList<State>();
-    if (transition.toState() != null)
-      targets.add(transition.toState());
-    for (var filter : transition.filters())
-      targets.addAll(targets(filter.alternative().model()));
-    return targets;
+  /// The states the transition may lead to: those of the transitions it may choose, as a transition with choices
+  /// always ends in one of them, or its own if it has none
+  private List<State> targets(TransitionModel<?, ?> transition) {
+    return leaves(transition).stream().map(TransitionModel::toState).filter(Objects::nonNull).toList();
   }
 
   /// The states an entity which is stored reaches: from `Begin` by the events stored, as one created by an event not
@@ -481,6 +476,9 @@ class Traverser {
             .collect(joining(", ")) + ")");
   }
 
+  /// The transitions whose events the transition may store: its own if it has no choices, or else those it may choose,
+  /// which are all its outcomes, as a transition with choices always ends in `otherwise`, and its own event is never
+  /// stored
   private List<TransitionModel<?, ?>> leaves(TransitionModel<?, ?> transition) {
     ArrayList<TransitionModel<?, ?>> leaves = new ArrayList<>();
     if (transition.filters().isEmpty()) {

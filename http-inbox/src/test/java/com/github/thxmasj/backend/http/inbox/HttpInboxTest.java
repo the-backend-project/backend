@@ -572,7 +572,7 @@ public class HttpInboxTest {
     var cookieInbox = HttpInbox.of(List.of(request));
     var machine = Init.stateMachine(UUID.randomUUID().toString(), cookieInbox.entityModels());
     var message = new HttpRequest<byte[]>(PUT, URI.create("/bell/" + UUID.randomUUID()), Headers.of(), null);
-    Function<HttpRequest<byte[]>, HttpResponse<byte[]>> send = m -> HttpResponse.raw(machine.onEvent(UUID.randomUUID().toString(), cookieInbox.trigger(), m)
+    Function<HttpRequest<byte[]>, HttpResponse<byte[]>> send = m -> HttpResponse.raw(machine.onEvent(cookieInbox.trigger(), m)
         .skip(1).next().block(Duration.ofSeconds(5)).getUnmarshalledData());
 
     HttpResponse<byte[]> first = send.apply(message);
@@ -679,10 +679,36 @@ public class HttpInboxTest {
   @Test
   public void whenCustomCorrelationIdHeaderOverHttpThenResponseHasSameCorrelationId() throws IOException {
     HttpResponse<byte[]> response = exchangeOverHttp(
-        new HttpInboxListener(stateMachine, inbox).correlationIdHeader("TID"),
-        Headers.of("TID", "tid-123", "X-Correlation-Id", "ignored")
+        new HttpInboxListener(stateMachine, inbox.correlationIdHeader("CorrelationId")),
+        Headers.of("CorrelationId", "correlation-123", "X-Correlation-Id", "ignored")
     );
-    assertEquals("tid-123", response.headerValue("X-Correlation-Id"));
+    assertEquals("correlation-123", response.headerValue("X-Correlation-Id"));
+  }
+
+  @Test
+  public void whenCorrelationIdHeaderWithoutListenerThenResponseHasSameCorrelationId() {
+    var request = internalRequest(UUID.randomUUID().toString(), "t0ken");
+    var withHeader = new HttpRequest<>(request.method(), request.uri(), request.headers().plus("CorrelationId", "correlation-456"), request.body());
+    HttpResponse<byte[]> response = HttpResponse.raw(
+        stateMachine.onEvent(inbox.correlationIdHeader("CorrelationId").trigger(), withHeader)
+            .skip(1)
+            .next()
+            .block(Duration.ofSeconds(5))
+            .getUnmarshalledData()
+    );
+    assertEquals("correlation-456", response.headerValue("X-Correlation-Id"));
+  }
+
+  @Test
+  public void whenNoCorrelationIdHeaderWithoutListenerThenGeneratedCorrelationId() {
+    HttpResponse<byte[]> response = HttpResponse.raw(
+        stateMachine.onEvent(inbox.trigger(), internalRequest(UUID.randomUUID().toString(), "t0ken"))
+            .skip(1)
+            .next()
+            .block(Duration.ofSeconds(5))
+            .getUnmarshalledData()
+    );
+    assertThat(response.headerValue("X-Correlation-Id")).matches("SYS-\\d{19}");
   }
 
   @Test
@@ -1135,26 +1161,14 @@ public class HttpInboxTest {
   }
 
   @Test
-  public void entityCanNotBeCreatedInGroup() {
-    var trigger = new EventTrigger<HttpRequest<byte[]>, HttpRequest<byte[]>, Void>(
-        new EventTrigger.EventSpec<>(HttpInbox.RequestReceived, d -> d),
-        List.of(newEntityId()),
-        Request,
-        true
-    );
-    assertThatThrownBy(() -> stateMachine.onEvent(UUID.randomUUID().toString(), trigger, new HttpRequest<>(PUT, URI.create("/x"), Headers.of(), null)).blockLast(Duration.ofSeconds(5)))
-        .hasMessageContaining("can't be created in the group Request");
-  }
-
-  @Test
   public void entityOfGroupCanOnlyBeIdentifiedBySession() {
-    var trigger = new EventTrigger<HttpRequest<byte[]>, HttpRequest<byte[]>, Void>(
-        new EventTrigger.EventSpec<>(HttpInbox.RequestReceived, d -> d),
-        List.of(_ -> EntitySelector.entityId(UUID.randomUUID())),
-        Request,
-        false
+    var trigger = new EventTrigger.Immediate<HttpRequest<byte[]>, HttpRequest<byte[]>, Void>(
+        HttpInbox.RequestReceived,
+        d -> d,
+        _ -> EntitySelector.entityId(UUID.randomUUID()),
+        Request
     );
-    assertThatThrownBy(() -> stateMachine.onEvent(UUID.randomUUID().toString(), trigger, new HttpRequest<>(PUT, URI.create("/x"), Headers.of(), null)).blockLast(Duration.ofSeconds(5)))
+    assertThatThrownBy(() -> stateMachine.onEvent(trigger, new HttpRequest<>(PUT, URI.create("/x"), Headers.of(), null)).blockLast(Duration.ofSeconds(5)))
         .hasMessageContaining("can only be identified by the session");
   }
 
@@ -1511,9 +1525,9 @@ public class HttpInboxTest {
     )).data());
   }
 
-  private Event<?> onRequest(EventTrigger<HttpRequest<byte[]>, ?, ?> eventTrigger, HttpRequest<byte[]> requestMessage) {
+  private Event<?> onRequest(EventTrigger.Immediate<HttpRequest<byte[]>, ?, ?> eventTrigger, HttpRequest<byte[]> requestMessage) {
     System.out.println(getClass().getSimpleName() + ": onRequest(...) with " + requestMessage.requestLine());
-    return stateMachine.onEvent(UUID.randomUUID().toString(), eventTrigger, requestMessage)
+    return stateMachine.onEvent(eventTrigger, requestMessage)
         .doOnNext(e -> System.out.println("Test got response: " + e.type().name()))
         .switchIfEmpty(Mono.defer(() -> Mono.error(new RuntimeException("Test error"))))
         // First event is the triggered event.

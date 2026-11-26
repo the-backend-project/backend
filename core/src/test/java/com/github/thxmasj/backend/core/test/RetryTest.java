@@ -119,7 +119,7 @@ public class RetryTest {
             Mono.empty()
     );
 
-    Event<?> event = machine.onEvent(correlationId, trigger(Counted, Counter, counterId), "this")
+    Event<?> event = machine.onEvent(trigger(Counted, Counter, counterId).withCorrelationId(correlationId), "this")
         .blockFirst(Duration.ofSeconds(20));
 
     assertTrue(appended.get());
@@ -169,7 +169,7 @@ public class RetryTest {
       return other.onEvent(trigger(Counted, Counter, counterId), "other").next().then();
     });
 
-    machine.onEvent(correlationId, trigger(CountRequested, Counter, counterId), tallyId).blockFirst(Duration.ofSeconds(20));
+    machine.onEvent(trigger(CountRequested, Counter, counterId).withCorrelationId(correlationId), tallyId).blockFirst(Duration.ofSeconds(20));
 
     // A retry would come within a second (a delay of 500 ms with full jitter)
     assertThrows(TimeoutException.class, () -> retried.get(3, TimeUnit.SECONDS));
@@ -197,7 +197,7 @@ public class RetryTest {
             Mono.empty()
     );
 
-    machine.onEvent(correlationId, trigger(CountRequested, Counter, counterId), tallyId).blockFirst(Duration.ofSeconds(20));
+    machine.onEvent(trigger(CountRequested, Counter, counterId).withCorrelationId(correlationId), tallyId).blockFirst(Duration.ofSeconds(20));
 
     // The next event after the request on the counter
     assertEquals(List.of(3), reported.numbers().get(20, TimeUnit.SECONDS));
@@ -224,7 +224,7 @@ public class RetryTest {
             Mono.empty()
     );
 
-    machine.onEvent(correlationId, trigger(IndexRequested, Counter, counterId), counterId).blockFirst(Duration.ofSeconds(20));
+    machine.onEvent(trigger(IndexRequested, Counter, counterId).withCorrelationId(correlationId), counterId).blockFirst(Duration.ofSeconds(20));
 
     // The next event after the request on the counter
     assertEquals(List.of(3), indexed.numbers().get(20, TimeUnit.SECONDS));
