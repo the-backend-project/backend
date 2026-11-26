@@ -6,8 +6,8 @@ import com.github.thxmasj.backend.core.database.DatabaseClient.UniqueIndexConstr
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/// Maps PostgreSQL's unique violations to primary key and unique index violations by the name of the constraint, for
-/// the clients of all of PostgreSQL's drivers
+/// Maps PostgreSQL's unique violations to primary key and unique index violations by the name of the constraint, on
+/// what the state machine stores in the table, for the clients of all of PostgreSQL's drivers
 public final class ConstraintViolations {
 
   private static final String UNIQUE_VIOLATION = "23505";
@@ -31,11 +31,11 @@ public final class ConstraintViolations {
       return null;
     Matcher duplicateKeyMatcher = duplicateKeyPattern.matcher(String.valueOf(detail));
     if (table == null || constraint == null || !duplicateKeyMatcher.matches())
-      return new DataIntegrityViolation(queryName, null, "N/A", errorMessage, error);
+      return new DataIntegrityViolation(queryName, null, null, errorMessage, error);
     // Primary keys are named with a "pk" prefix, see CreateSchema
     else if (constraint.startsWith("pk"))
-      return new PrimaryKeyConstraintViolation(queryName, null, duplicateKeyMatcher.group(1), table, constraint, error);
+      return new PrimaryKeyConstraintViolation(queryName, null, duplicateKeyMatcher.group(1), Tables.tableType(table), constraint, error);
     else
-      return new UniqueIndexConstraintViolation(queryName, null, duplicateKeyMatcher.group(1), table, constraint, error);
+      return new UniqueIndexConstraintViolation(queryName, null, duplicateKeyMatcher.group(1), Tables.tableType(table), constraint, error);
   }
 }

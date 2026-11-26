@@ -8,8 +8,8 @@ public class IdEventAlreadyExists extends RuntimeException {
 
   private final Event<?> idEvent;
 
-  public IdEventAlreadyExists(Event<?> idEvent, String duplicateKey) {
-    super("Id event " + idEvent.typeName() + " with data " + duplicateKey + " already exists");
+  public IdEventAlreadyExists(Event<?> idEvent, Throwable cause) {
+    super("Id event " + idEvent.typeName() + " of entity " + idEvent.entityId() + " has an id another entity has", cause);
     this.idEvent = idEvent;
   }
 

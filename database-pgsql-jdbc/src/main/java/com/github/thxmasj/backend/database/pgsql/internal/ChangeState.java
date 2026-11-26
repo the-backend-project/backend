@@ -9,6 +9,7 @@ import com.github.thxmasj.backend.core.IdEntityModel;
 import com.github.thxmasj.backend.core.IndexEntityModel;
 import com.github.thxmasj.backend.core.TriggerType;
 import com.github.thxmasj.backend.core.database.DatabaseClient;
+import com.github.thxmasj.backend.core.database.TableType;
 import com.github.thxmasj.backend.core.internal.DelayedEvent;
 import com.github.thxmasj.backend.core.internal.database.ChangeState.Change.FiredTrigger;
 import com.github.thxmasj.backend.core.internal.database.ConditionalTrigger;
@@ -75,7 +76,7 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
             :entityId,
             :eventNumber,:type,:timestamp,:data
           );
-          """.replace("{table}", table(schema, entityModel instanceof IdEntityModel ? "IdEvent" : "IndexEvent"));
+          """.replace("{table}", table(schema, Tables.table(TableType.of(entityModel))));
     } else if (event != null) {
       if (event.eventNumber() == 1) {
         sql +=

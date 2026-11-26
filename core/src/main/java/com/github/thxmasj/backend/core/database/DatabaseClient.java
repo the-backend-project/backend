@@ -243,34 +243,30 @@ public interface DatabaseClient extends AutoCloseable {
     }
   }
 
-  class ConcurrencyFailure extends MssqlException {
+  class DataIntegrityViolation extends DatabaseException {
 
-    public ConcurrencyFailure(String queryName, EntityModel model, String message, Throwable t) {
+    private final TableType tableType;
+
+    public DataIntegrityViolation(String queryName, EntityModel model, TableType tableType, String message, Throwable t) {
       super(queryName, model, message, t);
+      this.tableType = tableType;
     }
 
-  }
-
-  class DataIntegrityViolation extends MssqlException {
-
-    private final String tableName;
-
-    public DataIntegrityViolation(String queryName, EntityModel model, String tableName, String message, Throwable t) {
-      super(queryName, model, message, t);
-      this.tableName = tableName;
-    }
-
-    public DataIntegrityViolation(String queryName, EntityModel model, String tableName, Throwable e) {
+    public DataIntegrityViolation(String queryName, EntityModel model, TableType tableType, Throwable e) {
       super(queryName, model, e);
-      this.tableName = tableName;
+      this.tableType = tableType;
     }
 
-    public String tableName() {
-      return tableName;
+    /// The type of the table of the violation, as the database module maps its tables to them, or null if the state
+    /// machine stores no entities or events in it
+    public TableType tableType() {
+      return tableType;
     }
 
   }
 
+  /// A primary key violation, whose duplicate key has the values of the key of its table type (see [TableType]),
+  /// separated by commas
   class PrimaryKeyConstraintViolation extends DataIntegrityViolation {
 
     private final String constraintName;
@@ -280,17 +276,13 @@ public interface DatabaseClient extends AutoCloseable {
         String queryName,
         EntityModel model,
         String duplicateKey,
-        String tableName,
+        TableType tableType,
         String constraintName,
         Throwable cause
     ) {
-      super(queryName, model, tableName, "Primary key constraint " + constraintName + " on table " + tableName + " violated ", cause);
+      super(queryName, model, tableType, "Primary key constraint " + constraintName + " violated", cause);
       this.constraintName = constraintName;
       this.duplicateKey = duplicateKey;
-    }
-
-    public PrimaryKeyConstraintViolation(String queryName, EntityModel model, String tableName) {
-      this(queryName, model, null, tableName, null, null);
     }
 
     public String constraintName() {
@@ -302,6 +294,7 @@ public interface DatabaseClient extends AutoCloseable {
     }
   }
 
+  /// A unique index violation, whose duplicate key is as the database reports it
   class UniqueIndexConstraintViolation extends DataIntegrityViolation {
 
     private final String indexName;
@@ -311,11 +304,11 @@ public interface DatabaseClient extends AutoCloseable {
         String queryName,
         EntityModel model,
         String duplicateKey,
-        String tableName,
+        TableType tableType,
         String indexName,
         Throwable cause
     ) {
-      super(queryName, model, tableName, cause);
+      super(queryName, model, tableType, cause);
       this.duplicateKey = duplicateKey;
       this.indexName = indexName;
     }
@@ -329,32 +322,18 @@ public interface DatabaseClient extends AutoCloseable {
     }
   }
 
-  class MssqlException extends RuntimeException {
+  class DatabaseException extends RuntimeException {
 
-    public MssqlException(String queryName, EntityModel model, String message, Throwable t) {
+    public DatabaseException(String queryName, EntityModel model, String message, Throwable t) {
       super("Query " + queryName + " failed (model=" + (model != null ? model.name() : "N/A)")  + ")" + (message != null ? ": " + message : ""), t);
     }
 
-    public MssqlException(String queryName, EntityModel model, String message) {
+    public DatabaseException(String queryName, EntityModel model, String message) {
       this(queryName, model, message, null);
     }
 
-    public MssqlException(String queryName, EntityModel model, Throwable e) {
+    public DatabaseException(String queryName, EntityModel model, Throwable e) {
       this(queryName, model, null, e);
-    }
-  }
-
-  class UncategorizedMssqlException extends MssqlException {
-
-    private final int errorCode;
-
-    public UncategorizedMssqlException(String queryName, EntityModel model, String message, int errorCode, Throwable cause) {
-      super(queryName, model, message, cause);
-      this.errorCode = errorCode;
-    }
-
-    public int getErrorCode() {
-      return errorCode;
     }
   }
 }

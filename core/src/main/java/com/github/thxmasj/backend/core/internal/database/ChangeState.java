@@ -1,10 +1,11 @@
 package com.github.thxmasj.backend.core.internal.database;
 
+import static java.util.Objects.requireNonNullElse;
+
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EntityModel;
 import com.github.thxmasj.backend.core.Event;
 import com.github.thxmasj.backend.core.IdEntityModel;
-import com.github.thxmasj.backend.core.IndexEntityModel;
 import com.github.thxmasj.backend.core.Severity;
 import com.github.thxmasj.backend.core.StateMachine.ProcessResult;
 import com.github.thxmasj.backend.core.TriggerType;
@@ -12,12 +13,12 @@ import com.github.thxmasj.backend.core.database.DatabaseClient;
 import com.github.thxmasj.backend.core.database.DatabaseClient.PrimaryKeyConstraintViolation;
 import com.github.thxmasj.backend.core.database.DatabaseClient.Query.Builder;
 import com.github.thxmasj.backend.core.database.DatabaseClient.UniqueIndexConstraintViolation;
+import com.github.thxmasj.backend.core.database.TableType;
 import com.github.thxmasj.backend.core.internal.DelayedEvent;
 import java.time.Clock;
 import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.UUID;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import reactor.core.publisher.Flux;
 
@@ -261,8 +262,7 @@ public abstract class ChangeState {
             row.get("ElementId", byte[].class)
         ))
         .all()
-        .onErrorMap(PrimaryKeyConstraintViolation.class, primaryKeyConstraintViolationMapper(changes))
-        .onErrorMap(UniqueIndexConstraintViolation.class, uniqueIndexConstraintViolationMapper(changes))
+        .onErrorMap(failure -> requireNonNullElse(conflict(failure, changes), failure))
         .onErrorMap(this::isTriggerFiredElsewhere, TriggerFiredElsewhere::new);
   }
 
@@ -270,44 +270,53 @@ public abstract class ChangeState {
   /// the index of their change, as in "p0_". It selects the outbox elements to process, if any.
   protected abstract String sql(List<Change> changes);
 
-  private Function<PrimaryKeyConstraintViolation, Throwable> primaryKeyConstraintViolationMapper(List<Change> changes) {
-    return pkViolation -> {
-      if (List.of("Entity", "Event", "IndexEvent", "IdEvent").contains(pkViolation.tableName())) {
-        try {
-          String[] key = pkViolation.duplicateKey().split(",");
-          UUID entityId = UUID.fromString(key[0].trim());
-          // The entity table has the first event of an entity
-          int eventNumber = pkViolation.tableName().equals("Entity") ? 1 : Integer.parseInt(key[1].trim());
-          EntityModel entityModel = changes.stream()
-              .filter(change -> change.newEvent() != null
-                  && entityId.equals(change.entityId())
-                  && change.newEvent().eventNumber() == eventNumber
-                  && isStoredIn(change.entityModel(), pkViolation.tableName()))
-              .map(Change::entityModel)
-              .findFirst()
-              .orElseThrow();
-          return new EventAlreadyExists(entityModel, entityId, eventNumber, changes);
-        } catch (Exception e) {
-          return new EventAlreadyExists(pkViolation.duplicateKey());
-        }
-      } else {
-        return pkViolation;
-      }
-    };
-  }
-
-  /// Whether the events of the entity model are stored in the table. The id and index entities of an entity have its
-  /// entity id, so the table tells them apart from the entity.
-  private static boolean isStoredIn(EntityModel entityModel, String table) {
-    return switch (entityModel) {
-      case IdEntityModel _ -> table.equals("IdEvent");
-      case IndexEntityModel _ -> table.equals("IndexEvent");
-      default -> table.equals("Event") || table.equals("Entity");
-    };
-  }
-
-  /// The duplicate key of an id event, as reported by the database, i.e. its type and data
+  /// The key of an id event in its unique index, as reported by the database, i.e. its type and data
   protected abstract String duplicateKey(Event<?> idEvent);
+
+  /// The conflict with what another transaction stored which the failure to store the changes is, or null if it is
+  /// none. A primary key violation on a table of entities or events (see [TableType]) is an [EventAlreadyExists] of the
+  /// change whose event exists, and a violation of the unique index of the id events an [IdEventAlreadyExists] of the
+  /// id event whose id is taken.
+  private Throwable conflict(Throwable failure, List<Change> changes) {
+    return switch (failure) {
+      case PrimaryKeyConstraintViolation violation when violation.tableType() != null ->
+          eventAlreadyExists(violation, changes);
+      case UniqueIndexConstraintViolation violation when violation.tableType() == TableType.IdEvent ->
+          changes.stream()
+              .filter(change -> change.entityModel() instanceof IdEntityModel && change.newEvent() != null)
+              .map(Change::newEvent)
+              .filter(event -> violation.duplicateKey().equalsIgnoreCase(duplicateKey(event)))
+              .<Throwable>map(event -> new IdEventAlreadyExists(event, violation))
+              .findFirst()
+              .orElse(null);
+      default -> null;
+    };
+  }
+
+  /// The event which exists, of the change storing the event of the entity id and number of the key, of an entity
+  /// model whose events are stored in a table of the type of the violation's. The id and index entities of an entity have its entity id,
+  /// so where it is tells them apart.
+  private static EventAlreadyExists eventAlreadyExists(
+      PrimaryKeyConstraintViolation violation,
+      List<Change> changes
+  ) {
+    TableType tableType = violation.tableType();
+    try {
+      String[] key = violation.duplicateKey().split(",");
+      UUID entityId = UUID.fromString(key[0].trim());
+      int eventNumber = tableType == TableType.Entity ? 1 : Integer.parseInt(key[1].trim());
+      return changes.stream()
+          .filter(change -> change.newEvent() != null
+              && entityId.equals(change.entityId())
+              && change.newEvent().eventNumber() == eventNumber
+              && tableType.stores(change.entityModel()))
+          .findFirst()
+          .map(change -> new EventAlreadyExists(change, changes, violation))
+          .orElseGet(() -> new EventAlreadyExists(violation));
+    } catch (RuntimeException _) {
+      return new EventAlreadyExists(violation);
+    }
+  }
 
   /// Whether the failure is the one the store's SQL fails with when the deletion of the trigger which fired the
   /// transaction deletes nothing, as another transaction fired it first (see [TriggerFiredElsewhere])
@@ -320,17 +329,6 @@ public abstract class ChangeState {
     while (root.getCause() != null && root.getCause() != root)
       root = root.getCause();
     return root;
-  }
-
-  private Function<UniqueIndexConstraintViolation, Throwable> uniqueIndexConstraintViolationMapper(List<Change> changes) {
-    return indexViolation -> changes.stream()
-        .filter(_ -> indexViolation.tableName().equals("IdEvent"))
-        .filter(change -> change.entityModel() instanceof IdEntityModel && change.newEvent() != null)
-        .map(Change::newEvent)
-        .filter(event -> indexViolation.duplicateKey().equalsIgnoreCase(duplicateKey(event)))
-        .<Throwable>map(event -> new IdEventAlreadyExists(event, indexViolation.duplicateKey()))
-        .findFirst()
-        .orElseGet(() -> new RuntimeException("Failed to map index violation exception: " + indexViolation, indexViolation));
   }
 
 }

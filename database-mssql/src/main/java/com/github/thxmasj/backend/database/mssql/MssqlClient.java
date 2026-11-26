@@ -5,6 +5,7 @@ import com.github.thxmasj.backend.core.database.DatabaseClient.PrimaryKeyConstra
 import com.github.thxmasj.backend.core.database.DatabaseClient.UniqueIndexConstraintViolation;
 import com.github.thxmasj.backend.core.database.Parameter;
 import com.github.thxmasj.backend.core.internal.database.jdbc.JDBCClient;
+import com.github.thxmasj.backend.database.mssql.internal.Tables;
 import com.microsoft.sqlserver.jdbc.SQLServerException;
 import java.nio.ByteBuffer;
 import java.sql.PreparedStatement;
@@ -83,16 +84,16 @@ class MssqlClient extends JDBCClient {
       case SQLServerException e when e.getSQLServerError().getErrorNumber() == 2627 -> {
         Matcher primaryKeyViolationMatcher = primaryKeyViolationPattern.matcher(e.getMessage());
         if (primaryKeyViolationMatcher.matches())
-          yield new PrimaryKeyConstraintViolation(queryName, null, withUuid(primaryKeyViolationMatcher.group(4)), primaryKeyViolationMatcher.group(3), primaryKeyViolationMatcher.group(1), e);
+          yield new PrimaryKeyConstraintViolation(queryName, null, withUuid(primaryKeyViolationMatcher.group(4)), Tables.tableType(primaryKeyViolationMatcher.group(3)), primaryKeyViolationMatcher.group(1), e);
         else
-          yield new DataIntegrityViolation(queryName, null, "N/A", errorMessage, e);
+          yield new DataIntegrityViolation(queryName, null, null, errorMessage, e);
       }
       case SQLServerException f when f.getSQLServerError().getErrorNumber() == 2601 -> {
         Matcher duplicateKeyRowMatcher = duplicateKeyRowPattern.matcher(f.getMessage());
         if (duplicateKeyRowMatcher.matches())
-          yield new UniqueIndexConstraintViolation(queryName, null, withUuid(duplicateKeyRowMatcher.group(4)), duplicateKeyRowMatcher.group(2), duplicateKeyRowMatcher.group(3), f);
+          yield new UniqueIndexConstraintViolation(queryName, null, withUuid(duplicateKeyRowMatcher.group(4)), Tables.tableType(duplicateKeyRowMatcher.group(2)), duplicateKeyRowMatcher.group(3), f);
         else
-          yield new DataIntegrityViolation(queryName, null, "N/A", errorMessage, f);
+          yield new DataIntegrityViolation(queryName, null, null, errorMessage, f);
       }
       default -> null;
     };
