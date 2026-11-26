@@ -284,7 +284,7 @@ final class Sessions {
       UUID.fromString("3c8e5b2a-7d4f-4e10-9b6c-2f1a8d5e7c03")
   );
   /// Not stored, so a resource is an entity of the session only
-  static final EventType<ResourceRequest, ResourceRequest> ResourceRequested = EventType.notStored(
+  static final EventType.NotStored<ResourceRequest, ResourceRequest> ResourceRequested = EventType.notStored(
       "Resource requested",
       UUID.fromString("4c9e2a7d-1b5f-4a63-8d0e-6f3b9a2c5e81"),
       DataType.json(ResourceRequest.class)

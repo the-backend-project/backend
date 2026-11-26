@@ -100,7 +100,7 @@ public class ConditionalTriggerTest {
   );
   /// Not stored, so its conditional trigger is deleted by a change of its own when it fires, also as its transition
   /// stores another event on the batch
-  static EventType<Void, Void> BatchChecked = EventType.notStored(
+  static EventType.NotStored<Void, Void> BatchChecked = EventType.notStored(
       "Batch checked",
       UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b0e")
   );

@@ -22,7 +22,7 @@ public interface SettlementEvent {
       EventType.of("Acquirer batch number assigned", UUID.fromString("7d3f1b6e-4a52-4c0e-b1d8-5e9a2c4f6a10"), DataType.json(AcquirerBatchNumber.class));
   /// The acquirer's batch number assigned to a settlement which already has it, which changes nothing, and so isn't
   /// stored
-  EventType<Void, Void> AcquirerBatchNumberKnown =
+  EventType.NotStored<Void, Void> AcquirerBatchNumberKnown =
       EventType.notStored("Acquirer batch number known", UUID.fromString("9f8f1a33-b4cf-40f7-9ed0-9f7cb60cfc3a"));
   EventType<CutOff, CutOff> CutOffRequested =
       EventType.of("Cut off requested", UUID.fromString("2163fbfa-3870-43cd-8025-ec3fd9689bd2"), DataType.json(CutOff.class));
@@ -40,13 +40,13 @@ public interface SettlementEvent {
       EventType.of("Merchant debited", UUID.fromString("14147dca-bf25-487a-bee4-fe95521a0bb9"), DataType.json(Long.class));
   EventType<Long, Long> MerchantDebitReversed =
       EventType.of("Merchant debit reversed", UUID.fromString("9b51bf01-bdaa-4284-a853-bdceab8d8c04"), DataType.json(Long.class));
-  EventType<MerchantId, AcquirerBatchNumber> AcquirerBatchNumberLookedUp =
+  EventType.NotStored<MerchantId, AcquirerBatchNumber> AcquirerBatchNumberLookedUp =
       EventType.notStored("Acquirer batch number looked up", UUID.fromString("01700fc1-fa15-4142-a673-ba0e9a2768b6"), DataType.json(MerchantId.class), DataType.json(AcquirerBatchNumber.class));
   /// Looks up the batch number of a settlement without assigning the acquirer's batch number to it.
-  EventType<MerchantId, BatchNumber> CurrentBatchNumberLookedUp =
+  EventType.NotStored<MerchantId, BatchNumber> CurrentBatchNumberLookedUp =
       EventType.notStored("Current batch number looked up", UUID.fromString("e2f3a0a4-6c1d-4a58-8f57-2b6f9c1d7a35"), DataType.json(MerchantId.class), DataType.json(BatchNumber.class));
   /// Looks up the batch number of a settlement.
-  EventType<AcquirerBatchNumber, BatchNumber> BatchNumberLookedUp =
+  EventType.NotStored<AcquirerBatchNumber, BatchNumber> BatchNumberLookedUp =
       EventType.notStored("Batch number looked up", UUID.fromString("ad4a9ec8-d0e6-44ce-bef3-d2bd20709005"), DataType.json(AcquirerBatchNumber.class), DataType.json(BatchNumber.class));
 
   record Opened(BatchNumber batchNumber, AcquirerBatchNumber acquirerBatchNumber) {}

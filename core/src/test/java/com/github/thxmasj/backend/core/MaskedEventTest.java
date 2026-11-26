@@ -19,7 +19,7 @@ public class MaskedEventTest {
   enum States implements State {Open}
 
   static EventType<String, String> PasswordSet = EventType.of("Password set", UUID.fromString("1f3a5c7e-9b2d-4e46-a8c0-d2e4f6a8b013"), DataType.string());
-  static EventType<Void, Void> Viewed = EventType.notStored("Viewed", UUID.fromString("5b7d9f1a-3c4e-4a68-b0d2-e4f6a8c0d235"));
+  static EventType.NotStored<Void, Void> Viewed = EventType.notStored("Viewed", UUID.fromString("5b7d9f1a-3c4e-4a68-b0d2-e4f6a8c0d235"));
   static EventType<Void, Void> Touched = EventType.of("Touched", UUID.fromString("9d1f3b5c-7e8a-4c80-a2b4-c6d8e0f2a457"));
   static EntityType Account = EntityType.of("Account", UUID.fromString("3c5e7a9b-1d2f-4b64-86a8-cadcebf0a679"), () -> Map.of());
 
@@ -141,7 +141,7 @@ public class MaskedEventTest {
         .trigger(PasswordSet).with(_ -> "id").on(AccountIds).identifiedBy(EntitySelector::entityId)
         .output();
     var e = assertThrows(IllegalArgumentException.class, () -> EntityTypeChecksTest.check(Map.of(Begin, List.of(claiming), States.Open, List.of()), false));
-    assertTrue(e.getMessage().contains("can't trigger Password set on the id model Account ids"), e.getMessage());
+    assertTrue(e.getMessage().contains("can't trigger Password set on the id entity type Account ids"), e.getMessage());
     assertDoesNotThrow(() -> EntityTypeChecksTest.check(Map.of(Begin, List.of(claiming), States.Open, List.of()), true));
   }
 }

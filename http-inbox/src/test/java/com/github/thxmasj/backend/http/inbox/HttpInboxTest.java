@@ -235,8 +235,8 @@ public class HttpInboxTest {
       UUID.fromString("464fca06-f872-4e38-a167-5550f5247310"),
       DataType.none()
   );
-  static EventType<EventType.Rollback.Data, EventType.Rollback.Data>
-      ProcessingCancelled = EventType.cancel("Processing cancelled", UUID.fromString("d94c29c8-f113-4dee-921f-1a8e58f916f4"));
+  static EventType.Rollback
+      ProcessingCancelled = EventType.rollback("Processing cancelled", UUID.fromString("d94c29c8-f113-4dee-921f-1a8e58f916f4"));
   static EventType<Void, Void>
       ExternalProcessingRequested = EventType.of(
       "External processing requested",

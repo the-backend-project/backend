@@ -123,7 +123,7 @@ class PlantUMLFormatterTest {
 
   @Test
   void eventNotStoredIsNamedInItalics(@TempDir Path directory) throws IOException {
-    EventType<Void, Void> viewed = EventType.notStored("Viewed", UUID.fromString("0e6c4a2f-8b1d-4e37-9f5a-2c7d9b1e3a64"));
+    EventType.NotStored<Void, Void> viewed = EventType.notStored("Viewed", UUID.fromString("0e6c4a2f-8b1d-4e37-9f5a-2c7d9b1e3a64"));
     Map<State, List<TransitionModel<?, ?>>> transitions = Map.of(
         Begin, List.of(onEvent(Requested).to(States.Accepted).output()),
         States.Accepted, List.of(onEvent(viewed).toSelf().output())

@@ -48,26 +48,26 @@ public class EventsByIdEvent {
         .bind("data", id)
         .map(row -> {
           UUID entityId = row.get("EntityId", UUID.class);
-          UUID modelId = row.get("EntityTypeId", UUID.class);
-          EntityType model = entityTypes.get(modelId);
-          if (model == null)
-            throw new IllegalStateException("Unknown entity type " + modelId + " of entity having id of type " + type.name());
+          UUID entityTypeId = row.get("EntityTypeId", UUID.class);
+          EntityType entityType = entityTypes.get(entityTypeId);
+          if (entityType == null)
+            throw new IllegalStateException("Unknown entity type " + entityTypeId + " of entity having id of type " + type.name());
           try {
-            return new ModelEvent(model, entityId, Mappers.eventMapper(eventTypesByEntityType.get(model), clock).apply(entityId, row));
+            return new TypedEvent(entityType, entityId, Mappers.eventMapper(eventTypesByEntityType.get(entityType), clock).apply(entityId, row));
           } catch (MappingFailure e) {
-            throw new MappingFailure("EventsByIdEvent: Failed to map row to event for entity type " + model.name(), e);
+            throw new MappingFailure("EventsByIdEvent: Failed to map row to event for entity type " + entityType.name(), e);
           }
         })
         .all()
         .collectList()
         .filter(events -> !events.isEmpty())
         .map(events -> new EventLog(
-            events.getFirst().model(),
+            events.getFirst().entityType(),
             events.getFirst().entityId(),
-            Collections.unmodifiableList(events.stream().<Event<?>>map(ModelEvent::event).toList())
+            Collections.unmodifiableList(events.stream().<Event<?>>map(TypedEvent::event).toList())
         ));
   }
 
-  private record ModelEvent(EntityType model, UUID entityId, Event<?> event) {}
+  private record TypedEvent(EntityType entityType, UUID entityId, Event<?> event) {}
 
 }

@@ -112,7 +112,7 @@ public interface PaymentEvent {
   ) {}
 
   EventType<Tuple2<Authorisation, byte[]>, Void> PaymentRequested = EventType.of("Payment requested", UUID.fromString("bf2eaeb5-cd26-4e5a-873e-f6d308387ec3"), DataType.tuple(DataType.json(Authorisation.class), DataType.binary()), DataType.none());
-  EventType<Tuple3<Authorisation, Merchant, AuthenticationData>, Tuple2<Authorisation, Merchant>> PaymentRequestValidated = EventType.request(
+  EventType.Request<Tuple3<Authorisation, Merchant, AuthenticationData>, Tuple2<Authorisation, Merchant>> PaymentRequestValidated = EventType.request(
       "Payment request validated",
       UUID.fromString("a67a80c1-9b16-4445-9a14-76f114f49827"),
       DataType.tuple(
@@ -140,17 +140,17 @@ public interface PaymentEvent {
   EventType<AcquirerResponse, AcquirerResponse> AuthorisationApproved = EventType.of("Authorization approved", UUID.fromString("4a3821a0-dbba-448b-8175-c40e4a771df4"), DataType.json(AcquirerResponse.class));
   EventType<AcquirerResponse, AcquirerResponse> AuthorisationAdviceApproved = EventType.of("Authorization advice approved", UUID.fromString("c1fd88f3-2821-4c4d-bee1-52750f10f554"), DataType.json(AcquirerResponse.class));
   EventType<Capture, Capture> CaptureRequested = EventType.of("Capture requested", UUID.fromString("b4cef9f9-c9dd-40e4-a627-25ba529aec2e"), DataType.json(Capture.class));
-  EventType<CaptureRequestData, Capture> CaptureRequestValidated = EventType.request("Capture request validated", UUID.fromString("0cce8545-ce69-4c4c-8e42-056df84297e7"), DataType.json(CaptureRequestData.class), DataType.json(Capture.class));
+  EventType.Request<CaptureRequestData, Capture> CaptureRequestValidated = EventType.request("Capture request validated", UUID.fromString("0cce8545-ce69-4c4c-8e42-056df84297e7"), DataType.json(CaptureRequestData.class), DataType.json(Capture.class));
   EventType<Capture, Capture> UnauthorisedCaptureDeclined = EventType.of("Unauthorized capture declined", UUID.fromString("d39b2369-f88a-482e-8715-49de39fbdf93"), DataType.json(Capture.class));
   EventType<Capture, Capture> LateCaptureDeclined = EventType.of("Late capture declined", UUID.fromString("5da4f734-9779-41b9-a653-58388a63b8b9"), DataType.json(Capture.class));
   EventType<AcquirerResponse, AcquirerResponse> CaptureApproved = EventType.of("Capture approved", UUID.fromString("6186a241-f9e0-40ae-b444-6ce5e2509dcc"), DataType.json(AcquirerResponse.class));
   EventType<Refund, Refund> RefundRequested = EventType.of("Refund requested", UUID.fromString("4f6d6f15-f8a4-477e-b750-dc52a1f245eb"), DataType.json(Refund.class));
-  EventType<Refund, AcquirerRefund> RefundRequestValidated = EventType.request("Refund request validated", UUID.fromString("94513e5a-1ded-4379-9087-16a148903bb5"), DataType.json(Refund.class), DataType.json(AcquirerRefund.class));
+  EventType.Request<Refund, AcquirerRefund> RefundRequestValidated = EventType.request("Refund request validated", UUID.fromString("94513e5a-1ded-4379-9087-16a148903bb5"), DataType.json(Refund.class), DataType.json(AcquirerRefund.class));
   EventType<Refund, Refund> RefundDeclined = EventType.of("Refund declined", UUID.fromString("4bcd52bf-8abd-4973-8926-6391570ae29e"), DataType.json(Refund.class));
   EventType<AcquirerResponse, AcquirerResponse> RefundApproved = EventType.of("Refund approved", UUID.fromString("9c7f8d63-9b27-4bf3-8a90-b7bea56a3fbd"), DataType.json(AcquirerResponse.class));
   EventType<AcquirerResponse, AcquirerResponse> AcquirerResponded = EventType.of("Acquirer responded", UUID.fromString("267efd41-3ae3-4ad8-aa80-a7d20137e5b1"), DataType.json(AcquirerResponse.class), DataType.json(AcquirerResponse.class));
   EventType<AcquirerResponse, AcquirerResponse> AcquirerDeclined = EventType.of("Acquirer declined", UUID.fromString("994388bc-73a4-4334-ba16-41d471ee56b1"), DataType.json(AcquirerResponse.class), DataType.json(AcquirerResponse.class));
-  EventType<EventType.Rollback.Data, EventType.Rollback.Data> RollbackRequested = EventType.rollback("Rollback requested", UUID.fromString("da2d5fd5-beb7-4497-87f7-479ba7eb2a66"));
-  EventType<EventType.Rollback.Data, EventType.Rollback.Data> PaymentCancelled = EventType.cancel("Payment cancelled", UUID.fromString("d7bb2f14-4680-476e-8395-c972a1037589"));
+  EventType.Rollback RollbackRequested = EventType.rollback("Rollback requested", UUID.fromString("da2d5fd5-beb7-4497-87f7-479ba7eb2a66"));
+  EventType.Rollback PaymentCancelled = EventType.rollback("Payment cancelled", UUID.fromString("d7bb2f14-4680-476e-8395-c972a1037589"));
 
 }

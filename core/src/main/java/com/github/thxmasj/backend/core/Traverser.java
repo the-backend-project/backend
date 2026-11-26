@@ -75,8 +75,8 @@ class Traverser {
     var t = findTransitionForTriggeredEvent(eventType, availableTransitions);
     if (t != null && eventType == BuiltinEventTypes.EventsRolledBack)
       Debug.log("Using custom rollback transition for entity " + eventLog.entityType().name() + ": " + t + "\nAll transitions:\n" + transitions.values().stream().flatMap(List::stream).map(Object::toString).collect(joining("\n")));
-    if (t == null && eventType == BuiltinEventTypes.EventsRolledBack && eventType instanceof EventType.Rollback rollback)
-      t = rollbackOn(rollback);
+    if (t == null && eventType == BuiltinEventTypes.EventsRolledBack)
+      t = rollbackOn(BuiltinEventTypes.EventsRolledBack);
     else if (t == null && eventType == BuiltinEventTypes.StatusLookedUp)
       t = statusOn();
     return tuple(currentState, t);
@@ -142,8 +142,8 @@ class Traverser {
       }
     }
     // TODO: Avoid dynamic creation
-    if (eventType == BuiltinEventTypes.EventsRolledBack && eventType instanceof EventType.Rollback rollback)
-      return rollbackOn(rollback);
+    if (eventType == BuiltinEventTypes.EventsRolledBack)
+      return rollbackOn(BuiltinEventTypes.EventsRolledBack);
     throw new IllegalStateException(
         "No transition found for logged event " + eventType.name() + " from " + fromState.name() + " (available: " + transitions.get(fromState).stream()
             .flatMap(t -> t.leaves().stream())

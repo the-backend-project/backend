@@ -252,7 +252,7 @@ public interface Inbox {
     if (signIn)
       requests.addAll(List.of(
           authorizationHttpRequest(endpoints),
-          callbackHttpRequest(endpoints, new UpstreamSignIn(endpoints.upstream(), forwarder).model()),
+          callbackHttpRequest(endpoints, new UpstreamSignIn(endpoints.upstream(), forwarder).entityType()),
           userInfoHttpRequest(tokenRequest, endpoints)
       ));
     return HttpInbox.of(requests);

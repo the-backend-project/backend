@@ -91,7 +91,7 @@ public interface Clients {
       UUID.fromString("a9d4f1c7-3e62-4b8a-9f05-6c2e8d1b4a37"),
       DataType.json(Registration.class)
   );
-  EventType<Void, Registration> ClientLookedUp = EventType.notStored(
+  EventType.NotStored<Void, Registration> ClientLookedUp = EventType.notStored(
       "Client looked up",
       UUID.fromString("e2b7c9a4-58d1-4f6e-a3b0-9d4c1e7f2a86"),
       DataType.none(),

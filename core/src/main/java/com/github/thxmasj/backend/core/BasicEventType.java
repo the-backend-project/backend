@@ -3,7 +3,7 @@ package com.github.thxmasj.backend.core;
 import java.util.Objects;
 import java.util.UUID;
 
-/// The event types created by the factory methods of [EventType], equal if their ids are
+/// The event types created by the factory methods of [EventType], equal if their ids are, whatever their kind
 sealed class BasicEventType<I, O> implements EventType<I, O> {
 
   private final String name;
@@ -65,15 +65,9 @@ sealed class BasicEventType<I, O> implements EventType<I, O> {
     }
   }
 
-  static sealed class Rollback extends BasicEventType<Rollback.Data, Rollback.Data> implements EventType.Rollback {
+  static final class Rollback extends BasicEventType<Rollback.Data, Rollback.Data> implements EventType.Rollback {
     Rollback(String name, UUID id) {
       super(name, id, DataType.json(Data.class), DataType.json(Data.class));
-    }
-  }
-
-  static final class Cancel extends Rollback implements EventType.Cancel {
-    Cancel(String name, UUID id) {
-      super(name, id);
     }
   }
 

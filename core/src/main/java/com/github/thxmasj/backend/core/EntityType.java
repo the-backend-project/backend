@@ -1,7 +1,6 @@
 package com.github.thxmasj.backend.core;
 
 import com.github.thxmasj.backend.core.internal.EntityTypes;
-import com.github.thxmasj.backend.core.internal.Memoized;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -26,25 +25,13 @@ public interface EntityType extends Identifiable {
   /// An entity type whose transitions are created when they are first asked for, so that they can refer to the type
   /// itself and to other types created the same way, e.g. as constants which refer to each other.
   static EntityType of(String name, UUID id, Supplier<Map<State, List<TransitionModel<?, ?>>>> transitions) {
-    var created = new Memoized<>(transitions, "transitions of entity type " + name);
-    return new EntityType() {
-      @Override public String name() {return name;}
-      @Override public UUID id() {return id;}
-      @Override public Map<State, List<TransitionModel<?, ?>>> transitions() {return created.get();}
-      @Override public String toString() {return name;}
-    };
+    return new MemoizedEntityType(name, id, transitions);
   }
 
   /// An entity type whose entities are not stored, but of the session only (see [NotStored]), with its transitions
   /// created when they are first asked for, as [#of(String, UUID, Supplier)]
   static NotStored notStored(String name, UUID id, Supplier<Map<State, List<TransitionModel<?, ?>>>> transitions) {
-    var created = new Memoized<>(transitions, "transitions of entity type " + name);
-    return new NotStored() {
-      @Override public String name() {return name;}
-      @Override public UUID id() {return id;}
-      @Override public Map<State, List<TransitionModel<?, ?>>> transitions() {return created.get();}
-      @Override public String toString() {return name;}
-    };
+    return new MemoizedEntityType.NotStored(name, id, transitions);
   }
 
   /// The entity types, and those their transitions trigger events on, directly, in reversals and in the transitions they

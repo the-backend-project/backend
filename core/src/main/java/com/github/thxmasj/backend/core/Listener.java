@@ -13,11 +13,11 @@ public interface Listener {
         Event event
     ) {
       public record Entity(
-          String model,
+          String entityType,
           UUID id
       ) {
         @Override public String toString() {
-          return model + "[id=" + id + "]";
+          return entityType + "[id=" + id + "]";
         }
       }
 

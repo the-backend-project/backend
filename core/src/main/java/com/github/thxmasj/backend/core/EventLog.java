@@ -137,8 +137,8 @@ public record EventLog(
     int skipTo = Integer.MAX_VALUE;
     for (Event<?> event : events.reversed()) {
       if (skipTo >= event.eventNumber()) {
-        if (event.type() instanceof EventType.Rollback rollbackType) {
-          int toNumber = Event.unmarshal(rollbackType, event.storedData()).toNumber();
+        if (event.type() instanceof EventType.Rollback) {
+          int toNumber = ((EventType.Rollback.Data) event.data()).toNumber();
           skipTo = toNumber >= 0 ? toNumber : event.eventNumber() - 1 + toNumber ;
         } else {
           effectiveEventsReversed.add(event);
@@ -161,8 +161,8 @@ public record EventLog(
     );
   }
 
-  public static EventLog empty(UUID id, EntityType model) {
-    return new EventLog(model, id, List.of());
+  public static EventLog empty(UUID id, EntityType entityType) {
+    return new EventLog(entityType, id, List.of());
   }
 
 

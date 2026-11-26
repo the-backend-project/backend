@@ -59,6 +59,7 @@ import com.github.thxmasj.backend.core.StateMachine.ProcessResult;
 import com.github.thxmasj.backend.core.TransitionModel;
 import com.github.thxmasj.backend.core.Tuples.Tuple2;
 import com.github.thxmasj.backend.core.Validated;
+import com.github.thxmasj.backend.core.internal.EntityTypes;
 import com.github.thxmasj.backend.http.Headers;
 import com.github.thxmasj.backend.http.HttpRequest;
 import com.github.thxmasj.backend.http.HttpResponse;
@@ -465,7 +466,7 @@ interface TransitionModels {
             d -> tuple(d.t2().unknownId().exception().getMessage(), null, d.t1().request())
         )
         .when(_ -> process.eventType() instanceof EventType.Rollback).then(
-            !(request instanceof EntityType.NotStored) ?
+            EntityTypes.stored(request) ?
                 onEvent(RequestAccepted).to(Dispatched)
                     .assemble(c -> tuple(c.input().t1(), c.input().t2(), c.entityId()))
                     .trigger(ProcessReferenced).with(d -> d.t2().entityId()).on(Index).identifiedBy(d -> entityId(d.t3(), CreateIfNotExists))

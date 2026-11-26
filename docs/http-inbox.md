@@ -410,7 +410,7 @@ The monitoring writes no data of the events, and the [backoffice](backoffice.md)
 
 ### Requests not stored
 
-An inbox request with `notStored()` doesn't store its requests: it is an entity type which is not stored, so its
+An inbox request with `notStored()` doesn't store its requests: it is an `HttpInboxRequest.NotStoredRequest`, an entity type which is not stored, so its
 requests, like their `RequestRouting` entities, are [entities of the session only](entities.md#events-and-entities-not-stored). The event its
 process triggers on the application is stored if it is of a stored type, so a request not stored can still change an
 entity which is. It suits requests for static files and health checks, pages rendered from other entities, and the

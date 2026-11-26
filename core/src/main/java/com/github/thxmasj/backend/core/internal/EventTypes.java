@@ -18,6 +18,11 @@ public final class EventTypes {
 
   private EventTypes() {}
 
+  /// Whether the events of the type are stored, as they are unless it is an [EventType.NotStored]
+  public static boolean stored(EventType<?, ?> eventType) {
+    return !(eventType instanceof EventType.NotStored);
+  }
+
   /// The event type of the transition and those of the alternatives of its filters
   public static List<EventType<?, ?>> eventTypesFor(TransitionModel<?, ?> transition) {
     ArrayList<EventType<?, ?>> eventTypes = new ArrayList<>();

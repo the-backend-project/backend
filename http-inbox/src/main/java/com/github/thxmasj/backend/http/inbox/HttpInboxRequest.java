@@ -55,7 +55,7 @@ import java.util.regex.Pattern;
 /// ```
 ///
 /// @param <T> the type of the body of the request
-public sealed class HttpInboxRequest<T> implements EntityType permits HttpInboxRequest.NotStored {
+public sealed class HttpInboxRequest<T> implements EntityType permits HttpInboxRequest.NotStoredRequest {
 
   private final String name;
   private final UUID id;
@@ -126,9 +126,9 @@ public sealed class HttpInboxRequest<T> implements EntityType permits HttpInboxR
   /// An inbox request whose requests are not stored, built with [Builder#notStored()]. A request which is not stored
   /// is an entity of the session only, as every `RequestRouting` entity is (see [EntityType.NotStored]), while the
   /// events its process triggers on the application are stored if they are of stored types.
-  public static final class NotStored<T> extends HttpInboxRequest<T> implements EntityType.NotStored {
+  public static final class NotStoredRequest<T> extends HttpInboxRequest<T> implements EntityType.NotStored {
 
-    private NotStored(Builder<T> builder, String name, UUID id) {
+    private NotStoredRequest(Builder<T> builder, String name, UUID id) {
       super(builder, name, id);
     }
   }
@@ -372,8 +372,9 @@ public sealed class HttpInboxRequest<T> implements EntityType permits HttpInboxR
   }
 
   /// Builds an inbox request. A process is required, the rest is optional. An inbox request which can be rolled back
-  /// needs `deduplicateOn` first, which gives a [DeduplicatedBuilder].
-  public static sealed class Builder<T> permits DeduplicatedBuilder {
+  /// needs `deduplicateOn` first, which gives a [DeduplicatedBuilder], and one which is not stored `notStored()`, which
+  /// gives a [NotStoredBuilder].
+  public static sealed class Builder<T> permits DeduplicatedBuilder, NotStoredBuilder {
 
     private final Predicate<HttpRequest<byte[]>> matcher;
     private final Function<HttpRequest<byte[]>, Validated<T>> contentParser;
@@ -541,13 +542,103 @@ public sealed class HttpInboxRequest<T> implements EntityType permits HttpInboxR
     /// deduplicated, so it has no `deduplicateOn`, and the application must respond in the session of the request,
     /// e.g. by the callback of an outbox request, but not by a delayed or conditional trigger, which fires in a session
     /// of its own, as only the session finds the request.
-    public Builder<T> notStored() {
-      this.stored = false;
-      return this;
+    public NotStoredBuilder<T> notStored() {
+      return new NotStoredBuilder<>(this);
     }
 
     public HttpInboxRequest<T> build(String name, UUID id) {
-      return stored ? new HttpInboxRequest<>(this, name, id) : new NotStored<>(this, name, id);
+      return new HttpInboxRequest<>(this, name, id);
+    }
+
+  }
+
+  /// Builds an inbox request whose requests are not stored, see [Builder#notStored()]
+  public static final class NotStoredBuilder<T> extends Builder<T> {
+
+    private NotStoredBuilder(Builder<T> builder) {
+      super(builder);
+      ((Builder<T>) this).stored = false;
+    }
+
+    @Override
+    public NotStoredBuilder<T> authorizer(BiFunction<HttpRequest<byte[]>, T, Authorization> authorizer) {
+      super.authorizer(authorizer);
+      return this;
+    }
+
+    @Override
+    public <U> NotStoredBuilder<T> process(
+        EventType<U, ?> eventType,
+        EntityType entityType,
+        Function<RoutedRequest<T>, U> input,
+        BiFunction<HttpRequest<byte[]>, T, ? extends Validated<? extends EntitySelector>> selector
+    ) {
+      super.process(eventType, entityType, input, selector);
+      return this;
+    }
+
+    @Override
+    public <U> NotStoredBuilder<T> process(
+        Content<T> content,
+        EventType<U, ?> eventType,
+        EntityType entityType,
+        Function<RoutedRequest<T>, U> input,
+        BiFunction<HttpRequest<byte[]>, T, ? extends Validated<? extends EntitySelector>> selector
+    ) {
+      super.process(content, eventType, entityType, input, selector);
+      return this;
+    }
+
+    @Override
+    public NotStoredBuilder<T> process(
+        EventType<Void, ?> eventType,
+        EntityType entityType,
+        BiFunction<HttpRequest<byte[]>, T, ? extends Validated<? extends EntitySelector>> selector
+    ) {
+      super.process(eventType, entityType, selector);
+      return this;
+    }
+
+    @Override
+    public NotStoredBuilder<T> process(
+        Content<T> content,
+        EventType<Void, ?> eventType,
+        EntityType entityType,
+        BiFunction<HttpRequest<byte[]>, T, ? extends Validated<? extends EntitySelector>> selector
+    ) {
+      super.process(content, eventType, entityType, selector);
+      return this;
+    }
+
+    @Override
+    public <I> NotStoredBuilder<T> response(
+        ResponseEventType<I> eventType,
+        Function<TransitionContext<I>, HttpResponse<byte[]>> messageCreator
+    ) {
+      super.response(eventType, messageCreator);
+      return this;
+    }
+
+    @Override
+    public NotStoredBuilder<T> normalizer(Function<HttpRequest<byte[]>, HttpRequest<byte[]>> normalizer) {
+      super.normalizer(normalizer);
+      return this;
+    }
+
+    @Override
+    public NotStoredBuilder<T> masking(Masking masking) {
+      super.masking(masking);
+      return this;
+    }
+
+    @Override
+    public NotStoredBuilder<T> notStored() {
+      return this;
+    }
+
+    @Override
+    public NotStoredRequest<T> build(String name, UUID id) {
+      return new NotStoredRequest<>(this, name, id);
     }
 
   }

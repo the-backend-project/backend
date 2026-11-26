@@ -31,6 +31,7 @@ import com.github.thxmasj.backend.core.database.EntityGroupNotInitialised;
 import com.github.thxmasj.backend.core.database.MappingFailure;
 import com.github.thxmasj.backend.core.database.UnknownEntity;
 import com.github.thxmasj.backend.core.internal.ActionTrigger;
+import com.github.thxmasj.backend.core.internal.EventTypes;
 import com.github.thxmasj.backend.core.internal.Transaction;
 import com.github.thxmasj.backend.core.internal.Debug;
 import com.github.thxmasj.backend.core.internal.DelayedEvent;
@@ -551,7 +552,7 @@ public class StateMachine implements AutoCloseable {
     Event<?> transitionsEvent = nextEvents.get(new EntityKey(delayedEvent.entityType().id(), delayedEvent.entityId()));
     if (transitionsEvent == null)
       return delayedEvent;
-    return delayedEvent.withEventNumber(transitionsEvent.eventNumber() + (transitionsEvent.type() instanceof EventType.NotStored ? 0 : 1));
+    return delayedEvent.withEventNumber(transitionsEvent.eventNumber() + (EventTypes.stored(transitionsEvent.type()) ? 1 : 0));
   }
 
   /// The action trigger with the log of its entity as the transaction of the action's result reads it, a later one: with
@@ -562,7 +563,7 @@ public class StateMachine implements AutoCloseable {
     if (actionTrigger.eventLog().isSessionOnlyWith(event))
       return actionTrigger.withEvent(event);
     var asRead = new ActionTrigger<>(actionTrigger.action(), actionTrigger.data(), actionTrigger.eventLog().asStored());
-    return event.type() instanceof EventType.NotStored ? asRead : asRead.withEvent(event.asStored());
+    return EventTypes.stored(event.type()) ? asRead.withEvent(event.asStored()) : asRead;
   }
 
   private List<ActionTrigger<?>> actionTriggers(@NotNull TransitionStep<?> tail) {
@@ -920,7 +921,7 @@ public class StateMachine implements AutoCloseable {
         // An event which is not stored is not in the log of a stored entity, which the next event stored follows. The
         // log the transition was given is the entity's as the transaction has it, without the event, so it is the log,
         // rather than one read from the database.
-        return new InTransaction(!(event.type() instanceof EventType.NotStored) || log.isSessionOnlyWith(event) ? log.withNewEvent(event) : log, null);
+        return new InTransaction(EventTypes.stored(event.type()) || log.isSessionOnlyWith(event) ? log.withNewEvent(event) : log, null);
       }
     }
     return new InTransaction(null, previousTransaction(transitionStep));
@@ -1037,7 +1038,7 @@ public class StateMachine implements AutoCloseable {
         return true;
       if (sessionOnly.contains(owner(change)))
         return false;
-      return change.newEvent() == null || !(change.newEvent().type() instanceof EventType.NotStored);
+      return change.newEvent() == null || EventTypes.stored(change.newEvent().type());
     }
 
   }

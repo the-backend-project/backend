@@ -23,6 +23,6 @@ public interface MerchantEvent {
   EventType<Void, Void> MerchantResumed = EventType.of("Merchant resumed", UUID.fromString("f34b03b8-017f-41ff-80ac-df9a7b84f042"));
   EventType<Void, Void> MerchantDeleted = EventType.of("Merchant deleted", UUID.fromString("a11542b6-f591-4a3e-af3e-0113463d7509"));
   EventType<MerchantUpdate, Merchant> MerchantUpdated = EventType.of("Merchant updated", UUID.fromString("2119043f-d547-4b68-ab76-6644662e26ea"), DataType.json(MerchantUpdate.class), DataType.json(Merchant.class));
-  EventType<Void, Merchant> MerchantLookedUp = EventType.notStored("Merchant looked up", UUID.fromString("419b02d4-ad02-4cdf-a0a9-e20ffd3ad45f"), DataType.none(), DataType.json(Merchant.class));
+  EventType.NotStored<Void, Merchant> MerchantLookedUp = EventType.notStored("Merchant looked up", UUID.fromString("419b02d4-ad02-4cdf-a0a9-e20ffd3ad45f"), DataType.none(), DataType.json(Merchant.class));
 
 }

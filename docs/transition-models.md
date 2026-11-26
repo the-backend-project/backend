@@ -33,7 +33,6 @@ sub-type of `EventType`, which the state machine tells apart by their type:
 | `EventType.notStored(name, id, …)` | `EventType.NotStored` | Are not stored, see [Events and entities not stored](entities.md#events-and-entities-not-stored) |
 | `EventType.request(name, id, …)`   | `EventType.Request`   | Are requests: a rollback goes back over one of them at most                    |
 | `EventType.rollback(name, id)`     | `EventType.Rollback`  | Roll the events of the entity back to an event number                          |
-| `EventType.cancel(name, id)`       | `EventType.Cancel`    | Are rollbacks which cancel the entity                                          |
 
 ## Steps
 

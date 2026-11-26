@@ -9,6 +9,7 @@ import com.github.thxmasj.backend.core.TransitionModelBuilder.ModelContext;
 import com.github.thxmasj.backend.core.StateMachine.ProcessResult;
 import com.github.thxmasj.backend.core.StateMachine.ProcessResult.Accepted;
 import com.github.thxmasj.backend.core.Tuples.Tuple4;
+import com.github.thxmasj.backend.core.internal.EventTypes;
 import com.github.thxmasj.backend.core.internal.TransitionStep.ChoiceStep;
 import com.github.thxmasj.backend.core.internal.TransitionStep.InputStep;
 import com.github.thxmasj.backend.core.internal.TransitionStep.OutputStep;
@@ -159,7 +160,7 @@ public class TransitionModel<I, O> {
   private static <O> OutputStep<O> marshalledIfStored(OutputStep<O> step) {
     if (!(step.previous() instanceof ChoiceStep<?>)
         && step.stepOutput() instanceof Accepted<O>(Event<O> event, _, _)
-        && !(event.type() instanceof EventType.NotStored)
+        && EventTypes.stored(event.type())
         && !step.inputStep().log().isSessionOnlyWith(event))
       event.storedData();
     return step;

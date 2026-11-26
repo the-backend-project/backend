@@ -3,6 +3,7 @@ package com.github.thxmasj.backend.core;
 import static com.github.thxmasj.backend.core.EntityType.Begin;
 
 import com.github.thxmasj.backend.core.internal.EntityTypes;
+import com.github.thxmasj.backend.core.internal.EventTypes;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -16,46 +17,46 @@ import java.util.Set;
 import java.util.function.Predicate;
 
 /// The checks of the entity types a state machine runs, made when it is created. They fail with the refusals and
-/// failures of every model at once, each named, so that the models are fixed in one go rather than one refusal at a
+/// failures of every entity type at once, each named, so that the entity types are fixed in one go rather than one refusal at a
 /// time.
 final class EntityTypeChecks {
 
-  private final EntityType model;
+  private final EntityType entityType;
   private final Map<State, List<TransitionModel<?, ?>>> transitions;
   /// Why the transitions are refused, all of them. Each is told once, by the transition it is declared on, also if the
   /// transition is reached by more than one path.
   private final Set<String> refusals = new LinkedHashSet<>();
 
-  private EntityTypeChecks(EntityType model) {
-    this.model = model;
-    this.transitions = model.transitions();
+  private EntityTypeChecks(EntityType entityType) {
+    this.entityType = entityType;
+    this.transitions = entityType.transitions();
   }
 
   /// The entity types given, and those their transitions trigger events on, and so on (see
   /// [EntityTypes#resolve(List)]), checked
   ///
-  /// @throws IllegalArgumentException with the refusals of the transitions of every model, and the failures of the
-  ///                                  models whose transitions can't be created or checked, e.g. as their supplier
+  /// @throws IllegalArgumentException with the refusals of the transitions of every entity type, and the failures of the
+  ///                                  entity types whose transitions can't be created or checked, e.g. as their supplier
   ///                                  fails, each named. The failures are suppressed exceptions of it, with their
-  ///                                  stack traces. Also if one of the models given is an [EntityTypeGroup], or if
-  ///                                  two of the models have the same id.
+  ///                                  stack traces. Also if one of the entity types given is an [EntityTypeGroup], or if
+  ///                                  two of the entity types have the same id.
   /// @throws NullPointerException if one of the entity types given is null, e.g. a constant not created yet
   static List<EntityType> check(List<? extends EntityType> entityTypes) {
     var failures = new LinkedHashMap<EntityType, RuntimeException>();
-    List<EntityType> models = EntityTypes.resolve(entityTypes, failures);
+    List<EntityType> checked = EntityTypes.resolve(entityTypes, failures);
     var refusals = new ArrayList<String>();
     var causes = new ArrayList<RuntimeException>();
-    failures.forEach((model, e) -> {
-      refusals.add("The transitions of entity type " + model.name() + " can't be created: " + e);
+    failures.forEach((entityType, e) -> {
+      refusals.add("The transitions of entity type " + entityType.name() + " can't be created: " + e);
       causes.add(e);
     });
-    for (var model : models) {
+    for (var entityType : checked) {
       try {
-        check(model);
+        check(entityType);
       } catch (IllegalArgumentException e) {
-        refusals.add("The transitions of entity type " + model.name() + " are refused: " + e.getMessage());
+        refusals.add("The transitions of entity type " + entityType.name() + " are refused: " + e.getMessage());
       } catch (RuntimeException e) {
-        refusals.add("The transitions of entity type " + model.name() + " can't be checked: " + e);
+        refusals.add("The transitions of entity type " + entityType.name() + " can't be checked: " + e);
         causes.add(e);
       }
     }
@@ -64,21 +65,21 @@ final class EntityTypeChecks {
       causes.forEach(e::addSuppressed);
       throw e;
     }
-    return models;
+    return checked;
   }
 
   /// Checks the transitions of the entity type
   ///
-  /// @param model the entity type whose transitions are checked. Whether its entities are stored (see
+  /// @param entityType the entity type whose transitions are checked. Whether its entities are stored (see
   ///              [EntityType.NotStored]) tells whether an event which is not stored may change their state, and its
-  ///              id tells a trigger on the model from one on another.
+  ///              id tells a trigger on the entity type from one on another.
   /// @throws IllegalArgumentException with the refusals of the transitions, all of them
-  static void check(EntityType model) {
-    new EntityTypeChecks(model).checkTransitions();
+  static void check(EntityType entityType) {
+    new EntityTypeChecks(entityType).checkTransitions();
   }
 
   private void checkTransitions() {
-    boolean stored = !(model instanceof EntityType.NotStored);
+    boolean stored = EntityTypes.stored(entityType);
     transitions.forEach(this::requireUniquePaths);
     requireReachableFromBegin();
     requireLeavingBegin();
@@ -168,7 +169,7 @@ final class EntityTypeChecks {
       requireAtMostOneDelayedTrigger(filter.alternative().model(), delayed);
   }
 
-  /// The event types of transitions of the model which may end in an event not stored with a delayed trigger on the
+  /// The event types of transitions of the entity type which may end in an event not stored with a delayed trigger on the
   /// way to it. The event stored, and so the number of the delayed trigger, is that of the transition chosen, not of
   /// the one choosing, so each path from the transition to one it may choose is judged by the one it ends in.
   private Set<EventType<?, ?>> notStoredEventTypesWithADelayedTrigger() {
@@ -190,9 +191,9 @@ final class EntityTypeChecks {
   /// A delayed trigger is numbered after the event of its transition if that is stored, and with its number if it
   /// isn't. So a transition with a delayed trigger which triggers, on its own entity, an event not stored whose
   /// transition has a delayed trigger too, would have two delayed triggers on the entity with the same number, of which
-  /// only one can be pending. The entity a trigger is on is only known when it is taken, so a trigger on this model of
+  /// only one can be pending. The entity a trigger is on is only known when it is taken, so a trigger on this entity type of
   /// an event not stored with a delayed trigger is taken to be on the same entity, which is refused, as the transaction
-  /// would fail when stored. A trigger on another model is not. The refusal is told by the transition the trigger is
+  /// would fail when stored. A trigger on another entity type is not. The refusal is told by the transition the trigger is
   /// declared on, once, however many of the paths through it have a delayed trigger.
   private void requireNoDelayedTriggerNumberedAlike(
       TransitionModel<?, ?> transition,
@@ -228,13 +229,13 @@ final class EntityTypeChecks {
 
   /// An entity of the session only is never stored, so an id or index event, by which an entity is found later, would
   /// point to an entity which doesn't exist, and an id would be claimed for good. Its transitions, and those they may
-  /// choose, therefore can't trigger events on an id or index model.
+  /// choose, therefore can't trigger events on an id or index entity type.
   private void requireNoIdOrIndex(TransitionModel<?, ?> transition) {
     for (var trigger : transition.triggers())
       if (trigger.entityType() instanceof IdEntityType || trigger.entityType() instanceof IndexEntityType)
         refuse(String.format(
             "The transition on %s may be of an entity of the session only, which is never stored, so it can't trigger %s " +
-                "on the %s model %s, which would point to an entity which doesn't exist",
+                "on the %s entity type %s, which would point to an entity which doesn't exist",
             transition.eventType().name(),
             trigger.eventType().name(),
             trigger.entityType() instanceof IdEntityType ? "id" : "index",
@@ -245,12 +246,12 @@ final class EntityTypeChecks {
   }
 
   /// Whether the trigger is on the entity type of the transitions, or may be: on a group which includes it, or without
-  /// a model of its own, as a delayed trigger, which is on the entity of its transition
+  /// an entity type of its own, as a delayed trigger, which is on the entity of its transition
   private boolean isOnTheModel(EventTrigger<?, ?, ?> trigger) {
     if (trigger.entityType() == null)
       return true;
-    return trigger.entityType().id().equals(model.id())
-        || trigger.entityType() instanceof EntityTypeGroup group && group.includes(model);
+    return trigger.entityType().id().equals(entityType.id())
+        || trigger.entityType() instanceof EntityTypeGroup group && group.includes(entityType);
   }
 
   /// An entity of the session only is not found after its session, so its transitions, and those they may choose, can't
@@ -272,7 +273,7 @@ final class EntityTypeChecks {
   /// which doesn't exist, and its state would be that of an entity without events. An id or index entity has no states,
   /// so all its events are taken from `Begin`.
   private void requireLeavingBegin() {
-    if (model instanceof IdEntityType || model instanceof IndexEntityType)
+    if (entityType instanceof IdEntityType || entityType instanceof IndexEntityType)
       return;
     for (var transition : transitions.getOrDefault(Begin, List.of()))
       for (var leaf : transition.leaves())
@@ -284,13 +285,13 @@ final class EntityTypeChecks {
   }
 
   /// Every entity is created from `Begin`, as its state is found by replaying its events from there, so a state with
-  /// transitions which `Begin` doesn't lead to could never be left, and is refused, as is a model with transitions but
+  /// transitions which `Begin` doesn't lead to could never be left, and is refused, as is an entity type with transitions but
   /// none from `Begin`
   private void requireReachableFromBegin() {
     if (transitions.values().stream().allMatch(List::isEmpty))
       return;
     if (transitions.getOrDefault(Begin, List.of()).isEmpty()) {
-      refuse("The model has transitions, but none from Begin, from which every entity is created");
+      refuse("The entity type has transitions, but none from Begin, from which every entity is created");
       return;
     }
     var reached = new HashSet<State>();
@@ -318,10 +319,10 @@ final class EntityTypeChecks {
   /// stored is an entity of the session only, and from there by any event. The states only entities of the session
   /// reach may be left by events not stored.
   private Set<State> statesOfStoredEntities() {
-    return statesReachedFromBegin(eventType -> !(eventType instanceof EventType.NotStored));
+    return statesReachedFromBegin(EventTypes::stored);
   }
 
-  /// The states an entity of the session only of a stored model reaches: from `Begin` by the events not stored, which
+  /// The states an entity of the session only of a stored entity type reaches: from `Begin` by the events not stored, which
   /// create one, and from there by any event
   private Set<State> statesOfEntitiesOfTheSessionOnly() {
     return statesReachedFromBegin(eventType -> eventType instanceof EventType.NotStored);

@@ -55,11 +55,11 @@ final class Graph {
     this.entityTypes = models.entityTypesById();
     Map<UUID, EventType<?, ?>> eventTypesById = models.eventTypes().stream().collect(toMap(EventType::id, identity()));
     this.eventTypeMapper = eventTypesById::get;
-    var eventTypesByModel = models.eventTypesByEntityType();
+    var eventTypesByType = models.eventTypesByEntityType();
     var referenceTypes = new LinkedHashSet<EventType<?, ?>>();
     var idTypes = new LinkedHashSet<EventType<?, ?>>();
     var indexTypes = new LinkedHashSet<EventType<?, ?>>();
-    eventTypesByModel.entrySet().stream()
+    eventTypesByType.entrySet().stream()
         .sorted(Comparator.comparing(e -> e.getKey().name()))
         .forEach(e -> {
           for (EventType<?, ?> type : e.getValue()) {
@@ -85,11 +85,11 @@ final class Graph {
   /// An entity, of an entity type the backoffice may not know if the entity was created by another version of the
   /// application
   ///
-  /// @param model the entity type, or null if it is unknown
-  record Entity(UUID id, UUID modelId, EntityType model) {
+  /// @param entityType the entity type, or null if it is unknown
+  record Entity(UUID id, UUID entityTypeId, EntityType entityType) {
 
-    String modelName() {
-      return model != null ? model.name() : modelId.toString();
+    String entityTypeName() {
+      return entityType != null ? entityType.name() : entityTypeId.toString();
     }
 
   }
@@ -137,14 +137,14 @@ final class Graph {
   record Listed(Entity entity, LocalDateTime created, String firstEvent) {}
 
   /// The entity types of entities, which have their own event logs, in the order of their names
-  List<EntityType> models() {
+  List<EntityType> entityTypes() {
     return entityTypes.values().stream()
         .filter(m -> !(m instanceof IdEntityType) && !(m instanceof IndexEntityType))
         .sorted(Comparator.comparing(EntityType::name))
         .toList();
   }
 
-  Optional<EntityType> model(UUID id) {
+  Optional<EntityType> entityType(UUID id) {
     return Optional.ofNullable(entityTypes.get(id));
   }
 
@@ -190,12 +190,12 @@ final class Graph {
 
   /// The latest entities of an entity type, created before the entity `before` if it is given. Entity ids are time
   /// ordered, so the latest have the greatest entity ids.
-  Flux<Listed> latest(EntityType model, UUID before, int limit) {
+  Flux<Listed> latest(EntityType entityType, UUID before, int limit) {
     var query = client.sql(
             """
             SELECT e.EntityId, ev.Timestamp, ev.Type FROM "{schema}"."Entity" e
             JOIN "{schema}"."Event" ev ON ev.EntityId=e.EntityId AND ev.EventNumber=1
-            WHERE e.EntityTypeId=:model {before}
+            WHERE e.EntityTypeId=:entityType {before}
             ORDER BY e.EntityId DESC
             OFFSET 0 ROWS FETCH NEXT {limit} ROWS ONLY
             """
@@ -204,11 +204,11 @@ final class Graph {
                 .replace("{limit}", Integer.toString(limit))
         )
         .name("Backoffice.Latest")
-        .bind("model", model.id());
+        .bind("entityType", entityType.id());
     if (before != null)
       query = query.bind("before", before);
     return query.map(row -> new Listed(
-            new Entity(row.get("EntityId", UUID.class), model.id(), model),
+            new Entity(row.get("EntityId", UUID.class), entityType.id(), entityType),
             row.get("Timestamp", LocalDateTime.class),
             typeName(row.get("Type", UUID.class))
         ))
@@ -348,8 +348,8 @@ final class Graph {
     return new StoredEvent(number, typeId, eventTypeMapper.apply(typeId), data, timestamp);
   }
 
-  private Entity entity(UUID entityId, UUID modelId) {
-    return new Entity(entityId, modelId, entityTypes.get(modelId));
+  private Entity entity(UUID entityId, UUID entityTypeId) {
+    return new Entity(entityId, entityTypeId, entityTypes.get(entityTypeId));
   }
 
   private String typeName(UUID typeId) {

@@ -14,26 +14,29 @@ public final class Event<T> {
   private final int eventNumber;
   private final EventType<?, T> type;
   private final ZonedDateTime timestamp;
+  /// Gives the data as it is stored, e.g. masked, from the data, or null to store it as it is
+  private final UnaryOperator<T> storedForm;
+  // The data, as stored and unmarshalled, of which one is made from the other when it is first asked for. They are
+  // guarded by the event, as an event may be read by other threads than the one which created it.
   private byte[] data;
   private T unmarshalledData;
-  /// Gives the data as it is stored, e.g. masked, from the data, or null to store it as it is
-  private UnaryOperator<T> storedForm;
   /// Whether the stored form has been marshalled, which may give no data
   private boolean marshalled;
 
-  private Event(UUID entityId, int eventNumber, EventType<?, T> type, ZonedDateTime timestamp) {
+  private Event(UUID entityId, int eventNumber, EventType<?, T> type, ZonedDateTime timestamp, byte[] data, T unmarshalledData, UnaryOperator<T> storedForm) {
     this.entityId = entityId;
     this.eventNumber = eventNumber;
     this.type = requireNonNull(type, "type is null");
     this.timestamp = timestamp;
+    this.data = data;
+    this.unmarshalledData = unmarshalledData;
+    this.storedForm = storedForm;
   }
 
   /// An event with the data, or none if it is null, e.g. of a transition. The data is marshalled when it is first asked
   /// for, e.g. when the event is stored.
   public static <T> Event<T> of(UUID entityId, int eventNumber, EventType<?, T> type, ZonedDateTime timestamp, T data) {
-    var event = new Event<>(entityId, eventNumber, type, timestamp);
-    event.unmarshalledData = data;
-    return event;
+    return new Event<>(entityId, eventNumber, type, timestamp, null, data, null);
   }
 
   /// An event whose data in the session differs from the data stored, e.g. masked. [#data()] gives the data, while
@@ -42,17 +45,13 @@ public final class Event<T> {
   ///
   /// @param storedForm gives the data as it is stored, which must not be null
   public static <T> Event<T> masked(UUID entityId, int eventNumber, EventType<?, T> type, ZonedDateTime timestamp, T data, UnaryOperator<T> storedForm) {
-    var event = of(entityId, eventNumber, type, timestamp, data);
-    event.storedForm = requireNonNull(storedForm, "storedForm is null");
-    return event;
+    return new Event<>(entityId, eventNumber, type, timestamp, null, data, requireNonNull(storedForm, "storedForm is null"));
   }
 
   /// An event as it is stored, with its data marshalled, or null if it has none, e.g. read from the event log. The
   /// data is unmarshalled when it is first asked for.
   public static <T> Event<T> stored(UUID entityId, int eventNumber, EventType<?, T> type, ZonedDateTime timestamp, byte[] data) {
-    var event = new Event<>(entityId, eventNumber, type, timestamp);
-    event.data = data;
-    return event;
+    return new Event<>(entityId, eventNumber, type, timestamp, data, null, null);
   }
 
   public UUID entityId() {
@@ -96,13 +95,17 @@ public final class Event<T> {
         ", typeInput=" + type.inputDataType().name() +
         ", typeOutput=" + type.outputDataType().name() +
         ", timestamp=" + timestamp +
-        ", data#=" + (data != null ? data.length : 0) +
+        ", data#=" + dataLength() +
         '}';
+  }
+
+  private synchronized int dataLength() {
+    return data != null ? data.length : 0;
   }
 
   /// The data of the event, unmarshalled when it is first asked for, or null if it has none. A masked event of the
   /// transaction gives its whole data, which only the transaction has.
-  public T data() {
+  public synchronized T data() {
     if (unmarshalledData == null && data != null) {
       unmarshalledData = unmarshal(type, data);
     }
@@ -110,7 +113,7 @@ public final class Event<T> {
   }
 
   /// The data as it is stored, e.g. masked, marshalled when it is first asked for, or null if the event has none
-  public byte[] storedData() {
+  public synchronized byte[] storedData() {
     if (data == null && unmarshalledData != null && !marshalled) {
       T stored = storedForm != null ? storedForm.apply(unmarshalledData) : unmarshalledData;
       if (stored == null)

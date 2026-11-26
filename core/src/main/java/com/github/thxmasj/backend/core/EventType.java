@@ -4,10 +4,12 @@ import java.util.UUID;
 
 /// A type of events: their name, their id and the types of their data. The input is what a transition on the event
 /// type is given, and the output is what its event has, which is what is stored. An event type is created with the
-/// factory methods of this interface, e.g. [#of(String, UUID, DataType)]. Event types are equal if their ids are.
+/// factory methods of this interface, e.g. [#of(String, UUID, DataType)]. The ids of the event types of a state machine
+/// are unique. The event types the factory methods create are equal if their ids are, whatever their kind, while
+/// another implementation of the interface decides its own equality, e.g. by identity.
 ///
-/// The sub-types of an event type tell how the state machine treats its events: [NotStored], [Request], [Rollback] and
-/// [Cancel]. An event type of none of them is an ordinary one, whose events are stored.
+/// The sub-types of an event type tell how the state machine treats its events: [NotStored], [Request] and [Rollback].
+/// An event type of none of them is an ordinary one, whose events are stored.
 public interface EventType<I, O> {
 
   String name();
@@ -43,9 +45,6 @@ public interface EventType<I, O> {
         String reason
     ) {}
   }
-
-  /// A rollback which cancels its entity
-  interface Cancel extends Rollback {}
 
   /// An event type whose events have no data
   static EventType<Void, Void> of(String name, UUID id) {
@@ -89,11 +88,6 @@ public interface EventType<I, O> {
   /// An event type rolling back the events of its entity, see [Rollback]
   static Rollback rollback(String name, UUID id) {
     return new BasicEventType.Rollback(name, id);
-  }
-
-  /// A rollback which cancels its entity, see [Cancel]
-  static Cancel cancel(String name, UUID id) {
-    return new BasicEventType.Cancel(name, id);
   }
 
 }

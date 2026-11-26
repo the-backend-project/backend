@@ -42,19 +42,19 @@ public class NotStoredTest {
   static EventType<String, String> AccountOpened = EventType.of("Account opened", UUID.fromString("5e0a3f8c-2b7d-4c19-9a64-d1f8b3e7a025"), DataType.string());
   static EventType<Void, Void> AccountTouched = EventType.of("Account touched", UUID.fromString("c47d1e9b-0a3f-4b28-8e65-f2a9c1d7b304"));
   /// Not stored, and triggers a stored event on another entity
-  static EventType<Void, String> PageViewed = EventType.notStored("Page viewed", UUID.fromString("9b2c6e0f-4d1a-4e73-b8a5-3f7d9c2e1b46"), DataType.none(), DataType.string());
+  static EventType.NotStored<Void, String> PageViewed = EventType.notStored("Page viewed", UUID.fromString("9b2c6e0f-4d1a-4e73-b8a5-3f7d9c2e1b46"), DataType.none(), DataType.string());
   static EventType<UUID, UUID> ViewRecorded = EventType.of("View recorded", UUID.fromString("2f8a4d6c-9e1b-4a35-87c0-b5d3e9f1a627"), DataType.uuid());
   /// Not stored, creating an entity of the session only
-  static EventType<UUID, UUID> SignInStarted = EventType.notStored("Sign-in started", UUID.fromString("e1d5b9a3-7c2f-4086-9d4e-a6b8c0f2e315"), DataType.uuid());
+  static EventType.NotStored<UUID, UUID> SignInStarted = EventType.notStored("Sign-in started", UUID.fromString("e1d5b9a3-7c2f-4086-9d4e-a6b8c0f2e315"), DataType.uuid());
   static EventType<UUID, String> SignedIn = EventType.of("Signed in", UUID.fromString("7a3e9c1d-5b0f-4d62-a8e4-c9f1b3d5e708"), DataType.uuid(), DataType.string());
   static EventType<String, String> SecretIssued = EventType.of("Secret issued", UUID.fromString("4c8f2a6e-1d9b-4357-b0e3-d7a5c9f1e842"), DataType.string());
 
   /// Not stored, and fired by a delayed trigger, whose transition records a view
-  static EventType<Void, Void> LookupDue = EventType.notStored("Lookup due", UUID.fromString("1b3d5f7a-9c0e-4a24-86b8-dafc1e3f5a91"));
+  static EventType.NotStored<Void, Void> LookupDue = EventType.notStored("Lookup due", UUID.fromString("1b3d5f7a-9c0e-4a24-86b8-dafc1e3f5a91"));
   static EventType<Void, Void> LookupScheduled = EventType.of("Lookup scheduled", UUID.fromString("3d5f7b9c-1e2a-4c46-a8da-fc1e3f5a7bb3"));
   /// Stored, but chooses a transition which is not stored, after scheduling a stored event
   static EventType<Void, Void> TouchScheduled = EventType.of("Touch scheduled", UUID.fromString("5f7b9d1e-3a4c-4e68-8afc-1e3f5a7b9dd5"));
-  static EventType<Void, Void> TouchScheduledQuietly = EventType.notStored("Touch scheduled quietly", UUID.fromString("7b9d1f3a-5c6e-4a8a-ac1e-3f5a7b9dbff7"));
+  static EventType.NotStored<Void, Void> TouchScheduledQuietly = EventType.notStored("Touch scheduled quietly", UUID.fromString("7b9d1f3a-5c6e-4a8a-ac1e-3f5a7b9dbff7"));
 
   /// Sets a timeout on its entity, which a watcher of the entity cancels at once, in the same transaction
   static EventType<Void, Void> TimeoutSet = EventType.of("Timeout set", UUID.fromString("9d1f3b5c-7e8a-4c0e-b2d4-f6a8c0e2a419"));
@@ -71,7 +71,7 @@ public class NotStoredTest {
   ));
 
   /// Not stored, and schedules a stored event on its entity
-  static EventType<Void, Void> ReminderScheduled = EventType.notStored("Reminder scheduled", UUID.fromString("8e2c4a6f-0b1d-4f37-95e9-a3c5e7b9d148"));
+  static EventType.NotStored<Void, Void> ReminderScheduled = EventType.notStored("Reminder scheduled", UUID.fromString("8e2c4a6f-0b1d-4f37-95e9-a3c5e7b9d148"));
   static EventType<String, String> PasswordSet = EventType.of("Password set", UUID.fromString("6a1f3c5e-8b2d-4e90-a7c4-d9e1b3f5a768"), DataType.string());
 
   static EntityType Account = EntityType.of("Account", UUID.fromString("8d4b0f2a-6e3c-4a91-b7d5-e9c1f3a5b067"), NotStoredTest::accountTransitions);

@@ -80,7 +80,7 @@ public class IdEventTest {
   static EventType<String, String> AccountOpened = EventType.of("Account opened", UUID.fromString("a2d4f6b8-1c3e-4a5b-8d7f-9e0a1b2c3d4e"), DataType.string());
   static EventType<Void, Void> AccountTouched = EventType.of("Account touched", UUID.fromString("f1e2d3c4-b5a6-4978-8a6b-5c4d3e2f1a0b"));
   static EventType<StatementNumber, StatementNumber> StatementIssued = EventType.of("Statement issued", UUID.fromString("3b5d7f9a-2c4e-4a6b-8c0d-1e2f3a4b5c6d"), DataType.json(StatementNumber.class));
-  static EventType<Void, String> StatementLookedUp = EventType.notStored("Statement looked up", UUID.fromString("7c9e1a3b-5d7f-4b9a-8c1e-3f5a7b9c1d2e"), DataType.none(), DataType.string());
+  static EventType.NotStored<Void, String> StatementLookedUp = EventType.notStored("Statement looked up", UUID.fromString("7c9e1a3b-5d7f-4b9a-8c1e-3f5a7b9c1d2e"), DataType.none(), DataType.string());
 
   private static final String schema = UUID.randomUUID().toString();
   private static final StateMachine machine = stateMachine(schema, Clock.systemUTC());

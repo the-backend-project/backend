@@ -71,20 +71,20 @@ final class UpstreamSignIn {
 
   private final OpenIdConnectClient upstream;
   private final AtMostOnceDispatcher<Redemption, String> tokenRequests;
-  private final EntityType model;
+  private final EntityType entityType;
 
   /// @param upstream  the client of the upstream provider, which creates the token request and verifies the ID token,
-  ///                  or null for the model only, whose transitions are not taken
+  ///                  or null for the entity type only, whose transitions are not taken
   /// @param forwarder the HTTP client the token requests are sent with
   UpstreamSignIn(OpenIdConnectClient upstream, HttpClient forwarder) {
     this.upstream = upstream;
-    this.model = EntityType.of("Upstream sign-in", Id, this::transitions);
+    this.entityType = EntityType.of("Upstream sign-in", Id, this::transitions);
     AtMostOnce<String, Void> tokenRequest = HttpOutboxRequest.atMostOnce()
         .requestPayloadType(DataType.string())
         .responsePayloadType(DataType.string())
         .forwarder(forwarder)
         .inflightTimeout(Duration.ofSeconds(10))
-        .processModel(model)
+        .processModel(entityType)
         .onPeerUnavailable(UpstreamTokenRequestFailed)
         .onMissingResponse(UpstreamTokenRequestFailed)
         .onInvalidResponseRejection(UpstreamTokenRequestFailed)
@@ -105,8 +105,8 @@ final class UpstreamSignIn {
     this.tokenRequests = AtMostOnceDispatcher.reactive(tokenRequest, (_, r) -> upstream.tokenRequest(r.code(), r.secret()));
   }
 
-  EntityType model() {
-    return model;
+  EntityType entityType() {
+    return entityType;
   }
 
   private Map<State, List<TransitionModel<?, ?>>> transitions() {

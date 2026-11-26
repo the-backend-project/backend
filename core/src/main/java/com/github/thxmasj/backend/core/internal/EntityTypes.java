@@ -22,6 +22,11 @@ public final class EntityTypes {
 
   private EntityTypes() {}
 
+  /// Whether the entities of the type are stored, as they are unless it is an [EntityType.NotStored]
+  public static boolean stored(EntityType entityType) {
+    return !(entityType instanceof EntityType.NotStored);
+  }
+
   /// The entity types given, and those their transitions trigger events on, and so on, each once. The models given
   /// are those nothing triggers events on, e.g. the entity types of an inbox, whose requests trigger the events of
   /// the application, whose transitions in turn trigger events on e.g. outbox requests, rollback models and indexes.

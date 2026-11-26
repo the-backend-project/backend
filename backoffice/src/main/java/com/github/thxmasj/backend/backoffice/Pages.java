@@ -70,12 +70,12 @@ final class Pages {
       return search(q).map(results -> new Page(200, fragment ? results : document("Search", user, home(q).replace("<!--results-->", results))));
     }
     if (rest.startsWith("/models/")) {
-      UUID modelId = Graph.uuid(rest.substring("/models/".length()));
-      var model = modelId != null ? graph.model(modelId) : java.util.Optional.<EntityType>empty();
-      if (model.isEmpty())
+      UUID entityTypeId = Graph.uuid(rest.substring("/models/".length()));
+      var entityType = entityTypeId != null ? graph.entityType(entityTypeId) : java.util.Optional.<EntityType>empty();
+      if (entityType.isEmpty())
         return Mono.just(notFound(user, fragment, "No such entity type"));
       UUID before = Graph.uuid(query.get("before"));
-      return latest(model.get(), before).map(html -> new Page(200, fragment ? html : document(model.get().name(), user, html)));
+      return latest(entityType.get(), before).map(html -> new Page(200, fragment ? html : document(entityType.get().name(), user, html)));
     }
     if (rest.startsWith("/entities/")) {
       UUID entityId = Graph.uuid(rest.substring("/entities/".length()));
@@ -105,9 +105,9 @@ final class Pages {
   }
 
   private String home(String q) {
-    var models = new StringBuilder();
-    for (EntityType model : graph.models())
-      models.append("<li><a href=\"%s/models/%s\">%s</a></li>\n".formatted(Sessions.Path, model.id(), escape(model.name())));
+    var entityTypes = new StringBuilder();
+    for (EntityType entityType : graph.entityTypes())
+      entityTypes.append("<li><a href=\"%s/models/%s\">%s</a></li>\n".formatted(Sessions.Path, entityType.id(), escape(entityType.name())));
     return """
         <section>
         <form class="search" action="%1$s/search" method="get" hx-get="%1$s/search" hx-target="#results" hx-push-url="true"
@@ -122,7 +122,7 @@ final class Pages {
         <ul class="models">
         %3$s</ul>
         </section>
-        """.formatted(Sessions.Path, escape(q), models);
+        """.formatted(Sessions.Path, escape(q), entityTypes);
   }
 
   private Mono<String> search(String q) {
@@ -133,7 +133,7 @@ final class Pages {
         return "<p class=\"empty\">Nothing found for <code>" + escape(q) + "</code></p>";
       var rows = new StringBuilder();
       for (Match match : matches)
-        rows.append("<tr><td>%s</td><td>%s</td><td>%s</td></tr>\n".formatted(entityLink(match.entity()), escape(match.entity().modelName()), escape(match.matchedBy())));
+        rows.append("<tr><td>%s</td><td>%s</td><td>%s</td></tr>\n".formatted(entityLink(match.entity()), escape(match.entity().entityTypeName()), escape(match.matchedBy())));
       return """
           <table>
           <thead><tr><th>Entity</th><th>Model</th><th>Found by</th></tr></thead>
@@ -144,13 +144,13 @@ final class Pages {
     });
   }
 
-  private Mono<String> latest(EntityType model, UUID before) {
-    return graph.latest(model, before, pageSize + 1).collectList().map(listed -> {
+  private Mono<String> latest(EntityType entityType, UUID before) {
+    return graph.latest(entityType, before, pageSize + 1).collectList().map(listed -> {
       var rows = new StringBuilder();
       for (Listed entity : listed.subList(0, Math.min(pageSize, listed.size())))
         rows.append("<tr><td>%s</td><td>%s</td><td>%s</td></tr>\n".formatted(entityLink(entity.entity()), time(entity.created()), escape(entity.firstEvent())));
       String more = listed.size() > pageSize ?
-          "<p><a href=\"%s/models/%s?before=%s\">Earlier</a></p>".formatted(Sessions.Path, model.id(), listed.get(pageSize - 1).entity().id()) :
+          "<p><a href=\"%s/models/%s?before=%s\">Earlier</a></p>".formatted(Sessions.Path, entityType.id(), listed.get(pageSize - 1).entity().id()) :
           "";
       return """
           <h1>%s</h1>
@@ -158,7 +158,7 @@ final class Pages {
           %s
           %s
           """.formatted(
-          escape(model.name()),
+          escape(entityType.name()),
           listed.isEmpty() ? "<p class=\"empty\">No entities</p>" : """
               <table>
               <thead><tr><th>Entity</th><th>Created</th><th>First event</th></tr></thead>
@@ -177,7 +177,7 @@ final class Pages {
   private Mono<String> entity(View view, boolean heading) {
     var html = new StringBuilder();
     if (heading) {
-      html.append("<h1>%s <code>%s</code></h1>\n".formatted(escape(view.entity().modelName()), view.entity().id()));
+      html.append("<h1>%s <code>%s</code></h1>\n".formatted(escape(view.entity().entityTypeName()), view.entity().id()));
     } else {
       html.append("<p class=\"subtitle\"><a href=\"%s/entities/%s\">Open the page of the entity</a></p>\n".formatted(Sessions.Path, view.entity().id()));
     }
@@ -248,7 +248,7 @@ final class Pages {
         <summary>%3$s <code>%2$s</code>%4$s</summary>
         <div class="body"><p class="empty">Loading…</p></div>
         </details>
-        """.formatted(Sessions.Path, entity.id(), escape(entity.modelName()), by != null ? " <span class=\"by\">by " + escape(by) + "</span>" : "");
+        """.formatted(Sessions.Path, entity.id(), escape(entity.entityTypeName()), by != null ? " <span class=\"by\">by " + escape(by) + "</span>" : "");
   }
 
   private static String events(List<StoredEvent> events, List<String> dataOfEvents) {

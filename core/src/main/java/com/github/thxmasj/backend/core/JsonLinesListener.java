@@ -52,9 +52,9 @@ public class JsonLinesListener implements Listener {
       Map<String, Object> line = line(
           event.timestamp().toInstant(),
           event.severity(),
-          event.type() + " on " + change.entity().model() + " " + change.entity().id()
+          event.type() + " on " + change.entity().entityType() + " " + change.entity().id()
       );
-      line.put("entityType", change.entity().model());
+      line.put("entityType", change.entity().entityType());
       line.put("entityId", change.entity().id().toString());
       // An event which is not stored has no number in the event log
       if (event.stored())
