@@ -130,9 +130,10 @@ the next event may as well have been triggered by another entity, e.g. an applic
   in a box was stored together, or nothing would have been.
 - The transactions of a [session](sessions.md) of several are drawn in a box of the session, with the actions between
   them. A transaction starting with the outcome of an action is of the session of the transaction which ran the
-  action, and any other starts a session, e.g. a request to an inbox, or a delayed or conditional trigger firing. Boxes
-  must nest, so a session whose transactions have a transaction of another session between them isn't boxed, and its
-  transactions are named with its number instead.
+  action, and any other starts a session, e.g. a request to an inbox, or a delayed or conditional trigger firing. A
+  transaction which isn't in a box of its session is named with its session instead, so every transaction tells its
+  session: the only transaction of a session, and those of a session with a transaction of another session between
+  them, as boxes must nest.
 - Each entity whose log is drawn has a lifeline, and so has each model of the deduced entities. An event is numbered
   as in its log. A deduced event has no number, as it is never stored, and is named in italics.
 - An event triggered by an event of the replay is a synchronous message from that event's lifeline, nested in its

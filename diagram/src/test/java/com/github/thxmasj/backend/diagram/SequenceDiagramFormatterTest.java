@@ -318,12 +318,12 @@ class SequenceDiagramFormatterTest {
     String diagram = diagram();
     assertThat(diagram).contains(
         """
-        group Transaction 1, 2026-11-26T12:00:00Z
+        group Transaction 1, session 1, 2026-11-26T12:00:00Z
         [-> P1: 1. Placed
         """,
         """
         end
-        group Transaction 2, 2026-11-26T12:00:01Z
+        group Transaction 2, session 2, 2026-11-26T12:00:01Z
         [-> P1: 2. Accepted
         """
     );
@@ -351,7 +351,9 @@ class SequenceDiagramFormatterTest {
         end
         end
         """
-    ).doesNotContain("Session 1", ", session ");
+    ).doesNotContain("Session 1", "Transaction 2, session", "Transaction 3, session");
+    // The only transaction of its session tells the session by its name
+    assertThat(diagram).contains("group Transaction 1, session 1, 2026-11-26T12:00:00Z\n");
   }
 
   /// Groups must nest, so a session with a transaction of another between its own is told by the names of its
@@ -369,7 +371,7 @@ class SequenceDiagramFormatterTest {
     String diagram = new SequenceDiagramFormatter(log(), List.of(other)).format();
     assertThat(diagram).contains(
         "group Transaction 2, session 2, 2026-11-26T12:00:01Z\n",
-        "group Transaction 3, 2026-11-26T12:00:02Z\n",
+        "group Transaction 3, session 3, 2026-11-26T12:00:02Z\n",
         "group Transaction 4, session 2, 2026-11-26T12:00:03Z\n"
     ).doesNotContain("group Session");
   }
@@ -398,7 +400,7 @@ class SequenceDiagramFormatterTest {
         P1 -> P2: <color:#7A0000>Released</color>
         deactivate P1
         end
-        group Transaction 3, 2026-11-26T12:00:02Z
+        group Transaction 3, session 3, 2026-11-26T12:00:02Z
         [-> P1: 3. Placed
         """
     );

@@ -38,8 +38,9 @@ import net.sourceforge.plantuml.SourceStringReader;
 /// The steps of each transaction are drawn in a group, named with its number in the diagram and its timestamp, which
 /// all its events have. The actions of a transaction follow its group, as they are run after it is committed. The
 /// transactions of a session of several are drawn in a group of the session, with the actions between them, unless a
-/// transaction of another session comes between them, as groups must nest. They are then named with the number of
-/// their session instead.
+/// transaction of another session comes between them, as groups must nest. A transaction which isn't drawn in a group
+/// of its session, such as the only one of a session, is named with the number of its session instead, so that every
+/// transaction tells its session.
 ///
 /// Each entity whose log is drawn has a lifeline, and so does each model of the deduced steps of entities which aren't
 /// stored. An event no step of the replay triggered arrives at its entity from outside the diagram. The events a
@@ -108,7 +109,7 @@ public class SequenceDiagramFormatter {
       messages.append(String.format(
           "group Transaction %d%s, %s\n",
           transaction,
-          several && !boxed ? ", session " + session : "",
+          boxed ? "" : ", session " + session,
           roots.get(i).event().timestamp().toInstant()
       ));
       // The roots of the transaction, with the actions run after it is committed
