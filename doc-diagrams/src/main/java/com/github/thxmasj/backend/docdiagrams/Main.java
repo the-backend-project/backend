@@ -66,24 +66,40 @@ public class Main {
     graphviz("http-inbox-rollback.dot", name + ".Rollback");
   }
 
-  /// The examples of sequence diagrams on the diagrams page: a greeting of the hello world demo with its inbox request,
-  /// in one transaction, and an authorisation of the outbox examples whose outcome is unknown, as its response never
-  /// came, which is rolled back by a reversal
+  /// The examples of sequence diagrams on the diagrams page, with the entity models of their state machines, from which
+  /// the routing of the inbox requests, which isn't stored, is deduced: a greeting of the hello world demo with its
+  /// inbox request, in one transaction, and a payment of the card payment template, requested from the inbox, and
+  /// authenticated and authorised by outbox requests, in three transactions
   private static void sequenceDiagrams() throws IOException {
     var name = "com.github.thxmasj.backend.diagram.sequence.";
     sequenceDiagram(
         name + "Greeting",
+        Greetings.Inbox.entityModels(),
         log(Greetings.Greeting, at(1, "Greeting requested")),
         log(Greetings.GreetingRequest, at(1, "Request accepted"), at(1, "Greeting response created"))
     );
+    var models = EntityModel.reachable(DocExamples.PaymentInbox.entityModels());
     sequenceDiagram(
-        name + "Authorisation",
-        log(DocExamples.Authorisation, at(1, "Request dispatched"), at(2, "Timeout expired"), at(3, "Rollback dispatched"))
+        name + "Payment",
+        models,
+        log(DocExamples.CardPayments.payment(),
+            at(1, "Payment request validated"), at(2, "Authorization requested"), at(3, "Authorization approved")),
+        log(DocExamples.PaymentRequest, at(1, "Request accepted"), at(2, "Request completed")),
+        log(model(models, "Authentication"), at(1, "Request dispatched"), at(2, "Request accepted")),
+        log(model(models, "Authorisation"), at(2, "Request dispatched"), at(3, "Request accepted")),
+        // Opened by the merchant before the payment
+        log(DocExamples.CardPayments.settlement(), at(0, "Settlement opened"), at(3, "Merchant credited"))
     );
   }
 
-  private static void sequenceDiagram(String fileName, EventLog log, EventLog... related) throws IOException {
-    System.out.println(new SequenceDiagramFormatter(log, List.of(related)).formatToImage(new File(directory, fileName + ".svg")));
+  private static EntityModel model(List<EntityModel> models, String name) {
+    return models.stream().filter(m -> m.name().equals(name)).findFirst().orElseThrow();
+  }
+
+  private static void sequenceDiagram(String fileName, List<? extends EntityModel> models, EventLog log, EventLog... related)
+      throws IOException {
+    var formatter = new SequenceDiagramFormatter(log, List.of(related), models);
+    System.out.println(formatter.formatToImage(new File(directory, fileName + ".svg")));
   }
 
   private static void cardPayments() throws IOException {

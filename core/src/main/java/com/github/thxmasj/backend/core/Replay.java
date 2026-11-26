@@ -18,14 +18,21 @@ import java.util.stream.Stream;
 /// An event doesn't record what caused it, so the replay finds the transition each event took like the state machine
 /// does, from the state the events before it took the entity to. A transition with choices stores the event of the
 /// alternative it chose, so the transition of an event is the path from the transition of the state to that
-/// alternative, whose triggers and actions are all those of the event.
+/// alternative, whose triggers and actions are all those of the event. A trigger starts the first transition of the
+/// path, so the event stored may be of another type than the one triggered, e.g. `Request accepted` of an inbox
+/// request triggered with `Request received`.
 ///
 /// The events of one transaction have its timestamp, so an event of a log is taken to be triggered by a trigger of the
-/// same type on its entity model, or on a group of it, of an event with the same timestamp, e.g. the event an inbox
-/// request triggers on the entity it was processed on, and the response the entity triggers on the inbox request. An
-/// event no trigger is found for is a root of the replay, e.g. one given to the state machine from outside, or
-/// triggered by an entity whose log isn't replayed. A conditional trigger fires in another transaction, so its event
-/// is never found.
+/// type starting its path on its entity model, or on a group of it, of an event with the same timestamp, e.g. the
+/// event an inbox request triggers on the entity it was processed on, and the response the entity triggers on the
+/// inbox request. A conditional trigger fires in another transaction, so its event is never found.
+///
+/// An entity of a model which is not stored, e.g. the `RequestRouting` of an inbox, has no log. Given the entity models
+/// of the state machine, the replay deduces its step from their transitions: an event no trigger of the logs is found
+/// for is taken to be triggered by a transition of a model which is not stored, if that is the only transition of such
+/// a model triggering it. Its step has no event number, as it is never stored. Events of stored models are only taken
+/// from their logs, which can be given. An event with neither is a root of the replay, e.g. one given to the state
+/// machine from outside, or triggered by an entity whose log isn't given.
 ///
 /// A rollback takes the reverse transitions of the events it rolls back, latest first, whose triggers are those of the
 /// rollback.
@@ -39,36 +46,52 @@ public final class Replay {
     this.steps = steps;
   }
 
-  /// An event triggered by a step, and the step of the event if it is in the logs of the replay
+  /// An event triggered by a step, and the step of the event if it is in the replay
   ///
   /// @param reversal whether it is triggered by the reverse transition of an event rolled back
   public record Triggered(EventTrigger<?, ?, ?> trigger, boolean reversal, Optional<Step> step) {}
 
-  /// An event of a log, with the path of transitions it took, the events they triggered, and the step whose
-  /// transition triggered it, if it is in the logs of the replay
+  /// An event of a log, or a deduced one of an entity which isn't stored, with the path of transitions it took, the
+  /// events they triggered, and the step whose transition triggered it, if it is in the replay
   public static final class Step {
 
     private final EventLog log;
     private final Event<?> event;
     private final List<TransitionModel<?, ?>> path;
     private final List<Step> rolledBack;
+    private final boolean deduced;
     private final List<Triggered> triggered = new ArrayList<>();
     private Step cause;
     private boolean isRolledBack;
 
-    private Step(EventLog log, Event<?> event, List<TransitionModel<?, ?>> path, List<Step> rolledBack) {
+    private Step(EventLog log, Event<?> event, List<TransitionModel<?, ?>> path, List<Step> rolledBack, boolean deduced) {
       this.log = log;
       this.event = event;
       this.path = path;
       this.rolledBack = rolledBack;
+      this.deduced = deduced;
+      path.forEach(t -> t.triggers().forEach(trigger -> triggered.add(new Triggered(trigger, false, Optional.empty()))));
+      for (Step reversed : rolledBack) {
+        TransitionModel<?, ?> reverse = reversed.transition().reverseModel();
+        if (reverse != null)
+          reverse.triggers().forEach(trigger -> triggered.add(new Triggered(trigger, true, Optional.empty())));
+      }
     }
 
+    /// The log of the entity, which for a deduced step is of its model, with no entity id, and the deduced event only
     public EventLog log() {
       return log;
     }
 
+    /// The event, which for a deduced step has no entity id and event number 0
     public Event<?> event() {
       return event;
+    }
+
+    /// Whether the step is deduced from the transitions of an entity model which is not stored, rather than read from
+    /// a log
+    public boolean isDeduced() {
+      return deduced;
     }
 
     /// The transitions from the transition of the state to the one of the event, which is the last
@@ -102,9 +125,14 @@ public final class Replay {
       return isRolledBack;
     }
 
-    /// The step whose transition triggered the event, if it is in the logs of the replay
+    /// The step whose transition triggered the event, if it is in the replay
     public Optional<Step> cause() {
       return Optional.ofNullable(cause);
+    }
+
+    /// The type of the event triggered to take the path
+    private EventType<?, ?> triggeredType() {
+      return path.getFirst().eventType();
     }
 
     private Instant time() {
@@ -123,6 +151,15 @@ public final class Replay {
   /// @throws IllegalStateException if an event of a log has no transition from the state the events before it took
   ///                               the entity to, e.g. one of another version of the application
   public static Replay of(EventLog log, List<EventLog> related) {
+    return of(log, related, List.of());
+  }
+
+  /// Replays the log with related logs, and deduces the steps of the entities which aren't stored from the transitions
+  /// of the entity models, e.g. those given to the state machine, and those they trigger events on
+  ///
+  /// @throws IllegalStateException if an event of a log has no transition from the state the events before it took
+  ///                               the entity to, e.g. one of another version of the application
+  public static Replay of(EventLog log, List<EventLog> related, List<? extends EntityModel> entityModels) {
     List<EventLog> logs = Stream.concat(Stream.of(log), related.stream()).toList();
     List<Step> steps = new ArrayList<>();
     for (EventLog l : logs)
@@ -135,15 +172,31 @@ public final class Replay {
       if (step.cause == null)
         match(step, steps);
     }
-    return new Replay(logs, unmodifiableList(steps));
+    List<EntityModel> notStored = entityModels.isEmpty() ? List.of() : EntityModel.reachable(entityModels).stream()
+        .filter(model -> !model.stored())
+        .toList();
+    List<Step> all = new ArrayList<>();
+    List<EventLog> allLogs = new ArrayList<>(logs);
+    for (Step step : steps) {
+      if (step.cause == null) {
+        Step deduced = deduce(step, notStored);
+        if (deduced != null) {
+          all.add(deduced);
+          allLogs.add(deduced.log());
+        }
+      }
+      all.add(step);
+    }
+    return new Replay(List.copyOf(allLogs), unmodifiableList(all));
   }
 
-  /// The logs replayed, the first one first
+  /// The logs replayed, the first one first, followed by the related ones and those of the deduced steps
   public List<EventLog> logs() {
     return logs;
   }
 
-  /// The steps of all the logs, in the order of time, and of the logs and their events within a transaction
+  /// The steps of all the logs, in the order of time, and of the logs and their events within a transaction, with the
+  /// deduced steps before the steps they triggered
   public List<Step> steps() {
     return steps;
   }
@@ -153,9 +206,9 @@ public final class Replay {
     return steps.stream().filter(step -> step.cause == null).toList();
   }
 
-  /// Takes the step to be triggered by the first trigger of its type on its entity model of a step in the same
-  /// transaction, which isn't taken by another step, isn't a later event of the same entity, and isn't triggered by
-  /// the step itself
+  /// Takes the step to be triggered by the first trigger of the type starting its path on its entity model of a step
+  /// in the same transaction, which isn't taken by another step, isn't a later event of the same entity, and isn't
+  /// triggered by the step itself
   private static void match(Step step, List<Step> steps) {
     for (Step candidate : steps) {
       if (candidate == step || !candidate.time().equals(step.time()))
@@ -164,20 +217,60 @@ public final class Replay {
         continue;
       if (isCausedBy(candidate, step))
         continue;
-      for (int i = 0; i < candidate.triggered.size(); i++) {
-        Triggered triggered = candidate.triggered.get(i);
-        EventTrigger<?, ?, ?> trigger = triggered.trigger();
-        if (triggered.step().isEmpty()
-            && trigger instanceof EventTrigger.Immediate<?, ?, ?>
-            && trigger.eventType().equals(step.event().type())
-            && trigger.entityModel() != null
-            && EntityModelGroup.targets(trigger.entityModel(), step.log().entityModel())) {
-          candidate.triggered.set(i, new Triggered(trigger, triggered.reversal(), Optional.of(step)));
-          step.cause = candidate;
-          return;
+      if (link(candidate, step))
+        return;
+    }
+  }
+
+  /// Links the step to the first trigger of the cause it may have been triggered by, which isn't taken by another
+  /// step. Returns whether there was one.
+  private static boolean link(Step cause, Step step) {
+    for (int i = 0; i < cause.triggered.size(); i++) {
+      Triggered triggered = cause.triggered.get(i);
+      if (triggered.step().isEmpty() && triggers(triggered.trigger(), step.triggeredType(), step.log().entityModel())) {
+        cause.triggered.set(i, new Triggered(triggered.trigger(), triggered.reversal(), Optional.of(step)));
+        step.cause = cause;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// The step of an entity of a model which isn't stored that triggered the step, if exactly one transition of such a
+  /// model triggers it, or null
+  private static Step deduce(Step step, List<EntityModel> notStored) {
+    EntityModel found = null;
+    List<TransitionModel<?, ?>> foundPath = null;
+    for (EntityModel model : notStored) {
+      for (List<TransitionModel<?, ?>> path : model.transitions().values().stream().flatMap(List::stream).flatMap(Replay::paths).toList()) {
+        boolean triggersStep = path.stream()
+            .flatMap(t -> t.triggers().stream())
+            .anyMatch(trigger -> triggers(trigger, step.triggeredType(), step.log().entityModel()));
+        if (triggersStep) {
+          // The same transition may be one of several states
+          if (found == model && foundPath.equals(path))
+            continue;
+          if (found != null)
+            return null;
+          found = model;
+          foundPath = path;
         }
       }
     }
+    if (found == null)
+      return null;
+    Event<?> event = new Event<>(null, 0, foundPath.getLast().eventType(), step.event().timestamp());
+    Step deduced = new Step(new EventLog(found, null, List.of(event)), event, foundPath, List.of(), true);
+    link(deduced, step);
+    return deduced;
+  }
+
+  /// Whether the trigger, in the transaction, triggers an event of the type on an entity of the model
+  private static boolean triggers(EventTrigger<?, ?, ?> trigger, EventType<?, ?> type, EntityModel model) {
+    return trigger instanceof EventTrigger.Immediate<?, ?, ?>
+        && trigger.eventType().equals(type)
+        && trigger.entityModel() != null
+        && EntityModelGroup.targets(trigger.entityModel(), model);
   }
 
   private static boolean isCausedBy(Step step, Step cause) {
@@ -217,22 +310,16 @@ public final class Replay {
           kept++;
         List<Step> rolledBack = List.copyOf(effective.subList(kept, effective.size()).reversed());
         rolledBack.forEach(s -> s.isRolledBack = true);
-        step = new Step(log, event, path, rolledBack);
+        step = new Step(log, event, path, rolledBack, false);
         effective.subList(kept, effective.size()).clear();
         statesAfter.subList(kept, statesAfter.size()).clear();
         state = statesAfter.isEmpty() ? Begin : statesAfter.getLast();
       } else {
-        step = new Step(log, event, path, List.of());
+        step = new Step(log, event, path, List.of(), false);
         if (step.transition().toState() != null)
           state = step.transition().toState();
         effective.add(step);
         statesAfter.add(state);
-      }
-      path.forEach(t -> t.triggers().forEach(trigger -> step.triggered.add(new Triggered(trigger, false, Optional.empty()))));
-      for (Step reversed : step.rolledBack()) {
-        TransitionModel<?, ?> reverse = reversed.transition().reverseModel();
-        if (reverse != null)
-          reverse.triggers().forEach(trigger -> step.triggered.add(new Triggered(trigger, true, Optional.empty())));
       }
       steps.add(step);
     }
@@ -244,8 +331,8 @@ public final class Replay {
   /// several choices, and the log doesn't tell which one was taken, as the choices depend on data it doesn't have. The
   /// first one which triggers no event on the entity's own model is taken then, as the next event may as well have
   /// been triggered by another entity, e.g. an application completing an inbox request. If they all do, the first one
-  /// triggering the next event of the log is taken, and else the first one. A rollback without a transition of its own
-  /// takes the built-in one, which has no triggers or actions.
+  /// which may have triggered the next event of the log is taken, and else the first one. A rollback without a
+  /// transition of its own takes the built-in one, which has no triggers or actions.
   private static List<TransitionModel<?, ?>> path(
       EventLog log,
       Map<State, List<TransitionModel<?, ?>>> transitions,
@@ -269,7 +356,9 @@ public final class Replay {
     return candidates.stream()
         .filter(path -> triggersOnItself(path, log).isEmpty())
         .findFirst()
-        .or(() -> candidates.stream().filter(path -> next != null && triggersOnItself(path, log).contains(next)).findFirst())
+        .or(() -> candidates.stream()
+            .filter(path -> next != null && triggersOnItself(path, log).stream().anyMatch(t -> mayStore(log.entityModel(), t, next)))
+            .findFirst())
         .orElse(candidates.getFirst());
   }
 
@@ -279,6 +368,15 @@ public final class Replay {
         .filter(trigger -> isOnItself(trigger, log))
         .<EventType<?, ?>>map(EventTrigger::eventType)
         .toList();
+  }
+
+  /// Whether an event of the type triggered on an entity of the model may store an event of the stored type
+  private static boolean mayStore(EntityModel model, EventType<?, ?> triggered, EventType<?, ?> stored) {
+    return model.transitions().values().stream()
+        .flatMap(List::stream)
+        .filter(t -> t.eventType().equals(triggered))
+        .flatMap(Replay::paths)
+        .anyMatch(path -> path.getLast().eventType().equals(stored));
   }
 
   /// The paths from the transition to each of the transitions whose event it may store

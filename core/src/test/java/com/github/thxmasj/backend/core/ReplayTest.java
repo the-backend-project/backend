@@ -68,6 +68,56 @@ class ReplayTest {
     assertEquals(Answered, answered.event().type());
   }
 
+  enum RoutedStates implements State {Routed, Accepted}
+
+  static final EventType<Void, Void> Arrived = BasicEventType.of("Arrived", UUID.randomUUID());
+  static final EventType<Void, Void> Routed = BasicEventType.of("Routed", UUID.randomUUID());
+  static final EventType<Void, Void> Submitted = BasicEventType.of("Submitted", UUID.randomUUID());
+  static final EventType<Void, Void> Accepted = BasicEventType.of("Accepted", UUID.randomUUID());
+
+  /// A request stored as accepted when it is submitted, which is triggered with the type starting its choice
+  static final EntityModel Submission = EntityModel.of("Submission", UUID.randomUUID(), () -> Map.of(
+      Begin, List.<TransitionModel<?, ?>>of(
+          onEvent(Submitted).to(RoutedStates.Accepted).assembleInput()
+              .when(_ -> false).then(onEvent(Routed).to(RoutedStates.Accepted).output())
+              .otherwise(onEvent(Accepted).to(RoutedStates.Accepted).output())
+      ),
+      RoutedStates.Accepted, List.of()
+  ));
+
+  /// Routes what arrives to a submission, like the routing of an inbox, and isn't stored
+  static final EntityModel Router = EntityModel.notStored("Router", UUID.randomUUID(), () -> Map.of(
+      Begin, List.<TransitionModel<?, ?>>of(
+          onEvent(Arrived).to(RoutedStates.Routed).assembleInput()
+              .when(_ -> false).then(onEvent(Accepted).to(RoutedStates.Routed).output())
+              .otherwise(onEvent(Routed).to(RoutedStates.Routed)
+                  .trigger(Submitted).on(Submission).identifiedBy(newEntityId())
+                  .output())
+      ),
+      RoutedStates.Routed, List.of()
+  ));
+
+  @Test
+  void theStepOfAnEntityWhichIsNotStoredIsDeducedFromTheOnlyTransitionTriggeringTheEvent() {
+    UUID id = UUID.randomUUID();
+    EventLog submission = new EventLog(Submission, id, List.of(new Event<>(id, 1, Accepted, time)));
+    Replay replay = Replay.of(submission, List.of(), List.of(Router, Submission));
+    Step routed = replay.roots().getFirst();
+    assertTrue(routed.isDeduced());
+    assertEquals(Routed, routed.event().type());
+    assertSame(Router, routed.log().entityModel());
+    // The trigger of Submitted takes the choice storing Accepted
+    assertSame(submission, routed.triggered().getFirst().step().orElseThrow().log());
+  }
+
+  @Test
+  void nothingIsDeducedWithoutTheEntityModels() {
+    UUID id = UUID.randomUUID();
+    EventLog submission = new EventLog(Submission, id, List.of(new Event<>(id, 1, Accepted, time)));
+    Step root = Replay.of(submission).roots().getFirst();
+    assertSame(submission, root.log());
+  }
+
   @Test
   void anEventOfAnotherTransactionIsARoot() {
     EventLog order = log(Order, UUID.randomUUID(), time.plusSeconds(1));

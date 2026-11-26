@@ -38,33 +38,43 @@ colours.
 ## Sequence diagrams
 
 `SequenceDiagramFormatter` draws the event log of an entity as a sequence diagram, with related logs, such as those of
-its [inbox](http-inbox.md) and [outbox](http-outbox.md) requests, e.g. read in a test with the [test API](testing.md):
+its [inbox](http-inbox.md) and [outbox](http-outbox.md) requests, e.g. read in a test with the [test API](testing.md),
+and the entity models of the state machine:
 
 ```java
 EventLog greeting = api.eventLog(Greeting, greetingId).block();
 EventLog request = api.eventLog(GreetingRequest, requestId).block();
-new SequenceDiagramFormatter(greeting, List.of(request)).formatToImage(new File("greeting.svg"));
+new SequenceDiagramFormatter(greeting, List.of(request), Inbox.entityModels()).formatToImage(new File("greeting.svg"));
 ```
 
 `format()` gives the PlantUML source of the diagram instead.
 
 An event doesn't record what caused it, so the logs are replayed through the transitions of their entity models, like
 the state machine does, to find the transition each event took. This is done by `Replay` in the core library, which
-doesn't depend on PlantUML. The transitions' triggers are the messages of the diagram:
+doesn't depend on PlantUML. A transition with choices stores the event of the choice it took, so the transition of an
+event is the path from the event triggered to the one stored, e.g. from `Request received` to `Request accepted` of an
+inbox request, and has the triggers and actions of the whole path.
 
-- Each entity whose log is drawn has a lifeline. The events of a transaction have its timestamp, so an event is drawn
-  as triggered by a trigger of its type on its entity model, or on a group of it such as `HttpInbox.Request`, in an
-  event of the same transaction, nested in that transition. The other events arrive from outside the diagram, as
-  nothing in the logs triggered them.
+The events of a transaction have its timestamp, which ties the logs together: an event is drawn as triggered by a
+trigger of the event starting its path, on its entity model or on a group of it such as `HttpInbox.Request`, in an
+event of the same transaction, nested in that transition. That is all the logs tell. What they can't tell is deduced
+from the entity models, without assumptions from elsewhere: an entity of a model which is not stored, such as the
+`RequestRouting` of an inbox, never has a log, and an event of the logs no trigger is found for is drawn as triggered
+by a transition of such a model, if that is the only transition of one triggering it. Its event has no number, as it
+is never stored. So an inbox request is accepted from the routing of its request, and its response goes back to the
+same lifeline. Models which are stored are not deduced from, as their logs can be given. The other events arrive from
+outside the diagram.
+
 - The other events a transition triggers are synchronous messages to the entity models they are triggered on, as
   they are stored in the same transaction. A conditional trigger, which is stored and fires later, is an asynchronous
-  message.
-- The actions of a transition leave the diagram, as they are run after the transaction is committed.
-- An event of a transition with choices has the triggers and actions of the choices that led to it, like the inbox
-  request below, whose dispatch triggers the greeting.
+  message. Events triggered on [id](data-model.md#idevent) and [index](data-model.md#indexevent) entities are left out,
+  as in the ER diagram.
+- The actions of a transition, such as forwarding an outbox request, leave the diagram, as they are run after the
+  transaction is committed. What they get back arrives from outside in a later transaction.
 - A rollback is followed by the triggers of the reverse transitions of the events it rolls back, in the colour of a
   reversal, and the events rolled back are struck through.
-- The lifelines are in the order they are first drawn, so the diagram reads from left to right.
+- The lifelines are in the order of the first message between two lifelines they take part in, so the diagram reads
+  from left to right.
 
 Events are named with the symbols and colours of their [severity](monitoring.md#severity), as in the state diagrams.
 
@@ -72,19 +82,26 @@ The logs don't hold the data the choices of a transition depend on, so where sev
 the replay can't tell which was taken. It then takes the first one that triggers no event on the entity's own model, as
 the next event may as well have been triggered by another entity, e.g. an application completing its inbox request.
 
-A greeting of the [hello world demo](hello-world.md) with its inbox request, in one transaction: the request is accepted and
-dispatched to a new greeting, which responds to the request:
+A greeting of the [hello world demo](hello-world.md) with its inbox request, in one transaction: the routing of the
+request triggers it on the inbox request, which dispatches it to a new greeting, which responds to the request:
 
 <object data="../images/com.github.thxmasj.backend.diagram.sequence.Greeting.svg" type="image/svg+xml"></object>
 
 [Open the Greeting sequence diagram in full size](images/com.github.thxmasj.backend.diagram.sequence.Greeting.svg)
 
-The log of an [`AtMostOnce` authorisation](http-outbox.md#atmostonce) alone, in three transactions: its response
-never came, and the payment rolls it back by a reversal:
+A payment of the [card payment template](cardpayments.md), from the logs of its inbox request, the payment, its
+settlement and its two outbox requests, in three transactions after the settlement was opened:
 
-<object data="../images/com.github.thxmasj.backend.diagram.sequence.Authorisation.svg" type="image/svg+xml"></object>
+1. The request is accepted, and dispatched to a new payment, which sends an authentication request.
+2. The authentication is accepted, and the payment sends an authorisation request to the acquirer and completes the
+   inbox request, whose response goes back to the routing.
+3. The acquirer approves the authorisation, and the payment credits the merchant in the settlement and notifies the
+   merchant of the approval.
 
-[Open the Authorisation sequence diagram in full size](images/com.github.thxmasj.backend.diagram.sequence.Authorisation.svg)
+<object data="../images/com.github.thxmasj.backend.diagram.sequence.Payment.svg" type="image/svg+xml"></object>
+
+[Open the Payment sequence diagram in full size](images/com.github.thxmasj.backend.diagram.sequence.Payment.svg)
 
 The logs of these examples are written out in `ExampleLogs` in `doc-diagrams`, by the names of their events and the
-transactions storing them.
+transactions storing them. The template leaves the inbox requests to the application, so the payment request is
+`PaymentRequest` in `DocExamples`, with outbox requests calling back to the payment as an application's would.

@@ -55,6 +55,8 @@ final class ExampleLogs {
                   .distinct()
                   .collect(joining(", "))
           )));
+      if (!transition.eventType().stored())
+        throw new IllegalArgumentException(model.name() + " never stores " + name + ", whose type isn't stored");
       events.add(event(entityId, events.size() + 1, transition.eventType(), entry.transaction()));
       if (transition.toState() != null)
         state = transition.toState();

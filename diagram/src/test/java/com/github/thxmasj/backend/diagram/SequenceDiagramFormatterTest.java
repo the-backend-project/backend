@@ -12,12 +12,14 @@ import com.github.thxmasj.backend.core.Action;
 import com.github.thxmasj.backend.core.BasicEventType;
 import com.github.thxmasj.backend.core.BasicEventType.Rollback;
 import com.github.thxmasj.backend.core.BuiltinEventTypes;
+import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EntityModel;
 import com.github.thxmasj.backend.core.EntityModelGroup;
 import com.github.thxmasj.backend.core.EntitySelector;
 import com.github.thxmasj.backend.core.Event;
 import com.github.thxmasj.backend.core.EventLog;
 import com.github.thxmasj.backend.core.EventType;
+import com.github.thxmasj.backend.core.IndexEntityModel;
 import com.github.thxmasj.backend.core.InputEvent;
 import com.github.thxmasj.backend.core.Severity;
 import com.github.thxmasj.backend.core.State;
@@ -50,6 +52,9 @@ class SequenceDiagramFormatterTest {
   static final EventType<Void, Void> Shipped = BasicEventType.of("Shipped", UUID.randomUUID());
   static final EventType<Void, Void> Received = BasicEventType.of("Received", UUID.randomUUID());
   static final EventType<Void, Void> Answered = BasicEventType.of("Answered", UUID.randomUUID());
+  static final EventType<Void, Void> Arrived = BasicEventType.of("Arrived", UUID.randomUUID());
+  static final EventType<Void, Void> Responded = BasicEventType.of("Responded", UUID.randomUUID());
+  static final EventType<UUID, UUID> Indexed = BasicEventType.of("Indexed", UUID.randomUUID(), DataType.uuid());
 
   static final EntityModel Stock = EntityModel.of("Stock", UUID.randomUUID(), Map::of);
   static final EntityModel Audit = EntityModel.of("Audit", UUID.randomUUID(), Map::of);
@@ -65,6 +70,17 @@ class SequenceDiagramFormatterTest {
   static final EntityModel Request = EntityModel.of("Request", UUID.randomUUID(), SequenceDiagramFormatterTest::requestTransitions);
 
   static final EntityModelGroup Requests = EntityModelGroup.of("Requests", UUID.randomUUID(), Request::equals);
+
+  /// Routes what arrives to a new request and gets its response, like the routing of an inbox, and isn't stored
+  static final EntityModel Router = EntityModel.notStored("Router", UUID.randomUUID(), () -> Map.of(
+      Begin, List.<TransitionModel<?, ?>>of(
+          onEvent(Arrived).to(States.Waiting).trigger(Received).on(Request).identifiedBy(newEntityId()).output()
+      ),
+      States.Waiting, List.<TransitionModel<?, ?>>of(onEvent(Responded).to(States.Answered).output()),
+      States.Answered, List.of()
+  ));
+
+  static final IndexEntityModel Index = IndexEntityModel.of("Index", UUID.randomUUID(), Indexed);
 
   private static Map<State, List<TransitionModel<?, ?>>> orderTransitions() {
     return Map.of(
@@ -98,7 +114,13 @@ class SequenceDiagramFormatterTest {
                 .trigger(Placed).on(Order).identifiedBy(newEntityId())
                 .output()
         ),
-        States.Waiting, List.<TransitionModel<?, ?>>of(onEvent(Answered).to(States.Answered).output()),
+        States.Waiting, List.<TransitionModel<?, ?>>of(
+            onEvent(Answered).to(States.Answered)
+                .assemble(c -> c.log().entityId())
+                .trigger(Indexed).with(id -> id).on(Index).identifiedBy(newEntityId())
+                .trigger(Responded).on(Router).identifiedBy(entityIdFromSession())
+                .output()
+        ),
         States.Answered, List.of()
     );
   }
@@ -217,11 +239,51 @@ class SequenceDiagramFormatterTest {
         P1 -> P3: Reserved
         P1 -> P2: 2. Answered
         activate P2
+        P2 -> P4: Responded
         deactivate P2
         deactivate P1
         deactivate P2
         """
     ).doesNotContain("[-> P1", "Requests");
+  }
+
+  /// Like the routing of an inbox, which isn't stored, so that an inbox request is accepted from and responds to the
+  /// same lifeline
+  @Test
+  void theStepOfAnEntityWhichIsNotStoredIsDeducedFromTheEntityModels() {
+    UUID requestId = UUID.randomUUID();
+    event(Placed);
+    var request = new EventLog(Request, requestId, List.of(
+        new Event<>(requestId, 1, Received, transaction),
+        new Event<>(requestId, 2, Answered, transaction)
+    ));
+    String diagram = new SequenceDiagramFormatter(log(), List.of(request), List.of(Router, Request, Order)).format();
+    assertThat(diagram).contains(
+        """
+        participant "Router" as P3
+        participant "Request" as P2
+        participant "Order" as P1
+        """,
+        """
+        [-> P3: <i>Arrived</i>
+        activate P3
+        P3 -> P2: 1. Received
+        """,
+        """
+        P2 -> P3: Responded
+        """
+    ).doesNotContain("[-> P2");
+  }
+
+  /// As in the ER diagram
+  @Test
+  void eventsTriggeredOnIdAndIndexEntitiesAreLeftOut() {
+    UUID requestId = UUID.randomUUID();
+    var request = new EventLog(Request, requestId, List.of(
+        new Event<>(requestId, 1, Received, transaction),
+        new Event<>(requestId, 2, Answered, transaction)
+    ));
+    assertThat(new SequenceDiagramFormatter(request).format()).doesNotContain("Indexed", "\"Index\"");
   }
 
   @Test
