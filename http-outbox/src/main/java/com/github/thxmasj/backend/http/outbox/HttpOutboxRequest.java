@@ -4,7 +4,6 @@ import static com.github.thxmasj.backend.core.EntitySelector.lastReferencing;
 import static com.github.thxmasj.backend.core.IndexEntityModel.referenceEventType;
 import static com.github.thxmasj.backend.core.internal.EventTypes.eventTypesFor;
 
-import com.github.thxmasj.backend.core.BasicEventType;
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EntityId;
 import com.github.thxmasj.backend.core.EntitySelector;
@@ -67,7 +66,7 @@ public sealed interface HttpOutboxRequest<RQ> extends com.github.thxmasj.backend
   /// The request accepted event type of any outbox request, agnostic to its input and output data types. Use it where
   /// only the identity of the event type matters, e.g. when stating the last event that satisfies a condition.
   static EventType<?, ?> requestAccepted() {
-    return BasicEventType.of("Request accepted", RequestAcceptedId, DataType.unknown(), DataType.unknown());
+    return EventType.of("Request accepted", RequestAcceptedId, DataType.unknown(), DataType.unknown());
   }
 
   /// Id of the rollback dispatched event type, shared by all outbox requests that can be rolled back so that a
@@ -77,7 +76,7 @@ public sealed interface HttpOutboxRequest<RQ> extends com.github.thxmasj.backend
   /// The rollback dispatched event type of any outbox request, agnostic to its input data type. Use it where only the
   /// identity of the event type matters, e.g. when stating the last event that satisfies a condition.
   static EventType<?, ?> rollbackDispatched() {
-    return BasicEventType.of("Rollback dispatched", RollbackDispatchedId, DataType.unknown(), DataType.none());
+    return EventType.of("Rollback dispatched", RollbackDispatchedId, DataType.unknown(), DataType.none());
   }
 
   EventType<UUID, UUID> ProcessReferenced = referenceEventType("Process referenced", UUID.fromString("d5b264d9-bf81-4c1d-9d9b-93dd556d0f66"));

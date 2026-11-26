@@ -381,7 +381,7 @@ public class PlantUMLFormatter {
   // of their severity. The symbols have a text presentation by default, so they are drawn in that colour rather than as
   // emoji. Events of types which are not stored are named in italics.
   private static String eventName(EventType<?, ?> eventType, Severity severity) {
-    String name = eventType.stored() ? eventType.name() : "<i>" + eventType.name() + "</i>";
+    String name = eventType instanceof EventType.NotStored ? "<i>" + eventType.name() + "</i>" : eventType.name();
     String symbol = switch (severity) {
       case Info -> null;
       case Warning -> "\u26a0";

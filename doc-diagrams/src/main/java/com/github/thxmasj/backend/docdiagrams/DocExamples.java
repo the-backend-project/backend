@@ -6,7 +6,6 @@ import static com.github.thxmasj.backend.http.inbox.HttpInboxRequest.newEntity;
 import static com.github.thxmasj.backend.http.inbox.HttpInboxRequest.parseMessageId;
 import static com.github.thxmasj.backend.http.inbox.HttpInboxRequest.when;
 
-import com.github.thxmasj.backend.core.BasicEventType;
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EntityModel;
 import com.github.thxmasj.backend.core.EventType;
@@ -49,7 +48,7 @@ final class DocExamples {
 
   static final EntityModel Orders = EntityModel.of("Orders", UUID.fromString("6f0a6c55-2a3e-4a0b-9d3c-1c4f6d2b7e10"), Map::of);
 
-  static final EventType<Order, Void> OrderPlaced = BasicEventType.of(
+  static final EventType<Order, Void> OrderPlaced = EventType.of(
       "Order placed",
       UUID.fromString("0d9b3f4e-8c1a-4e57-b2f6-3a7d5c9e1b24"),
       DataType.json(Order.class),
@@ -83,14 +82,14 @@ final class DocExamples {
 
   static final EntityModel PaymentToken = EntityModel.of("PaymentToken", UUID.fromString("9a2e5c71-3b8d-4f04-a6e9-2d7c1b5f8e33"), Map::of);
 
-  static final EventType<EnrolmentResult, Void> Activate = BasicEventType.of(
+  static final EventType<EnrolmentResult, Void> Activate = EventType.of(
       "Activate",
       UUID.fromString("4c8e1a9f-6b2d-4e73-9f05-8a3c7d1e6b49"),
       DataType.json(EnrolmentResult.class),
       DataType.none()
   );
 
-  static final EventType<Void, Void> Reject = BasicEventType.of("Reject", UUID.fromString("e7b3d2a6-9c4f-4a18-b5e0-6d1f8c2a7e95"));
+  static final EventType<Void, Void> Reject = EventType.of("Reject", UUID.fromString("e7b3d2a6-9c4f-4a18-b5e0-6d1f8c2a7e95"));
 
   static final HttpInboxRequest<EnrolmentResult> EnrolmentResultReceived = HttpInboxRequest
       .matching(m -> m.requestLine().matches("POST /enrolments"))
@@ -134,19 +133,19 @@ final class DocExamples {
 
   static final EntityModel Payment = EntityModel.of("Payment", UUID.fromString("c3a7e1f9-4b2d-4d68-a0e5-9b1f7c3d6a28"), Map::of);
 
-  static final EventType<Void, Void> AuthorisationUnknown = BasicEventType.of(
+  static final EventType<Void, Void> AuthorisationUnknown = EventType.of(
       "Authorisation unknown",
       UUID.fromString("1e6d9b3a-7f2c-4a85-b4e1-8c5a2f7d3b96")
   );
 
-  static final EventType<AcquirerResponse, Void> AcquirerResponded = BasicEventType.of(
+  static final EventType<AcquirerResponse, Void> AcquirerResponded = EventType.of(
       "Acquirer responded",
       UUID.fromString("a5f2c8e1-3d9b-4e47-8a6c-2b7e1d4f9c53"),
       DataType.json(AcquirerResponse.class),
       DataType.none()
   );
 
-  static final EventType<AcquirerResponse, Void> AcquirerDeclined = BasicEventType.of(
+  static final EventType<AcquirerResponse, Void> AcquirerDeclined = EventType.of(
       "Acquirer declined",
       UUID.fromString("7d3b1f8a-5e2c-4c90-9b6d-4a1e8f2c7d65"),
       DataType.json(AcquirerResponse.class),

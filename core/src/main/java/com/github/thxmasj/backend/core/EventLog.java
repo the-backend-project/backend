@@ -137,8 +137,8 @@ public record EventLog(
     int skipTo = Integer.MAX_VALUE;
     for (Event<?> event : events.reversed()) {
       if (skipTo >= event.eventNumber()) {
-        if (event.type() instanceof BasicEventType.Rollback rollbackType) {
-          int toNumber = Event.unmarshal(rollbackType, event.data()).toNumber();
+        if (event.type() instanceof EventType.Rollback rollbackType) {
+          int toNumber = Event.unmarshal(rollbackType, event.storedData()).toNumber();
           skipTo = toNumber >= 0 ? toNumber : event.eventNumber() - 1 + toNumber ;
         } else {
           effectiveEventsReversed.add(event);
@@ -172,7 +172,7 @@ public record EventLog(
   @SuppressWarnings("unchecked")
   private static <T> T copy(Event<?> event) {
     Event<T> typed = (Event<T>) event;
-    byte[] data = typed.isMasked() ? Event.marshal(typed.type(), typed.getUnmarshalledData()) : typed.data();
+    byte[] data = typed.isMasked() ? Event.marshal(typed.type(), typed.data()) : typed.storedData();
     return Event.unmarshal(typed.type(), data);
   }
 
@@ -180,19 +180,19 @@ public record EventLog(
   /// transaction gives its whole data, which only the transaction has.
   @SuppressWarnings("unchecked")
   private static <T> T cached(Event<?> event) {
-    return ((Event<T>) event).getUnmarshalledData();
+    return ((Event<T>) event).data();
   }
 
   /// Whether the entity is one of the session only, whose events are not stored: of a model which is not stored, or
   /// created by an event which is not stored
   boolean isSessionOnly() {
-    return !entityModel.stored() || (!events.isEmpty() && !events.getFirst().type().stored());
+    return entityModel instanceof EntityModel.NotStored || (!events.isEmpty() && events.getFirst().type() instanceof EventType.NotStored);
   }
 
   /// Whether the entity would be one of the session only with the event as its next, see [#isSessionOnly()]
   boolean isSessionOnlyWith(Event<?> next) {
     Event<?> first = events.isEmpty() ? next : events.getFirst();
-    return !entityModel.stored() || !first.type().stored();
+    return entityModel instanceof EntityModel.NotStored || first.type() instanceof EventType.NotStored;
   }
 
 

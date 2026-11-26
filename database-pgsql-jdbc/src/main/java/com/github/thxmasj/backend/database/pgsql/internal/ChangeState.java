@@ -50,7 +50,7 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
   /// The duplicate key of an id event, as reported by PostgreSQL, e.g. "f721bf54-891b-41a0-aa63-5d3cbde52437, \x7b22..."
   @Override
   protected String duplicateKey(Event<?> idEvent) {
-    return idEvent.type().id() + ", \\x" + HexFormat.of().formatHex(idEvent.getMarshalledData());
+    return idEvent.type().id() + ", \\x" + HexFormat.of().formatHex(idEvent.storedData());
   }
 
   private String insertSql(

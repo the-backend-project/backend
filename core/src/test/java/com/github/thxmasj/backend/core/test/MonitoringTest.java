@@ -9,7 +9,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.github.thxmasj.backend.core.Action;
-import com.github.thxmasj.backend.core.BasicEventType;
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EntityModel;
 import com.github.thxmasj.backend.core.Event;
@@ -42,18 +41,18 @@ public class MonitoringTest {
   static EntityModel Inspection = EntityModel.of("Inspection", UUID.fromString("6c8e0a2b-4d6f-4e8a-b0c2-d4e6f8a0b2c5"), MonitoringTest::inspectionTransitions);
   static EntityModel Courier = EntityModel.of("Courier", UUID.fromString("0b2d4f6a-8c1e-4d3f-a5b7-c9e1a3b5d7f8"), MonitoringTest::courierTransitions);
 
-  static EventType<Void, Void> ParcelSent = BasicEventType.of("Parcel sent", UUID.fromString("c6e8a0b2-4d6f-4c7d-9f1b-a3c5e7d9f1b3"));
-  static EventType<Void, Void> DeliveryTimedOut = BasicEventType.of("Delivery timed out", UUID.fromString("7b9d1f3a-5e7a-4d8e-a0c2-b4d6f8e0a2c4"));
-  static EventType<Void, Void> ParcelLost = BasicEventType.of("Parcel lost", UUID.fromString("d8f0b2c4-6f8b-4e9f-b1d3-c5e7a9f1b3d5"));
-  static EventType<Void, Void> LossConfirmed = BasicEventType.of("Loss confirmed", UUID.fromString("3e5a7c9d-0b2d-4f4a-96c8-e0a2c4b6d8f9"));
-  static EventType<UUID, UUID> ComplaintFiled = BasicEventType.of("Complaint filed", UUID.fromString("8c0e2a4b-7a9c-4f0a-82e4-d6f8b0a2c4e6"), DataType.uuid());
-  static EventType<String, String> ParcelReceived = BasicEventType.of("Parcel received", UUID.fromString("e0a2c4d6-8b0d-4a1b-93f5-e7a9c1b3d5f7"), DataType.string());
-  static EventType<String, String> ParcelReturned = BasicEventType.of("Parcel returned", UUID.fromString("9d1f3b5c-9c1e-4b2c-a4a6-f8b0d2c4e6a8"), DataType.string());
-  static EventType<String, String> ParcelDelivered = BasicEventType.of("Parcel delivered", UUID.fromString("f2b4d6e8-0d2f-4c3d-b5b7-a9c1e3d5f7b9"), DataType.string());
-  static EventType<Void, Void> ParcelInspected = BasicEventType.of("Parcel inspected", UUID.fromString("2a4c6e8f-0b2d-4f4b-a6c8-e0a2c4e6a8b1"));
-  static EventType<UUID, UUID> InspectionStarted = BasicEventType.of("Inspection started", UUID.fromString("b5d7f9a1-3c5e-4a7c-9e1b-d3f5a7c9e1b2"), DataType.uuid());
-  static EventType<Void, Void> CourierCalled = BasicEventType.of("Courier called", UUID.fromString("4f6b8d0e-1c3e-4a5c-b7d9-f1a3c5e7b9d0"));
-  static EventType<Void, Void> CourierArrived = BasicEventType.of("Courier arrived", UUID.fromString("a1c3e5f7-2d4f-4b6d-88ea-0b2d4f6a8c1e"));
+  static EventType<Void, Void> ParcelSent = EventType.of("Parcel sent", UUID.fromString("c6e8a0b2-4d6f-4c7d-9f1b-a3c5e7d9f1b3"));
+  static EventType<Void, Void> DeliveryTimedOut = EventType.of("Delivery timed out", UUID.fromString("7b9d1f3a-5e7a-4d8e-a0c2-b4d6f8e0a2c4"));
+  static EventType<Void, Void> ParcelLost = EventType.of("Parcel lost", UUID.fromString("d8f0b2c4-6f8b-4e9f-b1d3-c5e7a9f1b3d5"));
+  static EventType<Void, Void> LossConfirmed = EventType.of("Loss confirmed", UUID.fromString("3e5a7c9d-0b2d-4f4a-96c8-e0a2c4b6d8f9"));
+  static EventType<UUID, UUID> ComplaintFiled = EventType.of("Complaint filed", UUID.fromString("8c0e2a4b-7a9c-4f0a-82e4-d6f8b0a2c4e6"), DataType.uuid());
+  static EventType<String, String> ParcelReceived = EventType.of("Parcel received", UUID.fromString("e0a2c4d6-8b0d-4a1b-93f5-e7a9c1b3d5f7"), DataType.string());
+  static EventType<String, String> ParcelReturned = EventType.of("Parcel returned", UUID.fromString("9d1f3b5c-9c1e-4b2c-a4a6-f8b0d2c4e6a8"), DataType.string());
+  static EventType<String, String> ParcelDelivered = EventType.of("Parcel delivered", UUID.fromString("f2b4d6e8-0d2f-4c3d-b5b7-a9c1e3d5f7b9"), DataType.string());
+  static EventType<Void, Void> ParcelInspected = EventType.of("Parcel inspected", UUID.fromString("2a4c6e8f-0b2d-4f4b-a6c8-e0a2c4e6a8b1"));
+  static EventType<UUID, UUID> InspectionStarted = EventType.of("Inspection started", UUID.fromString("b5d7f9a1-3c5e-4a7c-9e1b-d3f5a7c9e1b2"), DataType.uuid());
+  static EventType<Void, Void> CourierCalled = EventType.of("Courier called", UUID.fromString("4f6b8d0e-1c3e-4a5c-b7d9-f1a3c5e7b9d0"));
+  static EventType<Void, Void> CourierArrived = EventType.of("Courier arrived", UUID.fromString("a1c3e5f7-2d4f-4b6d-88ea-0b2d4f6a8c1e"));
 
   /// The courier arrives a while after it is called, when the one who called it has stopped listening
   static Action<String> arrival = new Action<>() {

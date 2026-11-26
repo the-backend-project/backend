@@ -34,8 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.github.thxmasj.backend.core.BasicEventType.Rollback.Data;
-import com.github.thxmasj.backend.core.BasicEventType;
+import com.github.thxmasj.backend.core.EventType.Rollback.Data;
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.DelaySpecification;
 import com.github.thxmasj.backend.core.EntityModel;
@@ -205,51 +204,51 @@ public class HttpInboxTest {
   public record Zero(String value) {}
 
   static EventType<Zero, Zero>
-      ZeroProcessingRequested = BasicEventType.of(
+      ZeroProcessingRequested = EventType.of(
       "Zero processing requested",
       UUID.fromString("aa70041a-a68f-4bcd-831f-5029eb329a05"),
       DataType.json(Zero.class)
   );
   static EventType<Void, Void>
-      AlwaysRejectedEventSubmitted = BasicEventType.of(
+      AlwaysRejectedEventSubmitted = EventType.of(
       "Always rejected event submitted",
       UUID.fromString("bd98a725-ac60-4db4-b7db-ce08a295ffca")
   ),
-      InternalProcessingRequested = BasicEventType.of(
+      InternalProcessingRequested = EventType.of(
           "Internal processing requested",
           UUID.fromString("5909336e-cc75-4c58-902f-fb68f08b0caa")
       ),
-      ComplexInternalProcessingRequested = BasicEventType.of(
+      ComplexInternalProcessingRequested = EventType.of(
           "Complex internal processing requested",
           UUID.fromString("16c1792d-9fb7-4f91-b55b-b59e2b00bad8")
       ),
-      ComplexInternalProcessingCompleted = BasicEventType.of(
+      ComplexInternalProcessingCompleted = EventType.of(
           "Complex internal processing completed",
           UUID.fromString("88c87c85-7778-4171-bc75-702f9e60b00e")
       ),
-      SubsystemUnavailableProcessingRequested = BasicEventType.of(
+      SubsystemUnavailableProcessingRequested = EventType.of(
           "Subsystem unavailable processing requested",
           UUID.fromString("af7756d1-0566-42d8-907b-70443bc7d879")
       );
-  static EventType<Void, Void> ExternalProcessingCompleted = BasicEventType.of(
+  static EventType<Void, Void> ExternalProcessingCompleted = EventType.of(
       "External processing completed",
       UUID.fromString("464fca06-f872-4e38-a167-5550f5247310"),
       DataType.none()
   );
-  static EventType<BasicEventType.Rollback.Data, BasicEventType.Rollback.Data>
-      ProcessingCancelled = new BasicEventType.Cancel("Processing cancelled", UUID.fromString("d94c29c8-f113-4dee-921f-1a8e58f916f4"));
+  static EventType<EventType.Rollback.Data, EventType.Rollback.Data>
+      ProcessingCancelled = EventType.cancel("Processing cancelled", UUID.fromString("d94c29c8-f113-4dee-921f-1a8e58f916f4"));
   static EventType<Void, Void>
-      ExternalProcessingRequested = BasicEventType.of(
+      ExternalProcessingRequested = EventType.of(
       "External processing requested",
       UUID.fromString("12a97e70-58cc-46a8-aed9-f867cfc7375f")
   ),
-      LongExternalProcessingRequested = BasicEventType.of(
+      LongExternalProcessingRequested = EventType.of(
           "Long external processing requested",
           UUID.fromString("6ebcbbec-5bbc-4c05-96fd-41ad0bbc097a")
       );
   static EventType<Void, Void>
-      LampSwitchedOn = BasicEventType.of("Lamp switched on", UUID.fromString("5e9a8a9d-6a21-41cf-82dc-857fe1e4c4e0")),
-      LampSwitchedOff = BasicEventType.of("Lamp switched off", UUID.fromString("8e1483c8-b649-43b8-b352-5094a94c0dad"));
+      LampSwitchedOn = EventType.of("Lamp switched on", UUID.fromString("5e9a8a9d-6a21-41cf-82dc-857fe1e4c4e0")),
+      LampSwitchedOff = EventType.of("Lamp switched off", UUID.fromString("8e1483c8-b649-43b8-b352-5094a94c0dad"));
 
   static AccessTokenVerifier verifier = verifier();
 
@@ -472,7 +471,7 @@ public class HttpInboxTest {
         URI.create("/internal/" + messageId),
         new ObjectMapper().writeValueAsBytes(new InternalProcess("Hello", 1))
     );
-    HttpResponse<byte[]> response = HttpMessageParser.parseResponse(responseEvent.data());
+    HttpResponse<byte[]> response = HttpMessageParser.parseResponse(responseEvent.storedData());
     assertEquals(201, response.statusCode());
     assertTrue(ProblemDetail.parse(response.body()).detail().startsWith("Light is on!"));
   }
@@ -531,7 +530,7 @@ public class HttpInboxTest {
   public void whenRequestIsStoredThenCredentialsAndMaskedParametersAreMasked() throws IOException {
     String messageId = UUID.randomUUID().toString();
     Event<?> response = onRequest(inbox.trigger(), maskedRequest(messageId, "c0de", "t0ken"));
-    assertEquals(201, HttpResponse.raw(response.getUnmarshalledData()).statusCode());
+    assertEquals(201, HttpResponse.raw(response.data()).statusCode());
 
     String stored = storedData(MaskedRequest, HttpInbox.RequestAccepted).stream().filter(d -> d.contains(messageId)).findFirst().orElseThrow();
     assertThat(stored)
@@ -544,7 +543,7 @@ public class HttpInboxTest {
   @Test
   public void whenRequestMasksTheBodyOfItsResponseThenItIsStoredMasked() {
     Event<?> response = onRequest(PUT, URI.create("/body-masked/" + UUID.randomUUID()), asJson(new InternalProcess("Hello", 1)));
-    assertTrue(new String(HttpResponse.raw(response.getUnmarshalledData()).body()).contains("Light is on!"));
+    assertTrue(new String(HttpResponse.raw(response.data()).body()).contains("Light is on!"));
     assertThat(storedData(BodyMaskedRequest, HttpInbox.RequestCompleted)).isNotEmpty()
         .allSatisfy(data -> assertThat(data).doesNotContain("Light is on!").contains("***"));
   }
@@ -573,7 +572,7 @@ public class HttpInboxTest {
     var machine = Init.stateMachine(UUID.randomUUID().toString(), cookieInbox.entityModels());
     var message = new HttpRequest<byte[]>(PUT, URI.create("/bell/" + UUID.randomUUID()), Headers.of(), null);
     Function<HttpRequest<byte[]>, HttpResponse<byte[]>> send = m -> HttpResponse.raw(machine.onEvent(cookieInbox.trigger(), m)
-        .skip(1).next().block(Duration.ofSeconds(5)).getUnmarshalledData());
+        .skip(1).next().block(Duration.ofSeconds(5)).data());
 
     HttpResponse<byte[]> first = send.apply(message);
     assertEquals(200, first.statusCode());
@@ -586,8 +585,8 @@ public class HttpInboxTest {
   @Test
   public void whenRetryDiffersOnlyInItsCredentialsThenItGetsTheFirstResponse() throws IOException {
     String messageId = UUID.randomUUID().toString();
-    HttpResponse<byte[]> first = HttpResponse.raw(onRequest(inbox.trigger(), internalRequest(messageId, "t0ken")).getUnmarshalledData());
-    HttpResponse<byte[]> retry = HttpResponse.raw(onRequest(inbox.trigger(), internalRequest(messageId, "refreshed")).getUnmarshalledData());
+    HttpResponse<byte[]> first = HttpResponse.raw(onRequest(inbox.trigger(), internalRequest(messageId, "t0ken")).data());
+    HttpResponse<byte[]> retry = HttpResponse.raw(onRequest(inbox.trigger(), internalRequest(messageId, "refreshed")).data());
     assertEquals(201, retry.statusCode());
     assertArrayEquals(first.body(), retry.body());
   }
@@ -615,7 +614,7 @@ public class HttpInboxTest {
   @Test
   public void whenRequestIsNotStoredThenNothingOfItIs() {
     Event<?> response = onRequest(PUT, URI.create("/not-stored/" + UUID.randomUUID()), asJson(new InternalProcess("Hello", 1)));
-    HttpResponse<byte[]> message = HttpResponse.raw(response.getUnmarshalledData());
+    HttpResponse<byte[]> message = HttpResponse.raw(response.data());
     assertEquals(201, message.statusCode());
     assertTrue(new String(message.body()).contains("Light is on!"));
     assertThat(storedData(NotStoredRequest, HttpInbox.RequestCompleted)).isEmpty();
@@ -625,7 +624,7 @@ public class HttpInboxTest {
   @Test
   public void whenRequestIsNotStoredThenItIsAnsweredInALaterTransactionOfTheSessionToo() {
     Event<?> response = onRequest(PUT, URI.create("/not-stored-external/" + UUID.randomUUID()), "Hello!".getBytes());
-    HttpResponse<byte[]> message = HttpResponse.raw(response.getUnmarshalledData());
+    HttpResponse<byte[]> message = HttpResponse.raw(response.data());
     assertEquals(201, message.statusCode());
     assertTrue(new String(message.body()).contains("Light is externally switched on!"));
     assertThat(storedData(NotStoredExternalRequest, HttpInbox.RequestCompleted)).isEmpty();
@@ -694,7 +693,7 @@ public class HttpInboxTest {
             .skip(1)
             .next()
             .block(Duration.ofSeconds(5))
-            .getUnmarshalledData()
+            .data()
     );
     assertEquals("correlation-456", response.headerValue("X-Correlation-Id"));
   }
@@ -706,7 +705,7 @@ public class HttpInboxTest {
             .skip(1)
             .next()
             .block(Duration.ofSeconds(5))
-            .getUnmarshalledData()
+            .data()
     );
     assertThat(response.headerValue("X-Correlation-Id")).matches("SYS-\\d{19}");
   }
@@ -868,14 +867,14 @@ public class HttpInboxTest {
         URI.create("/internal/" + messageId),
         new ObjectMapper().writeValueAsBytes(new InternalProcess("Hello", 1))
     );
-    HttpResponse<byte[]> response = HttpMessageParser.parseResponse(responseEvent.data());
+    HttpResponse<byte[]> response = HttpMessageParser.parseResponse(responseEvent.storedData());
     assertEquals(201, response.statusCode());
     ProblemDetail problemDetail = ProblemDetail.parse(response.body());
     assertTrue(problemDetail.detail().startsWith("Light is on!"));
     UUID entityId = UUID.fromString(problemDetail.entityId());
 
     Event<?> zeroResponseEvent = onRequest(PUT, URI.create("/zero/" + entityId), null);
-    HttpResponse<byte[]> zeroResponse = HttpMessageParser.parseResponse(zeroResponseEvent.data());
+    HttpResponse<byte[]> zeroResponse = HttpMessageParser.parseResponse(zeroResponseEvent.storedData());
     assertEquals(201, zeroResponse.statusCode());
     assertEquals("Complete", ProblemDetail.parse(zeroResponse.body()).detail());
   }
@@ -886,11 +885,11 @@ public class HttpInboxTest {
         PUT,
         URI.create("/internal/" + UUID.randomUUID()),
         new ObjectMapper().writeValueAsBytes(new InternalProcess("Hello", 1))
-    ).data());
+    ).storedData());
     UUID entityId = UUID.fromString(ProblemDetail.parse(response.body()).entityId());
 
-    HttpResponse<byte[]> zero1 = HttpMessageParser.parseResponse(onRequest(PUT, URI.create("/zero/" + entityId), null).data());
-    HttpResponse<byte[]> zero2 = HttpMessageParser.parseResponse(onRequest(PUT, URI.create("/zero/" + entityId), null).data());
+    HttpResponse<byte[]> zero1 = HttpMessageParser.parseResponse(onRequest(PUT, URI.create("/zero/" + entityId), null).storedData());
+    HttpResponse<byte[]> zero2 = HttpMessageParser.parseResponse(onRequest(PUT, URI.create("/zero/" + entityId), null).storedData());
     assertEquals(201, zero1.statusCode());
     assertEquals(201, zero2.statusCode());
     assertEquals("Complete", ProblemDetail.parse(zero2.body()).detail());
@@ -906,13 +905,13 @@ public class HttpInboxTest {
         URI.create("/internal/" + messageId),
         new ObjectMapper().writeValueAsBytes(new InternalProcess("Hello", 1))
     );
-    HttpResponse<byte[]> response = HttpMessageParser.parseResponse(responseEvent.data());
+    HttpResponse<byte[]> response = HttpMessageParser.parseResponse(responseEvent.storedData());
     assertEquals(201, response.statusCode());
     ProblemDetail problemDetail = ProblemDetail.parse(response.body());
     assertTrue(problemDetail.detail().startsWith("Light is on!"));
     UUID entityId = UUID.fromString(problemDetail.entityId());
     Event<?> cancelResponseEvent = onRequest(DELETE, URI.create("/internal/" + entityId), null);
-    HttpResponse<byte[]> cancelResponse = HttpMessageParser.parseResponse(cancelResponseEvent.data());
+    HttpResponse<byte[]> cancelResponse = HttpMessageParser.parseResponse(cancelResponseEvent.storedData());
     assertEquals(201, cancelResponse.statusCode());
   }
 
@@ -920,7 +919,7 @@ public class HttpInboxTest {
   public void whenComplexInternalProcessRequestThenComplexInternalProcessResponse() throws IOException {
     String messageId = UUID.randomUUID().toString();
     Event<?> responseEvent = onRequest(PUT, URI.create("/complexinternal/" + messageId), "Hello!".getBytes());
-    HttpResponse<byte[]> response = HttpMessageParser.parseResponse(responseEvent.data());
+    HttpResponse<byte[]> response = HttpMessageParser.parseResponse(responseEvent.storedData());
     assertEquals(201, response.statusCode());
     assertTrue(ProblemDetail.parse(response.body()).detail().startsWith("Phew! Light is switched on!"));
   }
@@ -929,7 +928,7 @@ public class HttpInboxTest {
   public void whenRequestIsRejectedDownstreamThenUnprocessableEntityResponse() throws IOException {
     String messageId = UUID.randomUUID().toString();
     Event<?> responseEvent = onRequest(PUT, URI.create("/rejected/" + messageId), "Hello!".getBytes());
-    HttpResponse<byte[]> response = HttpMessageParser.parseResponse(responseEvent.data());
+    HttpResponse<byte[]> response = HttpMessageParser.parseResponse(responseEvent.storedData());
     assertEquals(422, response.statusCode());
     ProblemDetail pd = ProblemDetail.parse(response.body());
     assertThat(pd.detail()).matches("\\[Always rejected event submitted] on \\[Lamp]/.{36} rejected for state \\[Begin].*");
@@ -940,7 +939,7 @@ public class HttpInboxTest {
   public void whenExternalProcessRequestThenExternalProcessResponse() throws IOException {
     String messageId = UUID.randomUUID().toString();
     Event<?> responseEvent = onRequest(PUT, URI.create("/external/" + messageId), "Hello!".getBytes());
-    HttpResponse<byte[]> response = HttpMessageParser.parseResponse(responseEvent.data());
+    HttpResponse<byte[]> response = HttpMessageParser.parseResponse(responseEvent.storedData());
     assertEquals(201, response.statusCode());
     assertTrue(ProblemDetail.parse(response.body()).detail().startsWith("Light is externally switched on!"));
   }
@@ -949,7 +948,7 @@ public class HttpInboxTest {
   public void whenSubsystemUnavailableThenInternalServerError() throws IOException {
     String messageId = UUID.randomUUID().toString();
     Event<?> responseEvent = onRequest(PUT, URI.create("/unavailable/" + messageId), "Hello!".getBytes());
-    HttpResponse<byte[]> response = HttpMessageParser.parseResponse(responseEvent.data());
+    HttpResponse<byte[]> response = HttpMessageParser.parseResponse(responseEvent.storedData());
     assertEquals(500, response.statusCode());
     assertEquals("Subsystem unavailable", ProblemDetail.parse(response.body()).detail());
   }
@@ -967,7 +966,7 @@ public class HttpInboxTest {
   @Test
   public void whenNoBearerTokenThenUnauthorizedWithChallenge() throws IOException {
     Event<?> responseEvent = onRequest(PUT, URI.create("/protected/" + UUID.randomUUID()), "Hello!".getBytes());
-    HttpResponse<byte[]> response = HttpMessageParser.parseResponse(responseEvent.data());
+    HttpResponse<byte[]> response = HttpMessageParser.parseResponse(responseEvent.storedData());
     assertEquals(401, response.statusCode());
     assertEquals("Bearer", response.headerValue("WWW-Authenticate"));
     assertEquals("Authorization header missing", ProblemDetail.parse(response.body()).detail());
@@ -981,7 +980,7 @@ public class HttpInboxTest {
         Headers.of("Authorization", "Bearer not-a-token"),
         "Hello!".getBytes()
     ));
-    HttpResponse<byte[]> response = HttpMessageParser.parseResponse(responseEvent.data());
+    HttpResponse<byte[]> response = HttpMessageParser.parseResponse(responseEvent.storedData());
     assertEquals(401, response.statusCode());
     assertEquals(
         "Bearer error=\"invalid_token\", error_description=\"Bearer token is invalid or expired\"",
@@ -993,7 +992,7 @@ public class HttpInboxTest {
   public void whenUnknownIdThenBadRequest() throws IOException {
     String messageId = UUID.randomUUID().toString();
     Event<?> responseEvent = onRequest(PUT, URI.create("/handledunknown/" + messageId), "Hello!".getBytes());
-    HttpResponse<byte[]> response = HttpMessageParser.parseResponse(responseEvent.data());
+    HttpResponse<byte[]> response = HttpMessageParser.parseResponse(responseEvent.storedData());
     assertEquals(400, response.statusCode());
     assertEquals("No such entity", ProblemDetail.parse(response.body()).detail());
   }
@@ -1003,7 +1002,7 @@ public class HttpInboxTest {
   public void whenLongExternalProcessRequestThenRollback() throws IOException {
     String messageId = UUID.randomUUID().toString();
     Event<?> responseEvent = onRequest(PUT, URI.create("/long-external/" + messageId), "Hello!".getBytes());
-    HttpResponse<byte[]> response = HttpMessageParser.parseResponse(responseEvent.data());
+    HttpResponse<byte[]> response = HttpMessageParser.parseResponse(responseEvent.storedData());
     assertEquals(201, response.statusCode());
     assertTrue(ProblemDetail.parse(response.body()).detail().startsWith("Light is externally switched on!"));
   }
@@ -1012,7 +1011,7 @@ public class HttpInboxTest {
   @Disabled("TODO")
   public void whenOneWayRequestThenTimeout() throws IOException {
     Event<?> responseEvent = onRequest(PUT, URI.create("/oneway/xxx"), "Hello!".getBytes());
-    HttpResponse<byte[]> response = HttpMessageParser.parseResponse(responseEvent.data());
+    HttpResponse<byte[]> response = HttpMessageParser.parseResponse(responseEvent.storedData());
     assertEquals(201, response.statusCode());
     assertTrue(ProblemDetail.parse(response.body()).detail().startsWith("Light is on!"));
   }
@@ -1021,10 +1020,10 @@ public class HttpInboxTest {
   public void whenDuplicateRequestThenRespondWithSameResponse() throws IOException {
     String messageId = UUID.randomUUID().toString();
     InternalProcess body = new InternalProcess("Static", 0);
-    HttpResponse<byte[]> response1 = HttpMessageParser.parseResponse(onInternalRequest(messageId, body).data());
+    HttpResponse<byte[]> response1 = HttpMessageParser.parseResponse(onInternalRequest(messageId, body).storedData());
     assertEquals(201, response1.statusCode());
     assertTrue(ProblemDetail.parse(response1.body()).detail().startsWith("Light is on!"));
-    HttpResponse<byte[]> response2 = HttpMessageParser.parseResponse(onInternalRequest(messageId, body).data());
+    HttpResponse<byte[]> response2 = HttpMessageParser.parseResponse(onInternalRequest(messageId, body).storedData());
     assertEquals(201, response2.statusCode());
     assertArrayEquals(response1.body(), response2.body());
   }
@@ -1035,12 +1034,12 @@ public class HttpInboxTest {
     HttpResponse<byte[]> response1 = HttpMessageParser.parseResponse(onInternalRequest(
         messageId,
         new InternalProcess("A", 1)
-    ).data());
+    ).storedData());
     assertTrue(ProblemDetail.parse(response1.body()).detail().startsWith("Light is on!"));
     HttpResponse<byte[]> response2 = HttpMessageParser.parseResponse(onInternalRequest(
         messageId,
         new InternalProcess("B", 2)
-    ).data());
+    ).storedData());
     assertEquals(400, response2.statusCode());
     assertEquals("Conflict", ProblemDetail.parse(response2.body()).detail());
   }
@@ -1048,23 +1047,23 @@ public class HttpInboxTest {
   @Test
   public void whenRollbackWithMessageIdInContentThenRolledBack() throws IOException {
     String messageId = UUID.randomUUID().toString();
-    HttpResponse<byte[]> request = HttpMessageParser.parseResponse(onRequest(PUT, URI.create("/reversible/" + messageId), asJson(new InternalProcess("Hello!", 1))).data());
+    HttpResponse<byte[]> request = HttpMessageParser.parseResponse(onRequest(PUT, URI.create("/reversible/" + messageId), asJson(new InternalProcess("Hello!", 1))).storedData());
     assertEquals(201, request.statusCode());
-    HttpResponse<byte[]> rollback = HttpMessageParser.parseResponse(onRequest(POST, URI.create("/reversals"), asJson(new Reversal(messageId))).data());
+    HttpResponse<byte[]> rollback = HttpMessageParser.parseResponse(onRequest(POST, URI.create("/reversals"), asJson(new Reversal(messageId))).storedData());
     assertEquals(201, rollback.statusCode());
     assertEquals("Rolled back", ProblemDetail.parse(rollback.body()).detail());
   }
 
   @Test
   public void whenRollbackWithInvalidContentThenBadRequest() throws IOException {
-    HttpResponse<byte[]> rollback = HttpMessageParser.parseResponse(onRequest(POST, URI.create("/reversals"), "not json".getBytes()).data());
+    HttpResponse<byte[]> rollback = HttpMessageParser.parseResponse(onRequest(POST, URI.create("/reversals"), "not json".getBytes()).storedData());
     assertEquals(400, rollback.statusCode());
     assertTrue(ProblemDetail.parse(rollback.body()).detail().startsWith("Invalid request body"));
   }
 
   @Test
   public void whenRollbackWithoutMessageIdInContentThenBadRequest() throws IOException {
-    HttpResponse<byte[]> rollback = HttpMessageParser.parseResponse(onRequest(POST, URI.create("/reversals"), asJson(new Reversal(null))).data());
+    HttpResponse<byte[]> rollback = HttpMessageParser.parseResponse(onRequest(POST, URI.create("/reversals"), asJson(new Reversal(null))).storedData());
     assertEquals(400, rollback.statusCode());
     assertEquals("Unable to parse message id: messageId missing", ProblemDetail.parse(rollback.body()).detail());
   }
@@ -1073,10 +1072,10 @@ public class HttpInboxTest {
   public void whenRollbackAfterRequestCompletedThenRespondOk() throws IOException {
     String messageId = UUID.randomUUID().toString();
     Event<?> responseEvent = onInternalRequest(messageId, new InternalProcess("Hello!", 100));
-    HttpResponse<byte[]> response = HttpMessageParser.parseResponse(responseEvent.data());
+    HttpResponse<byte[]> response = HttpMessageParser.parseResponse(responseEvent.storedData());
     assertTrue(ProblemDetail.parse(response.body()).detail().startsWith("Light is on!"));
     Event<?> rollbackResponseEvent = onRollbackRequest(messageId);
-    HttpResponse<byte[]> rollbackResponse = HttpMessageParser.parseResponse(rollbackResponseEvent.data());
+    HttpResponse<byte[]> rollbackResponse = HttpMessageParser.parseResponse(rollbackResponseEvent.storedData());
     assertEquals(201, rollbackResponse.statusCode());
     assertEquals("Rolled back", ProblemDetail.parse(rollbackResponse.body()).detail());
   }
@@ -1085,13 +1084,13 @@ public class HttpInboxTest {
   public void whenRollbackBeforeRequestThenRespondOk() throws IOException {
     String messageId = UUID.randomUUID().toString();
     Event<?> rollbackResponseEvent = onRollbackRequest(messageId);
-    HttpResponse<byte[]> rollbackResponse = HttpMessageParser.parseResponse(rollbackResponseEvent.data());
+    HttpResponse<byte[]> rollbackResponse = HttpMessageParser.parseResponse(rollbackResponseEvent.storedData());
     assertEquals(201, rollbackResponse.statusCode());
     assertEquals("Nothing to roll back", ProblemDetail.parse(rollbackResponse.body()).detail());
 
     // Verify that a request coming in afterward is rejected (422)
     Event<?> responseEvent = onInternalRequest(messageId, new InternalProcess("Hello!", 123));
-    HttpResponse<byte[]> response = HttpMessageParser.parseResponse(responseEvent.data());
+    HttpResponse<byte[]> response = HttpMessageParser.parseResponse(responseEvent.storedData());
     var detail = ProblemDetail.parse(response.body()).detail();
     assertEquals(422, response.statusCode());
     assertEquals("Rolled back", ProblemDetail.parse(response.body()).detail());
@@ -1101,9 +1100,9 @@ public class HttpInboxTest {
   /// inbox request of the session
   @Test
   public void responseOnRequestGroupGoesToInboxRequestOfSession() throws IOException {
-    HttpResponse<byte[]> internal = HttpMessageParser.parseResponse(onInternalRequest(UUID.randomUUID().toString(), new InternalProcess("A", 1)).data());
+    HttpResponse<byte[]> internal = HttpMessageParser.parseResponse(onInternalRequest(UUID.randomUUID().toString(), new InternalProcess("A", 1)).storedData());
     assertEquals(201, internal.statusCode());
-    HttpResponse<byte[]> other = HttpMessageParser.parseResponse(onRequest(PUT, URI.create("/other-internal/" + UUID.randomUUID()), null).data());
+    HttpResponse<byte[]> other = HttpMessageParser.parseResponse(onRequest(PUT, URI.create("/other-internal/" + UUID.randomUUID()), null).storedData());
     assertEquals(201, other.statusCode());
     assertTrue(ProblemDetail.parse(other.body()).detail().startsWith("Light is on!"));
   }
@@ -1233,9 +1232,9 @@ public class HttpInboxTest {
   @Test
   public void whenSameMessageIdForAnotherRequestTypeThenConflict() throws IOException {
     String messageId = UUID.randomUUID().toString();
-    HttpResponse<byte[]> first = HttpMessageParser.parseResponse(onInternalRequest(messageId, new InternalProcess("A", 1)).data());
+    HttpResponse<byte[]> first = HttpMessageParser.parseResponse(onInternalRequest(messageId, new InternalProcess("A", 1)).storedData());
     assertEquals(201, first.statusCode());
-    HttpResponse<byte[]> second = HttpMessageParser.parseResponse(onRequest(PUT, URI.create("/complexinternal/" + messageId), "Hello!".getBytes()).data());
+    HttpResponse<byte[]> second = HttpMessageParser.parseResponse(onRequest(PUT, URI.create("/complexinternal/" + messageId), "Hello!".getBytes()).storedData());
     assertEquals(400, second.statusCode());
     assertEquals("Conflict", ProblemDetail.parse(second.body()).detail());
   }
@@ -1244,9 +1243,9 @@ public class HttpInboxTest {
   @Test
   public void whenSameMessageIdAsRejectedRequestOfAnotherTypeThenConflict() throws IOException {
     String messageId = UUID.randomUUID().toString();
-    HttpResponse<byte[]> first = HttpMessageParser.parseResponse(onRequest(PUT, URI.create("/rejected/" + messageId), "Hello!".getBytes()).data());
+    HttpResponse<byte[]> first = HttpMessageParser.parseResponse(onRequest(PUT, URI.create("/rejected/" + messageId), "Hello!".getBytes()).storedData());
     assertEquals(422, first.statusCode());
-    HttpResponse<byte[]> second = HttpMessageParser.parseResponse(onInternalRequest(messageId, new InternalProcess("A", 1)).data());
+    HttpResponse<byte[]> second = HttpMessageParser.parseResponse(onInternalRequest(messageId, new InternalProcess("A", 1)).storedData());
     assertEquals(400, second.statusCode());
     assertEquals("Conflict", ProblemDetail.parse(second.body()).detail());
   }
@@ -1254,21 +1253,21 @@ public class HttpInboxTest {
   @Test
   public void whenRejectedRequestIsRepeatedThenRespondWithSameResponse() throws IOException {
     String messageId = UUID.randomUUID().toString();
-    HttpResponse<byte[]> first = HttpMessageParser.parseResponse(onRequest(PUT, URI.create("/rejected/" + messageId), "Hello!".getBytes()).data());
+    HttpResponse<byte[]> first = HttpMessageParser.parseResponse(onRequest(PUT, URI.create("/rejected/" + messageId), "Hello!".getBytes()).storedData());
     assertEquals(422, first.statusCode());
-    HttpResponse<byte[]> second = HttpMessageParser.parseResponse(onRequest(PUT, URI.create("/rejected/" + messageId), "Hello!".getBytes()).data());
+    HttpResponse<byte[]> second = HttpMessageParser.parseResponse(onRequest(PUT, URI.create("/rejected/" + messageId), "Hello!".getBytes()).storedData());
     assertEquals(422, second.statusCode());
     assertArrayEquals(first.body(), second.body());
   }
 
   private HttpResponse<byte[]> onContentRequest(String id, String a) throws IOException {
-    return HttpMessageParser.parseResponse(onRequest(PUT, URI.create("/content/" + id), asJson(new InternalProcess(a, 0))).data());
+    return HttpMessageParser.parseResponse(onRequest(PUT, URI.create("/content/" + id), asJson(new InternalProcess(a, 0))).storedData());
   }
 
   @Test
   public void whenRollbackBeforeRequestIsRepeatedThenRespondWithSameResponse() throws IOException {
     String messageId = UUID.randomUUID().toString();
-    HttpResponse<byte[]> first = HttpMessageParser.parseResponse(onRollbackRequest(messageId).data());
+    HttpResponse<byte[]> first = HttpMessageParser.parseResponse(onRollbackRequest(messageId).storedData());
     assertEquals("Nothing to roll back", ProblemDetail.parse(first.body()).detail());
     // A retry, with another correlation id, which the normalizer removes
     HttpResponse<byte[]> second = onRollbackRequest(messageId, Headers.of("X-Correlation-Id", "retry"));
@@ -1305,9 +1304,9 @@ public class HttpInboxTest {
   public void whenRollbackAfterRequestIsRepeatedThenRespondWithSameResponse() throws IOException {
     String messageId = UUID.randomUUID().toString();
     onInternalRequest(messageId, new InternalProcess("Hello!", 100));
-    HttpResponse<byte[]> first = HttpMessageParser.parseResponse(onRollbackRequest(messageId).data());
+    HttpResponse<byte[]> first = HttpMessageParser.parseResponse(onRollbackRequest(messageId).storedData());
     assertEquals("Rolled back", ProblemDetail.parse(first.body()).detail());
-    HttpResponse<byte[]> second = HttpMessageParser.parseResponse(onRollbackRequest(messageId).data());
+    HttpResponse<byte[]> second = HttpMessageParser.parseResponse(onRollbackRequest(messageId).storedData());
     assertEquals(201, second.statusCode());
     assertArrayEquals(first.body(), second.body());
   }
@@ -1315,7 +1314,7 @@ public class HttpInboxTest {
   @Test
   public void whenRollbackOfRequestAuthorizedByBodyThenRollbackIsAuthorizedByItsOwnAuthorizer() throws IOException {
     String messageId = UUID.randomUUID().toString();
-    HttpResponse<byte[]> request = HttpMessageParser.parseResponse(onRequest(PUT, URI.create("/owned/" + messageId), asJson(new InternalProcess("alice", 1))).data());
+    HttpResponse<byte[]> request = HttpMessageParser.parseResponse(onRequest(PUT, URI.create("/owned/" + messageId), asJson(new InternalProcess("alice", 1))).storedData());
     assertEquals(201, request.statusCode());
     HttpResponse<byte[]> rollback = onOwnedRollback(messageId, Headers.of("X-Owner", "alice"));
     assertEquals(201, rollback.statusCode());
@@ -1363,16 +1362,16 @@ public class HttpInboxTest {
   }
 
   static final EntityModel Chime = EntityModel.of("Chime", UUID.fromString("b8d3f6a1-2e47-4c09-9b5a-6f1c8e4d2a73"), HttpInboxTest::chimeTransitions);
-  static final EventType<Void, Void> BellRung = BasicEventType.of("Bell rung", UUID.fromString("d6f2a9c4-1b85-4e37-8a0d-3c7e5f9b1a26"));
-  static final EventType<Void, Void> ChimeRung = BasicEventType.of("Chime rung", UUID.fromString("7a4c2e9f-5d18-4b63-b1e0-8f6d3a2c9e54"));
+  static final EventType<Void, Void> BellRung = EventType.of("Bell rung", UUID.fromString("d6f2a9c4-1b85-4e37-8a0d-3c7e5f9b1a26"));
+  static final EventType<Void, Void> ChimeRung = EventType.of("Chime rung", UUID.fromString("7a4c2e9f-5d18-4b63-b1e0-8f6d3a2c9e54"));
   static final ResponseEventType<String> Rang = new ResponseEventType<>(
       "Rang",
       UUID.fromString("2f9b6d3e-8c41-4a75-9e0b-5d7a1c4f8e62"),
       DataType.string()
   );
 
-  static final EventType<Void, Void> BellPolished = BasicEventType.of("Bell polished", UUID.fromString("5e8a3c1f-9b26-4d70-a4e3-1c7f2b9d6e08"));
-  static final EventType<Void, Void> BellScheduled = BasicEventType.of("Bell scheduled", UUID.fromString("c9f1b4e7-3a62-4d8c-8e05-7b2d6a9c1f34"));
+  static final EventType<Void, Void> BellPolished = EventType.of("Bell polished", UUID.fromString("5e8a3c1f-9b26-4d70-a4e3-1c7f2b9d6e08"));
+  static final EventType<Void, Void> BellScheduled = EventType.of("Bell scheduled", UUID.fromString("c9f1b4e7-3a62-4d8c-8e05-7b2d6a9c1f34"));
 
   /// A bell, which responds itself, or through the chime it rings, when it is rung. When it is polished it gives no
   /// response, and when it is scheduled it is rung later, in another session.
@@ -1464,7 +1463,7 @@ public class HttpInboxTest {
         URI.create("/owned/messages/" + messageId),
         headers,
         null
-    )).data());
+    )).storedData());
   }
 
   @Test
@@ -1522,7 +1521,7 @@ public class HttpInboxTest {
         URI.create("/lamps/messages/" + messageId),
         headers,
         null
-    )).data());
+    )).storedData());
   }
 
   private Event<?> onRequest(EventTrigger.Immediate<HttpRequest<byte[]>, ?, ?> eventTrigger, HttpRequest<byte[]> requestMessage) {

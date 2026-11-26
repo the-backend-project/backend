@@ -55,7 +55,7 @@ import java.util.regex.Pattern;
 /// ```
 ///
 /// @param <T> the type of the body of the request
-public final class HttpInboxRequest<T> implements EntityModel {
+public sealed class HttpInboxRequest<T> implements EntityModel permits HttpInboxRequest.NotStored {
 
   private final String name;
   private final UUID id;
@@ -68,7 +68,6 @@ public final class HttpInboxRequest<T> implements EntityModel {
   private final List<Response<?>> responses;
   private final Rollback<?> rollback;
   private final Masking masking;
-  private final boolean stored;
   private final Map<State, List<TransitionModel<?, ?>>> transitions;
 
   private HttpInboxRequest(Builder<T> builder, String name, UUID id) {
@@ -95,12 +94,11 @@ public final class HttpInboxRequest<T> implements EntityModel {
     if (rollback != null && processes.stream().map(Process::entityModel).distinct().count() > 1)
       throw new IllegalArgumentException("The processes of the request " + name + ", which can be rolled back, must have the same entity model");
     this.masking = Masking.CREDENTIALS.and(builder.masking);
-    this.stored = builder.stored;
     if (deduplicateOn != null && masking.wholeResponseBody())
       throw new IllegalArgumentException("The request " + name + " masks the body of its response, so it can't be deduplicated, as a retry gets the response of the first request as stored");
     if (deduplicateOn != null && masking.masksMoreOfRequestsThan(Masking.CREDENTIALS))
       throw new IllegalArgumentException("The request " + name + " masks more of its requests than their credentials, so it can't be deduplicated, as a request differing from the first one in what is masked couldn't be told from a retry");
-    if (!stored && deduplicateOn != null)
+    if (!builder.stored && deduplicateOn != null)
       throw new IllegalArgumentException("The request " + name + " is not stored, so it can't be deduplicated, as a retry is recognised by the request stored");
     this.transitions = TransitionModels.requestTransitions(this);
   }
@@ -125,12 +123,14 @@ public final class HttpInboxRequest<T> implements EntityModel {
     return name;
   }
 
-  /// Whether the requests are stored. A request which is not stored is an entity of the session only, as every
-  /// `RequestRouting` entity is (see [EntityModel#stored()]), while the events its process triggers on the application
-  /// are stored if they are of stored types.
-  @Override
-  public boolean stored() {
-    return stored;
+  /// An inbox request whose requests are not stored, built with [Builder#notStored()]. A request which is not stored
+  /// is an entity of the session only, as every `RequestRouting` entity is (see [EntityModel.NotStored]), while the
+  /// events its process triggers on the application are stored if they are of stored types.
+  public static final class NotStored<T> extends HttpInboxRequest<T> implements EntityModel.NotStored {
+
+    private NotStored(Builder<T> builder, String name, UUID id) {
+      super(builder, name, id);
+    }
   }
 
   /// What of the requests and responses is masked in the event log, [Masking#CREDENTIALS] and what
@@ -547,7 +547,7 @@ public final class HttpInboxRequest<T> implements EntityModel {
     }
 
     public HttpInboxRequest<T> build(String name, UUID id) {
-      return new HttpInboxRequest<>(this, name, id);
+      return stored ? new HttpInboxRequest<>(this, name, id) : new NotStored<>(this, name, id);
     }
 
   }

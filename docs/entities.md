@@ -62,7 +62,7 @@ the event is about, followed by a past participle, e.g. `Registration accepted`,
 upper camel case:
 
 ```java
-EventType<Registration, Registration> RegistrationRejected = BasicEventType.of(
+EventType<Registration, Registration> RegistrationRejected = EventType.of(
     "Registration rejected",
     UUID.fromString("1a7e4c9d-2f63-4b05-8e9a-6d3c0b8f1e72"),
     DataType.json(Registration.class)
@@ -124,7 +124,7 @@ out of it: one with a credential, e.g. a session cookie or a code, one with bulk
 e.g. a rendered page, or one of no interest, e.g. a request for a static file. They can still be transitions, which are
 tested, drawn in the state diagrams and told the [monitoring](monitoring.md), without being stored:
 
-* **An event type which is not stored**, `BasicEventType.notStored(name, id, ...)`, takes part in its transition like
+* **An event type which is not stored**, an `EventType.NotStored` from `EventType.notStored(name, id, ...)`, takes part in its transition like
   any other: it is calculated, may trigger events on other entities, which are stored if they are of stored types, is
   given to the one who triggered it and is told the listener. It is not written to the event log, so the state of an
   entity must not depend on it: on an entity which is stored, its transitions stay in their state (`toSelf()`), which
@@ -135,7 +135,7 @@ tested, drawn in the state diagrams and told the [monitoring](monitoring.md), wi
   A delayed or conditional trigger may fire an event which isn't stored: the trigger is deleted with the changes of
   the event, as it is when the event is stored. An event reading an entity, for another entity to assemble from, is one, named `<subject> looked up`.
 * **An entity of the session only** is created by an event which is not stored, i.e. one from `Begin`, or is of an
-  entity model whose `stored()` is false, e.g. one of `EntityModel.notStored(name, id, transitions)`. None of its
+  entity model which is not stored, an `EntityModel.NotStored`, e.g. one of `EntityModel.notStored(name, id, transitions)`. None of its
   events are stored, whatever their types, so its transitions may go to any state, also on events not stored. The
   [session](sessions.md#sessions) finds it among the events of its transactions, but no other session does, so it can't have
   delayed or conditional triggers, which fire in a session of their own: the change fails if it has one. Nor can its
@@ -154,7 +154,7 @@ tested, drawn in the state diagrams and told the [monitoring](monitoring.md), wi
 
 ```java
 // A page rendered from other entities, which is not stored
-EventType<View, Page> PageViewed = BasicEventType.notStored("Page viewed", UUID.fromString("..."), DataType.json(View.class), DataType.json(Page.class));
+EventType<View, Page> PageViewed = EventType.notStored("Page viewed", UUID.fromString("..."), DataType.json(View.class), DataType.json(Page.class));
 
 // A secret kept in the browser, of which the event log only has the hash
 onEvent(SignInStarted).to(States.SigningIn)

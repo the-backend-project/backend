@@ -16,34 +16,33 @@ public interface EntityModel extends Identifiable {
   /// The transitions of the entities of the model, by the state they are taken from
   Map<State, List<TransitionModel<?, ?>>> transitions();
 
-  /// Whether the entities of the model are stored. The entities of a model which is not stored are entities of the
+  /// An entity model whose entities are not stored. The entities of a model which is not stored are entities of the
   /// session only: their transitions are taken, and the events they trigger on other entities are stored if those
   /// are, but none of their own events are stored. They are found by the transactions of the session, the later ones
   /// among the events of the earlier ones, but not by another session. Their transitions may therefore go to any
   /// state, but they can't have delayed or conditional triggers, which fire in a session of their own.
-  default boolean stored() {
-    return true;
-  }
+  interface NotStored extends EntityModel {}
 
   /// An entity model whose transitions are created when they are first asked for, so that they can refer to the model
   /// itself and to other models created the same way, e.g. as constants which refer to each other.
   static EntityModel of(String name, UUID id, Supplier<Map<State, List<TransitionModel<?, ?>>>> transitions) {
-    return memoized(name, id, transitions, true);
-  }
-
-  /// An entity model which is not stored, whose entities are of the session only (see [#stored()]), with its transitions
-  /// created when they are first asked for, as [#of(String, UUID, Supplier)]
-  static EntityModel notStored(String name, UUID id, Supplier<Map<State, List<TransitionModel<?, ?>>>> transitions) {
-    return memoized(name, id, transitions, false);
-  }
-
-  private static EntityModel memoized(String name, UUID id, Supplier<Map<State, List<TransitionModel<?, ?>>>> transitions, boolean stored) {
     var created = new Memoized<>(transitions, "transitions of entity model " + name);
     return new EntityModel() {
       @Override public String name() {return name;}
       @Override public UUID id() {return id;}
       @Override public Map<State, List<TransitionModel<?, ?>>> transitions() {return created.get();}
-      @Override public boolean stored() {return stored;}
+      @Override public String toString() {return name;}
+    };
+  }
+
+  /// An entity model whose entities are not stored, but of the session only (see [NotStored]), with its transitions
+  /// created when they are first asked for, as [#of(String, UUID, Supplier)]
+  static NotStored notStored(String name, UUID id, Supplier<Map<State, List<TransitionModel<?, ?>>>> transitions) {
+    var created = new Memoized<>(transitions, "transitions of entity model " + name);
+    return new NotStored() {
+      @Override public String name() {return name;}
+      @Override public UUID id() {return id;}
+      @Override public Map<State, List<TransitionModel<?, ?>>> transitions() {return created.get();}
       @Override public String toString() {return name;}
     };
   }

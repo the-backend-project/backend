@@ -7,7 +7,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import com.github.thxmasj.backend.core.BasicEventType;
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EntityModel;
 import com.github.thxmasj.backend.core.Event;
@@ -45,8 +44,8 @@ public class StorageTest {
 
   enum States implements State {Created}
 
-  static EventType<Void, Void> PersonCreated = BasicEventType.of("Person created", UUID.fromString("5a4bd3b2-5d0e-4a8e-9a61-2f3b1d6e0c01"));
-  static EventType<String, String> NameClaimed = BasicEventType.of("Name claimed", UUID.fromString("5a4bd3b2-5d0e-4a8e-9a61-2f3b1d6e0c02"), DataType.string());
+  static EventType<Void, Void> PersonCreated = EventType.of("Person created", UUID.fromString("5a4bd3b2-5d0e-4a8e-9a61-2f3b1d6e0c01"));
+  static EventType<String, String> NameClaimed = EventType.of("Name claimed", UUID.fromString("5a4bd3b2-5d0e-4a8e-9a61-2f3b1d6e0c02"), DataType.string());
 
   static EntityModel Person = EntityModel.of(
       "Person",
@@ -72,8 +71,8 @@ public class StorageTest {
   /// A person with a name, i.e. its first event and its name's id event
   private static Change[] person(UUID entityId, String name) {
     return new Change[] {
-        change(Person, new Event<>(entityId, 1, PersonCreated, clock)),
-        change(Names, new Event<>(entityId, 1, NameClaimed, clock, name))
+        change(Person, Event.of(entityId, 1, PersonCreated, ZonedDateTime.now(clock), null)),
+        change(Names, Event.of(entityId, 1, NameClaimed, ZonedDateTime.now(clock), name))
     };
   }
 
@@ -107,7 +106,7 @@ public class StorageTest {
 
     var e = assertThrows(IdEventAlreadyExists.class, () -> store(storage, person(UUID.randomUUID(), "Alice")));
 
-    assertEquals("Alice", e.idEvent().getUnmarshalledData());
+    assertEquals("Alice", e.idEvent().data());
   }
 
   @Test

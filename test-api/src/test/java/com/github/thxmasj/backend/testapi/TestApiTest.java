@@ -14,7 +14,6 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.github.thxmasj.backend.core.BasicEventType;
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EntityModel;
 import com.github.thxmasj.backend.core.EntitySelector;
@@ -67,25 +66,25 @@ public class TestApiTest {
     }
   }
 
-  static EventType<String, String> AccountNumberClaimed = BasicEventType.of("Account number claimed", UUID.fromString("5b0e8c3a-6f1d-4e2b-9a7c-1d3e5f7a9b01"), DataType.string());
+  static EventType<String, String> AccountNumberClaimed = EventType.of("Account number claimed", UUID.fromString("5b0e8c3a-6f1d-4e2b-9a7c-1d3e5f7a9b01"), DataType.string());
   static IdEntityModel Ids = IdEntityModel.of("Ids", UUID.fromString("5b0e8c3a-6f1d-4e2b-9a7c-1d3e5f7a9b02"), AccountNumberClaimed);
 
   static EventType<UUID, UUID> StatementOfAccountReferenced = IndexEntityModel.referenceEventType("Statement of account referenced", UUID.fromString("5b0e8c3a-6f1d-4e2b-9a7c-1d3e5f7a9b03"));
-  static EventType<StatementNumber, StatementNumber> NumberOfStatementIndexed = BasicEventType.of("Number of statement indexed", UUID.fromString("5b0e8c3a-6f1d-4e2b-9a7c-1d3e5f7a9b04"), new StatementNumberDataType());
+  static EventType<StatementNumber, StatementNumber> NumberOfStatementIndexed = EventType.of("Number of statement indexed", UUID.fromString("5b0e8c3a-6f1d-4e2b-9a7c-1d3e5f7a9b04"), new StatementNumberDataType());
   static IndexEntityModel Index = IndexEntityModel.of("Index", UUID.fromString("5b0e8c3a-6f1d-4e2b-9a7c-1d3e5f7a9b05"), StatementOfAccountReferenced, NumberOfStatementIndexed);
 
   static EntityModel Account = EntityModel.of("Account", UUID.fromString("5b0e8c3a-6f1d-4e2b-9a7c-1d3e5f7a9b06"), TestApiTest::accountTransitions);
   static EntityModel Statement = EntityModel.of("Statement", UUID.fromString("5b0e8c3a-6f1d-4e2b-9a7c-1d3e5f7a9b07"), TestApiTest::statementTransitions);
 
-  static EventType<String, String> AccountOpened = BasicEventType.of("Account opened", UUID.fromString("5b0e8c3a-6f1d-4e2b-9a7c-1d3e5f7a9b08"), DataType.string());
-  static EventType<Void, Void> AccountExpired = BasicEventType.of("Account expired", UUID.fromString("5b0e8c3a-6f1d-4e2b-9a7c-1d3e5f7a9b09"));
-  static EventType<Void, Void> AccountCloseRequestedWhenSettled = BasicEventType.of("Account close requested when settled", UUID.fromString("5b0e8c3a-6f1d-4e2b-9a7c-1d3e5f7a9b0a"));
-  static EventType<Void, Void> AccountClosed = BasicEventType.of("Account closed", UUID.fromString("5b0e8c3a-6f1d-4e2b-9a7c-1d3e5f7a9b0b"));
+  static EventType<String, String> AccountOpened = EventType.of("Account opened", UUID.fromString("5b0e8c3a-6f1d-4e2b-9a7c-1d3e5f7a9b08"), DataType.string());
+  static EventType<Void, Void> AccountExpired = EventType.of("Account expired", UUID.fromString("5b0e8c3a-6f1d-4e2b-9a7c-1d3e5f7a9b09"));
+  static EventType<Void, Void> AccountCloseRequestedWhenSettled = EventType.of("Account close requested when settled", UUID.fromString("5b0e8c3a-6f1d-4e2b-9a7c-1d3e5f7a9b0a"));
+  static EventType<Void, Void> AccountClosed = EventType.of("Account closed", UUID.fromString("5b0e8c3a-6f1d-4e2b-9a7c-1d3e5f7a9b0b"));
 
   record Issuing(UUID account, StatementNumber number) {}
 
-  static EventType<Issuing, Issuing> StatementIssued = BasicEventType.of("Statement issued", UUID.fromString("5b0e8c3a-6f1d-4e2b-9a7c-1d3e5f7a9b0c"), DataType.json(Issuing.class));
-  static EventType<Void, Void> StatementSettled = BasicEventType.of("Statement settled", UUID.fromString("5b0e8c3a-6f1d-4e2b-9a7c-1d3e5f7a9b0d"));
+  static EventType<Issuing, Issuing> StatementIssued = EventType.of("Statement issued", UUID.fromString("5b0e8c3a-6f1d-4e2b-9a7c-1d3e5f7a9b0c"), DataType.json(Issuing.class));
+  static EventType<Void, Void> StatementSettled = EventType.of("Statement settled", UUID.fromString("5b0e8c3a-6f1d-4e2b-9a7c-1d3e5f7a9b0d"));
 
   enum ShipmentStates implements State {Sent}
 
@@ -94,8 +93,8 @@ public class TestApiTest {
   /// Shipments of letters and parcels share the id of their event type, like the outbox requests of different
   /// payloads, but differ in data type
   static UUID SendId = UUID.fromString("5b0e8c3a-6f1d-4e2b-9a7c-1d3e5f7a9b0e");
-  static EventType<String, String> LetterSent = BasicEventType.of("Shipment sent", SendId, DataType.string());
-  static EventType<Parcel, Parcel> ParcelSent = BasicEventType.of("Shipment sent", SendId, DataType.json(Parcel.class));
+  static EventType<String, String> LetterSent = EventType.of("Shipment sent", SendId, DataType.string());
+  static EventType<Parcel, Parcel> ParcelSent = EventType.of("Shipment sent", SendId, DataType.json(Parcel.class));
   static EventType<UUID, UUID> ShipmentOfAccountReferenced = IndexEntityModel.referenceEventType("Shipment of account referenced", UUID.fromString("5b0e8c3a-6f1d-4e2b-9a7c-1d3e5f7a9b0f"));
   static IndexEntityModel ShipmentIndex = IndexEntityModel.of("ShipmentIndex", UUID.fromString("5b0e8c3a-6f1d-4e2b-9a7c-1d3e5f7a9b10"), ShipmentOfAccountReferenced);
   static EntityModel LetterShipment = EntityModel.of("LetterShipment", UUID.fromString("5b0e8c3a-6f1d-4e2b-9a7c-1d3e5f7a9b11"), TestApiTest::letterShipmentTransitions);
@@ -279,7 +278,7 @@ public class TestApiTest {
     machine.onEvent(trigger(ParcelSent, ParcelShipment), new Parcel(2)).blockFirst();
 
     Map<EntityModel, Object> sent = api.entitiesByIndex(ShipmentOfAccountReferenced, shipmentAccount)
-        .collectMap(EventLog::entityModel, log -> (Object) log.events().getFirst().getUnmarshalledData())
+        .collectMap(EventLog::entityModel, log -> (Object) log.events().getFirst().data())
         .block();
 
     assertEquals(Map.of(LetterShipment, "Dear account", ParcelShipment, new Parcel(2)), sent);

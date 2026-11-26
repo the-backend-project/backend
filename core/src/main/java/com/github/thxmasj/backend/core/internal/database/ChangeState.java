@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import reactor.core.publisher.Flux;
+import com.github.thxmasj.backend.core.EventType;
 
 /// Stores the changes of a transition atomically
 public abstract class ChangeState {
@@ -42,7 +43,7 @@ public abstract class ChangeState {
     if (event != null) {
       spec.bind("eventNumber", event.eventNumber())
           .bind("type", event.type().id())
-          .bindNullable("data", byte[].class, event.getMarshalledData());
+          .bindNullable("data", byte[].class, event.storedData());
     }
     if (change.firedTrigger() != null) {
       if (change.firedTrigger().type() == TriggerType.CONDITIONAL)
@@ -204,7 +205,7 @@ public abstract class ChangeState {
               newEvent().typeName() + "]:" +
               // Without the data, which may be a secret, and which would be marshalled just for the debug output
               newEvent().eventNumber() +
-              (!newEvent().type().stored() ? " (not stored)" : "");
+              (newEvent().type() instanceof EventType.NotStored ? " (not stored)" : "");
         }
 
       };

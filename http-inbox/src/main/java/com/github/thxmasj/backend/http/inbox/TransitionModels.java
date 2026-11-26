@@ -43,8 +43,7 @@ import static com.github.thxmasj.backend.http.inbox.HttpInbox.States.Routed;
 import static com.github.thxmasj.backend.http.inbox.RequestRoutingModel.RequestRouting;
 import static java.util.stream.Collectors.toSet;
 
-import com.github.thxmasj.backend.core.BasicEventType.Rollback.Data;
-import com.github.thxmasj.backend.core.BasicEventType;
+import com.github.thxmasj.backend.core.EventType.Rollback.Data;
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EntityModel;
 import com.github.thxmasj.backend.core.EntityModelGroup;
@@ -387,7 +386,7 @@ interface TransitionModels {
     var content = request.processes().get(process).content();
     if (content == null)
       return requestDispatched();
-    return BasicEventType.of(
+    return EventType.of(
         "Request dispatched [" + content.description() + "]",
         UUID.nameUUIDFromBytes((request.id() + "/" + process).getBytes(StandardCharsets.UTF_8)),
         DataType.unknown(),
@@ -465,8 +464,8 @@ interface TransitionModels {
                 .output(d -> d.t1().input().t3()).masked(request.masking()::mask),
             d -> tuple(d.t2().unknownId().exception().getMessage(), null, d.t1().request())
         )
-        .when(_ -> process.eventType() instanceof BasicEventType.Rollback).then(
-            request.stored() ?
+        .when(_ -> process.eventType() instanceof EventType.Rollback).then(
+            !(request instanceof EntityModel.NotStored) ?
                 onEvent(RequestAccepted).to(Dispatched)
                     .assemble(c -> tuple(c.input().t1(), c.input().t2(), c.entityId()))
                     .trigger(ProcessReferenced).with(d -> d.t2().entityId()).on(Index).identifiedBy(d -> entityId(d.t3(), CreateIfNotExists))
@@ -503,7 +502,7 @@ interface TransitionModels {
   /// The request is accepted by the application, and indexed by the entity of the application, by which the requests of
   /// an entity are found. A request which is not stored is not indexed, as it can't be found.
   private static <T> TransitionModel<Tuple2<RoutedRequest<?>, EventReference>, Tuple2<HttpRequest<byte[]>, EventReference>> accepted(HttpInboxRequest<T> request) {
-    if (!request.stored())
+    if (request instanceof EntityModel.NotStored)
       return onEvent(RequestAccepted).to(Dispatched)
           .assembleInput()
           .output(d -> tuple(d.t1().request(), d.t2()));

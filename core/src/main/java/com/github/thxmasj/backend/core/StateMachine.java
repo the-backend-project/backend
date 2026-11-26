@@ -551,7 +551,7 @@ public class StateMachine implements AutoCloseable {
     Event<?> transitionsEvent = nextEvents.get(new EntityKey(delayedEvent.entityModel().id(), delayedEvent.entityId()));
     if (transitionsEvent == null)
       return delayedEvent;
-    return delayedEvent.withEventNumber(transitionsEvent.eventNumber() + (transitionsEvent.type().stored() ? 1 : 0));
+    return delayedEvent.withEventNumber(transitionsEvent.eventNumber() + (transitionsEvent.type() instanceof EventType.NotStored ? 0 : 1));
   }
 
   /// The action trigger with the log of its entity as the transaction of the action's result reads it, a later one: with
@@ -562,7 +562,7 @@ public class StateMachine implements AutoCloseable {
     if (actionTrigger.eventLog().isSessionOnlyWith(event))
       return actionTrigger.withEvent(event);
     var asRead = new ActionTrigger<>(actionTrigger.action(), actionTrigger.data(), actionTrigger.eventLog().asStored());
-    return event.type().stored() ? asRead.withEvent(event.asStored()) : asRead;
+    return event.type() instanceof EventType.NotStored ? asRead : asRead.withEvent(event.asStored());
   }
 
   private List<ActionTrigger<?>> actionTriggers(@NotNull TransitionStep<?> tail) {
@@ -681,7 +681,7 @@ public class StateMachine implements AutoCloseable {
         })
         .onErrorResume(
             IdEventAlreadyExists.class,
-            e -> storage.eventsByIdEvent().execute(e.idEvent().type(), e.idEvent().getMarshalledData())
+            e -> storage.eventsByIdEvent().execute(e.idEvent().type(), e.idEvent().storedData())
                 .switchIfEmpty(Mono.error(e))
                 .doOnNext(_ -> Debug.log("onEvent " + transitionModel.eventType().name() + ": " + e.getMessage()))
                 .flatMap(log -> initial.transaction().recomputeWith(ProcessResult.idExists(e.idEvent().type(), e.idEvent(), log)) ?
@@ -699,7 +699,7 @@ public class StateMachine implements AutoCloseable {
     EventType<I, O> type = eventTrigger.eventType();
     return tail.inputStep().transaction().existingIds().stream()
         .filter(existing -> existing.idEvent().type().id().equals(type.id())
-            && Arrays.equals(existing.idEvent().getMarshalledData(), type.inputDataType().marshal(data)))
+            && Arrays.equals(existing.idEvent().storedData(), type.inputDataType().marshal(data)))
         .findFirst()
         .map(existing -> new IdExistsStep<>(tail, ProcessResult.idExists(type, existing.idEvent(), existing.log())))
         .orElse(null);
@@ -920,7 +920,7 @@ public class StateMachine implements AutoCloseable {
         // An event which is not stored is not in the log of a stored entity, which the next event stored follows. The
         // log the transition was given is the entity's as the transaction has it, without the event, so it is the log,
         // rather than one read from the database.
-        return new InTransaction(event.type().stored() || log.isSessionOnlyWith(event) ? log.withNewEvent(event) : log, null);
+        return new InTransaction(!(event.type() instanceof EventType.NotStored) || log.isSessionOnlyWith(event) ? log.withNewEvent(event) : log, null);
       }
     }
     return new InTransaction(null, previousTransaction(transitionStep));
@@ -1037,7 +1037,7 @@ public class StateMachine implements AutoCloseable {
         return true;
       if (sessionOnly.contains(owner(change)))
         return false;
-      return change.newEvent() == null || change.newEvent().type().stored();
+      return change.newEvent() == null || !(change.newEvent().type() instanceof EventType.NotStored);
     }
 
   }

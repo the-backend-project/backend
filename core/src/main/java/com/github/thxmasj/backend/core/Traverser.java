@@ -22,9 +22,9 @@ class Traverser {
 
   Traverser(EntityModel model) {
     this.transitions = model.transitions();
-    this.hasEntitiesOfTheSessionOnly = !model.stored() || transitions.getOrDefault(Begin, List.of()).stream()
+    this.hasEntitiesOfTheSessionOnly = model instanceof EntityModel.NotStored || transitions.getOrDefault(Begin, List.of()).stream()
         .flatMap(transition -> transition.leaves().stream())
-        .anyMatch(leaf -> !leaf.eventType().stored());
+        .anyMatch(leaf -> leaf.eventType() instanceof EventType.NotStored);
   }
 
   /// Whether entities of the session only are of the model, which the later transactions of a session find among the
@@ -75,7 +75,7 @@ class Traverser {
     var t = findTransitionForTriggeredEvent(eventType, availableTransitions);
     if (t != null && eventType == BuiltinEventTypes.EventsRolledBack)
       Debug.log("Using custom rollback transition for entity " + eventLog.entityModel().name() + ": " + t + "\nAll transitions:\n" + transitions.values().stream().flatMap(List::stream).map(Object::toString).collect(joining("\n")));
-    if (t == null && eventType == BuiltinEventTypes.EventsRolledBack && eventType instanceof BasicEventType.Rollback rollback)
+    if (t == null && eventType == BuiltinEventTypes.EventsRolledBack && eventType instanceof EventType.Rollback rollback)
       t = rollbackOn(rollback);
     else if (t == null && eventType == BuiltinEventTypes.StatusLookedUp)
       t = statusOn();
@@ -95,7 +95,7 @@ class Traverser {
 //    var availableTransitions = transitions.get(currentState);
 //    if (availableTransitions == null) throw new IllegalStateException("No available transitions for current state " + currentState);
 //    var t = findTransition(eventType, availableTransitions);
-//    if (t == null && eventType == BuiltinEventTypes.Rollback && eventType instanceof BasicEventType.Rollback rollback)
+//    if (t == null && eventType == BuiltinEventTypes.Rollback && eventType instanceof EventType.Rollback rollback)
 //      t = onEvent(rollback).toSelf().assembleInput().output(d -> d);
 //    return t;
 //  }
@@ -142,7 +142,7 @@ class Traverser {
       }
     }
     // TODO: Avoid dynamic creation
-    if (eventType == BuiltinEventTypes.EventsRolledBack && eventType instanceof BasicEventType.Rollback rollback)
+    if (eventType == BuiltinEventTypes.EventsRolledBack && eventType instanceof EventType.Rollback rollback)
       return rollbackOn(rollback);
     throw new IllegalStateException(
         "No transition found for logged event " + eventType.name() + " from " + fromState.name() + " (available: " + transitions.get(fromState).stream()

@@ -204,7 +204,7 @@ public final class IdentityProvider {
         // First event is the triggered event, second is the response event
         .skip(1)
         .next()
-        .map(event -> HttpResponse.raw(event.getUnmarshalledData()))
+        .map(event -> HttpResponse.raw(event.data()))
         .timeout(Duration.ofSeconds(30))
         .block();
   }

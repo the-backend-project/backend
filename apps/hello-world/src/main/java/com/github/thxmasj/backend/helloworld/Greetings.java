@@ -6,7 +6,6 @@ import static com.github.thxmasj.backend.core.TransitionModelBuilder.WithEvent.o
 import static com.github.thxmasj.backend.http.inbox.HttpInbox.Request;
 import static com.github.thxmasj.backend.http.inbox.HttpInboxRequest.newEntity;
 
-import com.github.thxmasj.backend.core.BasicEventType;
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EntityModel;
 import com.github.thxmasj.backend.core.EventType;
@@ -31,7 +30,7 @@ public interface Greetings {
     Greeted
   }
 
-  EventType<Void, Void> GreetingRequested = BasicEventType.of("Greeting requested", UUID.fromString("0b7f8f43-37a3-4f26-9a5c-6f3ad6f1c2a4"));
+  EventType<Void, Void> GreetingRequested = EventType.of("Greeting requested", UUID.fromString("0b7f8f43-37a3-4f26-9a5c-6f3ad6f1c2a4"));
 
   ResponseEventType<String> GreetingResponseCreated = new ResponseEventType<>(
       "Greeting response created",

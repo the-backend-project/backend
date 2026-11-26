@@ -6,7 +6,6 @@ import static com.github.thxmasj.backend.core.TransitionModelBuilder.WithEvent.o
 import static com.github.thxmasj.backend.core.TransitionModelBuilder.assemble;
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.github.thxmasj.backend.core.BasicEventType;
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EntityModel;
 import com.github.thxmasj.backend.core.EntityModelGroup;
@@ -29,11 +28,11 @@ class ERDiagramFormatterTest {
 
   enum States implements State {Moving, Stopped}
 
-  static final EventType<Void, Void> CarStarted = BasicEventType.of("Car started", UUID.randomUUID());
-  static final EventType<Void, Void> CarStopped = BasicEventType.of("Car stopped", UUID.randomUUID());
-  static final EventType<Void, Void> SpeedIncreased = BasicEventType.of("Speed increased", UUID.randomUUID());
-  static final EventType<Void, Void> SpeedDecreased = BasicEventType.of("Speed decreased", UUID.randomUUID());
-  static final EventType<String, String> NameClaimed = BasicEventType.of("Name claimed", UUID.randomUUID(), DataType.string());
+  static final EventType<Void, Void> CarStarted = EventType.of("Car started", UUID.randomUUID());
+  static final EventType<Void, Void> CarStopped = EventType.of("Car stopped", UUID.randomUUID());
+  static final EventType<Void, Void> SpeedIncreased = EventType.of("Speed increased", UUID.randomUUID());
+  static final EventType<Void, Void> SpeedDecreased = EventType.of("Speed decreased", UUID.randomUUID());
+  static final EventType<String, String> NameClaimed = EventType.of("Name claimed", UUID.randomUUID(), DataType.string());
 
   static final EntityModel Car = EntityModel.of("Car", UUID.randomUUID(), ERDiagramFormatterTest::carTransitions);
   static final EntityModel Speed = EntityModel.of("Speed", UUID.randomUUID(), ERDiagramFormatterTest::speedTransitions);
@@ -150,7 +149,7 @@ class ERDiagramFormatterTest {
   static final EntityModel Garage = EntityModel.of("Garage", UUID.randomUUID(), ERDiagramFormatterTest::garageTransitions);
   static final EntityModel Workshop = EntityModel.of("Workshop", UUID.randomUUID(), ERDiagramFormatterTest::workshopTransitions);
   static final EntityModelGroup Places = EntityModelGroup.of("Places", UUID.randomUUID(), m -> m == Garage || m == Workshop);
-  static final EventType<Void, Void> CarParked = BasicEventType.of("Car parked", UUID.randomUUID());
+  static final EventType<Void, Void> CarParked = EventType.of("Car parked", UUID.randomUUID());
   /// A car which parks in a place
   static final EntityModel ParkedCar = EntityModel.of("Car", UUID.randomUUID(), ERDiagramFormatterTest::parkedCarTransitions);
 

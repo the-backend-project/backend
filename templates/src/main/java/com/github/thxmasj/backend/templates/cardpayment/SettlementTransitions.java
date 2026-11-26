@@ -260,7 +260,7 @@ public class SettlementTransitions {
             .trigger(reconciliation.requestDispatched())
             // A rolled back request is settled too, as its reversal is a request referencing the batch on its own
             .when(BatchReferenced, d -> d.t1().t5()).is(HttpOutboxRequest.requestAccepted(), HttpOutboxRequest.rollbackDispatched())
-            .withReactive(d -> reconciliation.input(d.t1().t6(), tuple(d.t1().t2(), d.t1().t3(), d.t2().accepted().event().getUnmarshalledData())))
+            .withReactive(d -> reconciliation.input(d.t1().t6(), tuple(d.t1().t2(), d.t1().t3(), d.t2().accepted().event().data())))
             .on(reconciliation.outbox())
             .identifiedBy(newEntityId())
             .trigger(SettlementEvent.SettlementOpened).with(d -> new Opened(d.t1().t2().next(), d.t1().t3().next())).on(settlement).identifiedBy(newEntityId())

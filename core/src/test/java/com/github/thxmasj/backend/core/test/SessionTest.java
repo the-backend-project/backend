@@ -8,7 +8,6 @@ import static com.github.thxmasj.backend.core.TransitionModelBuilder.WithEvent.o
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import com.github.thxmasj.backend.core.Action;
-import com.github.thxmasj.backend.core.BasicEventType;
 import com.github.thxmasj.backend.core.EntityModel;
 import com.github.thxmasj.backend.core.EntityModelGroup;
 import com.github.thxmasj.backend.core.Event;
@@ -68,7 +67,7 @@ public class SessionTest {
   }
 
   private static EventType<Void, Void> event(String name, int n) {
-    return BasicEventType.of(name, id(n));
+    return EventType.of(name, id(n));
   }
 
   /// An action whose outcome is the event, as of an outbox request getting its response

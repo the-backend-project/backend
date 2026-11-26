@@ -62,7 +62,7 @@ enum States implements State {
   Greeted
 }
 
-EventType<Void, Void> GreetingRequested = BasicEventType.of(
+EventType<Void, Void> GreetingRequested = EventType.of(
     "Greeting requested",
     UUID.fromString("0b7f8f43-37a3-4f26-9a5c-6f3ad6f1c2a4")
 );

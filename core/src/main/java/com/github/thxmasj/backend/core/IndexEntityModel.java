@@ -27,7 +27,7 @@ public interface IndexEntityModel extends EntityModel {
   }
 
   static EventType<UUID, UUID> referenceEventType(String name, UUID id) {
-    return BasicEventType.of(name, id, DataType.uuid());
+    return EventType.of(name, id, DataType.uuid());
   }
 
 }

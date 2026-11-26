@@ -8,7 +8,6 @@ import static com.github.thxmasj.backend.core.TransitionModelBuilder.assemble;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.github.thxmasj.backend.core.BasicEventType;
 import com.github.thxmasj.backend.core.EntityModel;
 import com.github.thxmasj.backend.core.EntityModelGroup;
 import com.github.thxmasj.backend.core.EventType;
@@ -20,10 +19,10 @@ import org.junit.jupiter.api.Test;
 
 public class EntityModelsTest {
 
-  static final EventType<Void, Void> Started = BasicEventType.of("Started", UUID.randomUUID());
-  static final EventType<Void, Void> Ordered = BasicEventType.of("Ordered", UUID.randomUUID());
-  static final EventType<Void, Void> Undone = BasicEventType.of("Undone", UUID.randomUUID());
-  static final EventType<Void, Void> Chosen = BasicEventType.of("Chosen", UUID.randomUUID());
+  static final EventType<Void, Void> Started = EventType.of("Started", UUID.randomUUID());
+  static final EventType<Void, Void> Ordered = EventType.of("Ordered", UUID.randomUUID());
+  static final EventType<Void, Void> Undone = EventType.of("Undone", UUID.randomUUID());
+  static final EventType<Void, Void> Chosen = EventType.of("Chosen", UUID.randomUUID());
 
   static final EntityModel Order = EntityModel.of("Order", UUID.randomUUID(), () -> Map.of(Begin, List.of(
       onEvent(Ordered).toSelf().output()

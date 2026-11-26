@@ -2,8 +2,6 @@ package com.github.thxmasj.backend.core;
 
 import static java.util.Objects.requireNonNull;
 
-import java.time.Clock;
-import java.time.LocalDateTime;
 import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -13,7 +11,7 @@ import java.util.stream.Stream;
 public final class Event<T> {
 
   private final UUID entityId;
-  private final Integer eventNumber;
+  private final int eventNumber;
   private final EventType<?, T> type;
   private final ZonedDateTime timestamp;
   private byte[] data;
@@ -23,70 +21,45 @@ public final class Event<T> {
   /// Whether the stored form has been marshalled, which may give no data
   private boolean marshalled;
 
-  public Event(UUID entityId, Integer eventNumber, EventType<?, T> type, Clock clock) {
-    this(entityId, eventNumber, type, LocalDateTime.ofInstant(clock.instant(), clock.getZone()), clock, null);
-  }
-
-  public Event(UUID entityId, Integer eventNumber, EventType<?, T> type, Clock clock, T data) {
-    this(entityId, eventNumber, type, LocalDateTime.ofInstant(clock.instant(), clock.getZone()), clock, marshal(type, data));
-    this.unmarshalledData = data;
-  }
-
-  public Event(UUID entityId, int eventNumber, EventType<?, T> type, ZonedDateTime timestamp) {
-    requireNonNull(type, "type is null");
+  private Event(UUID entityId, int eventNumber, EventType<?, T> type, ZonedDateTime timestamp) {
     this.entityId = entityId;
     this.eventNumber = eventNumber;
-    this.type = type;
+    this.type = requireNonNull(type, "type is null");
     this.timestamp = timestamp;
   }
 
-  public Event(UUID entityId, int eventNumber, EventType<?, T> type, ZonedDateTime timestamp, T data) {
-    requireNonNull(type, "type is null");
-    this.entityId = entityId;
-    this.eventNumber = eventNumber;
-    this.type = type;
-    this.timestamp = timestamp;
-    this.data = type.outputDataType().marshal(data);
-    this.unmarshalledData = data;
-  }
-
-  /// An event with the data, which is marshalled when it is first asked for, e.g. when the event is stored
-  public static <T> Event<T> marshalledWhenAskedFor(UUID entityId, int eventNumber, EventType<?, T> type, ZonedDateTime timestamp, T data) {
+  /// An event with the data, or none if it is null, e.g. of a transition. The data is marshalled when it is first asked
+  /// for, e.g. when the event is stored.
+  public static <T> Event<T> of(UUID entityId, int eventNumber, EventType<?, T> type, ZonedDateTime timestamp, T data) {
     var event = new Event<>(entityId, eventNumber, type, timestamp);
     event.unmarshalledData = data;
     return event;
   }
 
-  /// An event whose data in the session differs from the data stored, e.g. masked. [#getUnmarshalledData()] gives the
-  /// data, while [#getMarshalledData()], which is what is stored, has the stored form of the data, which is made when
-  /// it is first asked for, as an event which is not stored never is.
+  /// An event whose data in the session differs from the data stored, e.g. masked. [#data()] gives the data, while
+  /// [#storedData()], which is what is stored, has the stored form of the data, which is made when it is first asked
+  /// for, as an event which is not stored never is.
   ///
   /// @param storedForm gives the data as it is stored, which must not be null
-  public Event(UUID entityId, int eventNumber, EventType<?, T> type, ZonedDateTime timestamp, T data, UnaryOperator<T> storedForm) {
-    requireNonNull(type, "type is null");
-    this.entityId = entityId;
-    this.eventNumber = eventNumber;
-    this.type = type;
-    this.timestamp = timestamp;
-    this.unmarshalledData = data;
-    this.storedForm = requireNonNull(storedForm, "storedForm is null");
+  public static <T> Event<T> masked(UUID entityId, int eventNumber, EventType<?, T> type, ZonedDateTime timestamp, T data, UnaryOperator<T> storedForm) {
+    var event = of(entityId, eventNumber, type, timestamp, data);
+    event.storedForm = requireNonNull(storedForm, "storedForm is null");
+    return event;
   }
 
-  public Event(UUID entityId, Integer eventNumber, EventType<?, T> type, LocalDateTime timestamp, Clock clock, byte[] data) {
-    this.entityId = entityId;
-    requireNonNull(eventNumber, "eventNumber is null");
-    requireNonNull(type, "type is null");
-    this.eventNumber = eventNumber;
-    this.type = type;
-    this.timestamp = ZonedDateTime.of(timestamp, clock.getZone());
-    this.data = data;
+  /// An event as it is stored, with its data marshalled, or null if it has none, e.g. read from the event log. The
+  /// data is unmarshalled when it is first asked for.
+  public static <T> Event<T> stored(UUID entityId, int eventNumber, EventType<?, T> type, ZonedDateTime timestamp, byte[] data) {
+    var event = new Event<>(entityId, eventNumber, type, timestamp);
+    event.data = data;
+    return event;
   }
 
   public UUID entityId() {
     return entityId;
   }
 
-  public Integer eventNumber() {
+  public int eventNumber() {
     return eventNumber;
   }
 
@@ -111,14 +84,7 @@ public final class Event<T> {
   public Event<T> asStored() {
     if (storedForm == null)
       return this;
-    var stored = new Event<>(entityId, eventNumber, type, timestamp);
-    stored.data = getMarshalledData();
-    return stored;
-  }
-
-  /// The data as it is stored, see [#getMarshalledData()]
-  public byte[] data() {
-    return getMarshalledData();
+    return stored(entityId, eventNumber, type, timestamp, storedData());
   }
 
   @Override
@@ -134,14 +100,17 @@ public final class Event<T> {
         '}';
   }
 
-  public T getUnmarshalledData() {
+  /// The data of the event, unmarshalled when it is first asked for, or null if it has none. A masked event of the
+  /// transaction gives its whole data, which only the transaction has.
+  public T data() {
     if (unmarshalledData == null && data != null) {
       unmarshalledData = unmarshal(type, data);
     }
     return unmarshalledData;
   }
 
-  public byte[] getMarshalledData() {
+  /// The data as it is stored, e.g. masked, marshalled when it is first asked for, or null if the event has none
+  public byte[] storedData() {
     if (data == null && unmarshalledData != null && !marshalled) {
       T stored = storedForm != null ? storedForm.apply(unmarshalledData) : unmarshalledData;
       if (stored == null)
@@ -164,11 +133,11 @@ public final class Event<T> {
     return Stream.concat(list1.stream(), list2.stream()).toList();
   }
 
-  public static <T> byte[] marshal(EventType<?, T> eventType, T data) {
+  static <T> byte[] marshal(EventType<?, T> eventType, T data) {
     return eventType.outputDataType().marshal(data);
   }
 
-  public static <T> T unmarshal(EventType<?, T> eventType, byte[] data) {
+  static <T> T unmarshal(EventType<?, T> eventType, byte[] data) {
     return eventType.outputDataType().unmarshal(data);
   }
 

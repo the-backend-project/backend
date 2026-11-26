@@ -70,7 +70,7 @@ final class EntityModelChecks {
   /// Checks the transitions of the entity model
   ///
   /// @param model the entity model whose transitions are checked. Whether its entities are stored (see
-  ///              [EntityModel#stored()]) tells whether an event which is not stored may change their state, and its
+  ///              [EntityModel.NotStored]) tells whether an event which is not stored may change their state, and its
   ///              id tells a trigger on the model from one on another.
   /// @throws IllegalArgumentException with the refusals of the transitions, all of them
   static void check(EntityModel model) {
@@ -78,7 +78,7 @@ final class EntityModelChecks {
   }
 
   private void checkTransitions() {
-    boolean stored = model.stored();
+    boolean stored = !(model instanceof EntityModel.NotStored);
     transitions.forEach(this::requireUniquePaths);
     requireReachableFromBegin();
     requireLeavingBegin();
@@ -114,7 +114,7 @@ final class EntityModelChecks {
   private boolean mayBeOfAnEntityOfTheSessionOnly(Set<State> reachedBySessionOnly, State from, TransitionModel<?, ?> transition) {
     if (reachedBySessionOnly.contains(from))
       return true;
-    return from == Begin && transition.leaves().stream().anyMatch(leaf -> !leaf.eventType().stored());
+    return from == Begin && transition.leaves().stream().anyMatch(leaf -> leaf.eventType() instanceof EventType.NotStored);
   }
 
   /// A conditional trigger refers to the event of its transition, so the transition, and every transition it may
@@ -122,7 +122,7 @@ final class EntityModelChecks {
   private void requireStoredEventOfConditionalTrigger(TransitionModel<?, ?> transition) {
     if (transition.triggers().stream().anyMatch(trigger -> trigger instanceof EventTrigger.Conditional<?, ?, ?>)) {
       for (var leaf : transition.leaves()) {
-        if (!leaf.eventType().stored())
+        if (leaf.eventType() instanceof EventType.NotStored)
           refuse(String.format(
               "The transition on %s has a conditional trigger, which refers to its event, but the transition on %s, which " +
                   "it may choose, is not stored",
@@ -183,7 +183,7 @@ final class EntityModelChecks {
   private static boolean endsNotStoredWithADelayedTrigger(TransitionModel<?, ?> transition, boolean delayedBefore) {
     boolean delayed = delayedBefore || !transition.delayedEventTypes().isEmpty();
     if (transition.filters().isEmpty())
-      return delayed && !transition.eventType().stored();
+      return delayed && transition.eventType() instanceof EventType.NotStored;
     return transition.filters().stream().anyMatch(filter -> endsNotStoredWithADelayedTrigger(filter.alternative().model(), delayed));
   }
 
@@ -318,13 +318,13 @@ final class EntityModelChecks {
   /// stored is an entity of the session only, and from there by any event. The states only entities of the session
   /// reach may be left by events not stored.
   private Set<State> statesOfStoredEntities() {
-    return statesReachedFromBegin(EventType::stored);
+    return statesReachedFromBegin(eventType -> !(eventType instanceof EventType.NotStored));
   }
 
   /// The states an entity of the session only of a stored model reaches: from `Begin` by the events not stored, which
   /// create one, and from there by any event
   private Set<State> statesOfEntitiesOfTheSessionOnly() {
-    return statesReachedFromBegin(eventType -> !eventType.stored());
+    return statesReachedFromBegin(eventType -> eventType instanceof EventType.NotStored);
   }
 
   /// The states reached from the leaves from `Begin` whose event types are of the kind, and from there by any event
@@ -351,7 +351,7 @@ final class EntityModelChecks {
   private void requireNotStoredToSelf(State from, List<TransitionModel<?, ?>> transitionsFromState) {
     for (var transition : transitionsFromState) {
       for (var leaf : transition.leaves()) {
-        if (!leaf.eventType().stored() && leaf.toState() != null && !leaf.toState().equals(from))
+        if (leaf.eventType() instanceof EventType.NotStored && leaf.toState() != null && !leaf.toState().equals(from))
           refuse(String.format(
               "Event type %s is not stored, but its transition from %s goes to %s. The state of an entity is found " +
                   "from its stored events, so a transition on an event which is not stored must stay in its state",

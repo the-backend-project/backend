@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 /// What the libraries write in their debug output, which is on stdout, has no data of the events, which may be secrets
 public class DebugOutputTest {
 
-  static final EventType<String, String> SecretSet = BasicEventType.of("Secret set", UUID.randomUUID(), DataType.string());
+  static final EventType<String, String> SecretSet = EventType.of("Secret set", UUID.randomUUID(), DataType.string());
   static final EntityModel Vault = EntityModel.of("Vault", UUID.randomUUID(), java.util.Map::of);
 
   @Test

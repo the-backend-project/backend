@@ -18,21 +18,21 @@ public class MaskedEventTest {
 
   enum States implements State {Open}
 
-  static EventType<String, String> PasswordSet = BasicEventType.of("Password set", UUID.fromString("1f3a5c7e-9b2d-4e46-a8c0-d2e4f6a8b013"), DataType.string());
-  static EventType<Void, Void> Viewed = BasicEventType.notStored("Viewed", UUID.fromString("5b7d9f1a-3c4e-4a68-b0d2-e4f6a8c0d235"));
-  static EventType<Void, Void> Touched = BasicEventType.of("Touched", UUID.fromString("9d1f3b5c-7e8a-4c80-a2b4-c6d8e0f2a457"));
+  static EventType<String, String> PasswordSet = EventType.of("Password set", UUID.fromString("1f3a5c7e-9b2d-4e46-a8c0-d2e4f6a8b013"), DataType.string());
+  static EventType<Void, Void> Viewed = EventType.notStored("Viewed", UUID.fromString("5b7d9f1a-3c4e-4a68-b0d2-e4f6a8c0d235"));
+  static EventType<Void, Void> Touched = EventType.of("Touched", UUID.fromString("9d1f3b5c-7e8a-4c80-a2b4-c6d8e0f2a457"));
   static EntityModel Account = EntityModel.of("Account", UUID.fromString("3c5e7a9b-1d2f-4b64-86a8-cadcebf0a679"), () -> Map.of());
 
   /// The transitions of the session read the log of the entity with the whole data of a masked event, by every accessor
   @Test
   public void theLogOfTheSessionHasTheWholeDataOfAMaskedEvent() {
-    var event = new Event<>(UUID.randomUUID(), 1, PasswordSet, ZonedDateTime.now(), "hunter2", _ -> "***");
+    var event = Event.masked(UUID.randomUUID(), 1, PasswordSet, ZonedDateTime.now(), "hunter2", _ -> "***");
     var log = new EventLog(Account, event.entityId(), List.of(event));
     assertEquals("hunter2", log.one(PasswordSet));
     assertEquals("hunter2", log.oneIfExists(PasswordSet).orElseThrow());
     assertEquals("hunter2", log.one(DataType.string()));
     assertEquals("hunter2", log.number(1, PasswordSet));
-    assertEquals("***", new String(event.getMarshalledData()));
+    assertEquals("***", new String(event.storedData()));
   }
 
   /// The transition creating an account, from `Begin`, from which every entity is created
@@ -72,13 +72,13 @@ public class MaskedEventTest {
 
   record Codes(List<String> values) {}
 
-  static EventType<Codes, Codes> CodesSet = BasicEventType.of("Codes set", UUID.fromString("2e4a6c8f-0b1d-4f35-97a9-cbdfe1f3a5c7"), DataType.json(Codes.class));
+  static EventType<Codes, Codes> CodesSet = EventType.of("Codes set", UUID.fromString("2e4a6c8f-0b1d-4f35-97a9-cbdfe1f3a5c7"), DataType.json(Codes.class));
 
   /// A reader of a masked event of the transaction gets a copy of its whole data, like a reader of any other event, so
   /// one changing it doesn't change what the next one reads
   @Test
   public void eachReaderOfAMaskedEventGetsACopyOfItsWholeData() {
-    var event = new Event<>(UUID.randomUUID(), 1, CodesSet, ZonedDateTime.now(), new Codes(new ArrayList<>(List.of("c0de"))), _ -> new Codes(List.of("***")));
+    var event = Event.masked(UUID.randomUUID(), 1, CodesSet, ZonedDateTime.now(), new Codes(new ArrayList<>(List.of("c0de"))), _ -> new Codes(List.of("***")));
     var log = new EventLog(Account, event.entityId(), List.of(event));
     log.one(CodesSet).values().add("changed");
     assertEquals(List.of("c0de"), log.one(CodesSet).values());
@@ -87,10 +87,10 @@ public class MaskedEventTest {
 
   @Test
   public void aMaskGivingNullIsRefused() {
-    var event = new Event<>(UUID.randomUUID(), 1, PasswordSet, ZonedDateTime.now(), "hunter2", _ -> null);
-    var e = assertThrows(IllegalStateException.class, event::getMarshalledData);
+    var event = Event.masked(UUID.randomUUID(), 1, PasswordSet, ZonedDateTime.now(), "hunter2", _ -> null);
+    var e = assertThrows(IllegalStateException.class, event::storedData);
     assertTrue(e.getMessage().contains("The mask of Password set gives null"), e.getMessage());
-    assertEquals("hunter2", event.getUnmarshalledData());
+    assertEquals("hunter2", event.data());
   }
 
   /// An event of a type with data has data, so a transition on it can't end in output() without a data adapter
@@ -104,29 +104,29 @@ public class MaskedEventTest {
   @Test
   public void aMaskIsAppliedOnlyWhenTheDataStoredIsAskedFor() {
     var masked = new java.util.concurrent.atomic.AtomicInteger();
-    var event = new Event<>(UUID.randomUUID(), 1, PasswordSet, ZonedDateTime.now(), "hunter2", _ -> {
+    var event = Event.masked(UUID.randomUUID(), 1, PasswordSet, ZonedDateTime.now(), "hunter2", _ -> {
       masked.incrementAndGet();
       return "***";
     });
-    assertEquals("hunter2", event.getUnmarshalledData());
+    assertEquals("hunter2", event.data());
     assertEquals(0, masked.get());
-    assertEquals("***", new String(event.getMarshalledData()));
-    assertEquals("***", new String(event.data()));
+    assertEquals("***", new String(event.storedData()));
+    assertEquals("***", new String(event.storedData()));
     assertEquals(1, masked.get());
   }
 
   @SuppressWarnings({"unchecked", "rawtypes"})
-  static EventType<ArrayList<String>, ArrayList<String>> Scanned = BasicEventType.of("Scanned", UUID.fromString("2b4d6f8a-0c1e-4a3c-95e7-a9cbedf10b46"), (DataType) DataType.json(ArrayList.class));
+  static EventType<ArrayList<String>, ArrayList<String>> Scanned = EventType.of("Scanned", UUID.fromString("2b4d6f8a-0c1e-4a3c-95e7-a9cbedf10b46"), (DataType) DataType.json(ArrayList.class));
 
   /// Each reader of the log gets the data of its own, which it may change, also of a masked event of the transaction,
   /// whose whole data it gets
   @Test
   public void eachReaderOfTheLogGetsTheDataOfItsOwn() {
-    var event = new Event<>(UUID.randomUUID(), 1, Scanned, ZonedDateTime.now(), new ArrayList<>(List.of("a")));
+    var event = Event.of(UUID.randomUUID(), 1, Scanned, ZonedDateTime.now(), new ArrayList<>(List.of("a")));
     var log = new EventLog(Account, event.entityId(), List.of(event));
     log.one(Scanned).add("b");
     assertEquals(List.of("a"), log.one(Scanned));
-    var masked = new Event<>(UUID.randomUUID(), 1, PasswordSet, ZonedDateTime.now(), "hunter2", _ -> "***");
+    var masked = Event.masked(UUID.randomUUID(), 1, PasswordSet, ZonedDateTime.now(), "hunter2", _ -> "***");
     assertEquals("hunter2", new EventLog(Account, masked.entityId(), List.of(masked)).one(PasswordSet));
   }
 

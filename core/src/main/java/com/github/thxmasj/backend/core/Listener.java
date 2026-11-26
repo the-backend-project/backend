@@ -50,7 +50,7 @@ public interface Listener {
         public int number() {return number;}
 
         /// Whether the event is stored. An event of a type which is not stored, or of an entity of the session only,
-        /// is not (see [EventType#stored()] and [EntityModel#stored()]), so the event log does not have it.
+        /// is not (see [EventType.NotStored] and [EntityModel.NotStored]), so the event log does not have it.
         public boolean stored() {return stored;}
 
         public String type() {return type;}

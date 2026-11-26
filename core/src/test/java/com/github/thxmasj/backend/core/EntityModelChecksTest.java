@@ -20,10 +20,10 @@ public class EntityModelChecksTest {
   enum States implements State {Requested, Accepted, Rejected}
 
   static EventType<Void, Void>
-      Requested = BasicEventType.of("Requested", UUID.fromString("2c5f0a4e-8d1b-4f6a-9c3e-7b2d1e0f4a01")),
-      Retried = BasicEventType.of("Retried", UUID.fromString("2c5f0a4e-8d1b-4f6a-9c3e-7b2d1e0f4a02")),
-      Accepted = BasicEventType.of("Accepted", UUID.fromString("2c5f0a4e-8d1b-4f6a-9c3e-7b2d1e0f4a03")),
-      Rejected = BasicEventType.of("Rejected", UUID.fromString("2c5f0a4e-8d1b-4f6a-9c3e-7b2d1e0f4a04"));
+      Requested = EventType.of("Requested", UUID.fromString("2c5f0a4e-8d1b-4f6a-9c3e-7b2d1e0f4a01")),
+      Retried = EventType.of("Retried", UUID.fromString("2c5f0a4e-8d1b-4f6a-9c3e-7b2d1e0f4a02")),
+      Accepted = EventType.of("Accepted", UUID.fromString("2c5f0a4e-8d1b-4f6a-9c3e-7b2d1e0f4a03")),
+      Rejected = EventType.of("Rejected", UUID.fromString("2c5f0a4e-8d1b-4f6a-9c3e-7b2d1e0f4a04"));
 
   /// The model whose transitions are checked, for a trigger on it. The one checked is created by [#check(Map)] with
   /// its id.
@@ -104,7 +104,7 @@ public class EntityModelChecksTest {
     )));
   }
 
-  static EventType<Void, Void> Viewed = BasicEventType.notStored("Viewed", UUID.fromString("2c5f0a4e-8d1b-4f6a-9c3e-7b2d1e0f4a05"));
+  static EventType<Void, Void> Viewed = EventType.notStored("Viewed", UUID.fromString("2c5f0a4e-8d1b-4f6a-9c3e-7b2d1e0f4a05"));
 
   @Test
   public void anEventNotStoredStayingInItsStateIsAccepted() {
@@ -165,7 +165,7 @@ public class EntityModelChecksTest {
     assertTrue(e.getMessage().startsWith("The transition on Rejected triggers 2 delayed events, with the transitions choosing it, "), e.getMessage());
   }
 
-  static EventType<Void, Void> QuietlyRetried = BasicEventType.notStored("Quietly retried", UUID.fromString("6f8a0c2e-4b1d-4e7a-b9cb-dfe1f3a5c7e9"));
+  static EventType<Void, Void> QuietlyRetried = EventType.notStored("Quietly retried", UUID.fromString("6f8a0c2e-4b1d-4e7a-b9cb-dfe1f3a5c7e9"));
 
   /// A transition with a delayed trigger which triggers an event not stored of the model with a delayed trigger too is
   /// refused, as on the same entity the two would have the same number

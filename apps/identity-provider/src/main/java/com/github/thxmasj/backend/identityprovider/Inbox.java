@@ -8,7 +8,6 @@ import static com.github.thxmasj.backend.http.inbox.HttpInboxRequest.newEntity;
 import static com.github.thxmasj.backend.http.inbox.HttpInboxRequest.when;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
-import com.github.thxmasj.backend.core.BasicEventType;
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EntityModel;
 import com.github.thxmasj.backend.core.EventType;
@@ -85,7 +84,7 @@ public interface Inbox {
   );
 
   /// A request answered at once with the response
-  EventType<HttpResponse<byte[]>, Void> AnswerRequested = BasicEventType.of(
+  EventType<HttpResponse<byte[]>, Void> AnswerRequested = EventType.of(
       "Answer requested",
       UUID.fromString("c7e3a9f1-4b2d-4e86-a0c5-8d1f6b3e9a27"),
       HttpDataType.forResponse(),

@@ -1,37 +1,21 @@
 package com.github.thxmasj.backend.core;
 
-import com.github.thxmasj.backend.core.BasicEventType.Rollback.Data;
 import java.util.Objects;
 import java.util.UUID;
 
-public class BasicEventType<I, O> implements EventType<I, O> {
+/// The event types created by the factory methods of [EventType], equal if their ids are
+sealed class BasicEventType<I, O> implements EventType<I, O> {
 
   private final String name;
   private final UUID id;
   private final DataType<I> inputDataType;
   private final DataType<O> outputDataType;
 
-  protected BasicEventType(String name, UUID id, DataType<I> inputDataType, DataType<O> outputDataType) {
-    assert name != null;
-    assert id != null;
-    assert inputDataType != null;
-    assert outputDataType != null;
-    this.name = name;
-    this.id = id;
-    this.inputDataType = inputDataType;
-    this.outputDataType = outputDataType;
-  }
-
-  public static <I, O> EventType<I, O> of(String name, UUID id, DataType<I> inputDataType, DataType<O> outputDataType) {
-    return new BasicEventType<>(name, id, inputDataType, outputDataType);
-  }
-
-  public static EventType<Void, Void> of(String name, UUID id) {
-    return of(name, id, DataType.none(), DataType.none());
-  }
-
-  public static <T> EventType<T, T> of(String name, UUID id, DataType<T> dataType) {
-    return of(name, id, dataType, dataType);
+  BasicEventType(String name, UUID id, DataType<I> inputDataType, DataType<O> outputDataType) {
+    this.name = Objects.requireNonNull(name, "name is null");
+    this.id = Objects.requireNonNull(id, "id is null");
+    this.inputDataType = Objects.requireNonNull(inputDataType, "inputDataType is null");
+    this.outputDataType = Objects.requireNonNull(outputDataType, "outputDataType is null");
   }
 
   @Override
@@ -40,25 +24,8 @@ public class BasicEventType<I, O> implements EventType<I, O> {
   }
 
   @Override
-  public String toString() {
-    return name;
-  }
-
-  @Override
   public UUID id() {
     return id;
-  }
-
-  @Override
-  public boolean equals(Object o) {
-    if (!(o instanceof BasicEventType<?, ?> that))
-      return false;
-    return Objects.equals(id, that.id);
-  }
-
-  @Override
-  public int hashCode() {
-    return Objects.hashCode(id);
   }
 
   @Override
@@ -71,57 +38,42 @@ public class BasicEventType<I, O> implements EventType<I, O> {
     return outputDataType;
   }
 
-  public static class Rollback extends BasicEventType<Data, Data> {
-    public Rollback(String name, UUID id) {
-      super(name, id, DataType.json(Data.class), DataType.json(Data.class));
-    }
-
-    public record Data(
-        int toNumber,
-        String reason
-    ) {}
+  @Override
+  public String toString() {
+    return name;
   }
 
-  public static class Cancel extends Rollback {
-
-    public Cancel(String name, UUID id) {
-      super(name, id);
-    }
+  @Override
+  public boolean equals(Object o) {
+    return o instanceof BasicEventType<?, ?> that && id.equals(that.id);
   }
 
-  /// An event type which is not stored, see [EventType#stored()]
-  public static <I, O> EventType<I, O> notStored(String name, UUID id, DataType<I> inputDataType, DataType<O> outputDataType) {
-    return new NotStored<>(name, id, inputDataType, outputDataType);
+  @Override
+  public int hashCode() {
+    return id.hashCode();
   }
 
-  /// An event type which is not stored, see [EventType#stored()]
-  public static EventType<Void, Void> notStored(String name, UUID id) {
-    return notStored(name, id, DataType.none(), DataType.none());
-  }
-
-  /// An event type which is not stored, see [EventType#stored()]
-  public static <T> EventType<T, T> notStored(String name, UUID id, DataType<T> dataType) {
-    return notStored(name, id, dataType, dataType);
-  }
-
-  /// An event type which is not stored, see [EventType#stored()], e.g. one reading an entity for another entity to
-  /// assemble from, named `<subject> looked up`
-  public static class NotStored<I, O> extends BasicEventType<I, O> {
-
-    public NotStored(String name, UUID id, DataType<I> inputDataType, DataType<O> outputDataType) {
+  static final class NotStored<I, O> extends BasicEventType<I, O> implements EventType.NotStored<I, O> {
+    NotStored(String name, UUID id, DataType<I> inputDataType, DataType<O> outputDataType) {
       super(name, id, inputDataType, outputDataType);
     }
+  }
 
-    @Override
-    public boolean stored() {
-      return false;
+  static final class Request<I, O> extends BasicEventType<I, O> implements EventType.Request<I, O> {
+    Request(String name, UUID id, DataType<I> inputDataType, DataType<O> outputDataType) {
+      super(name, id, inputDataType, outputDataType);
     }
   }
 
-  public static class DataLess extends BasicEventType<Void, Void> {
+  static sealed class Rollback extends BasicEventType<Rollback.Data, Rollback.Data> implements EventType.Rollback {
+    Rollback(String name, UUID id) {
+      super(name, id, DataType.json(Data.class), DataType.json(Data.class));
+    }
+  }
 
-    public DataLess(String name, UUID id) {
-      super(name, id, DataType.none(), DataType.none());
+  static final class Cancel extends Rollback implements EventType.Cancel {
+    Cancel(String name, UUID id) {
+      super(name, id);
     }
   }
 

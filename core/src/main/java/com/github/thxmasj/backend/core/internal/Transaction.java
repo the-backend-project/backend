@@ -113,7 +113,7 @@ public final class Transaction {
 
   private static boolean isSameId(Event<?> idEvent, Event<?> other) {
     return idEvent.type().id().equals(other.type().id())
-        && Arrays.equals(idEvent.getMarshalledData(), other.getMarshalledData());
+        && Arrays.equals(idEvent.storedData(), other.storedData());
   }
 
 

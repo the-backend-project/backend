@@ -3,7 +3,7 @@ package com.github.thxmasj.backend.core;
 import static com.github.thxmasj.backend.core.TransitionModelBuilder.log;
 import static java.util.Collections.unmodifiableList;
 
-import com.github.thxmasj.backend.core.BasicEventType.Rollback.Data;
+import com.github.thxmasj.backend.core.EventType.Rollback.Data;
 import com.github.thxmasj.backend.core.TransitionModelBuilder.Filter;
 import com.github.thxmasj.backend.core.TransitionModelBuilder.ModelContext;
 import com.github.thxmasj.backend.core.StateMachine.ProcessResult;
@@ -159,9 +159,9 @@ public class TransitionModel<I, O> {
   private static <O> OutputStep<O> marshalledIfStored(OutputStep<O> step) {
     if (!(step.previous() instanceof ChoiceStep<?>)
         && step.stepOutput() instanceof Accepted<O>(Event<O> event, _, _)
-        && event.type().stored()
+        && !(event.type() instanceof EventType.NotStored)
         && !step.inputStep().log().isSessionOnlyWith(event))
-      event.getMarshalledData();
+      event.storedData();
     return step;
   }
 

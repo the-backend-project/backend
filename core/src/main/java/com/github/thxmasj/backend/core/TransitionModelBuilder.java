@@ -3,7 +3,7 @@ package com.github.thxmasj.backend.core;
 import static java.util.Collections.unmodifiableList;
 import static java.util.Objects.requireNonNull;
 
-import com.github.thxmasj.backend.core.BasicEventType.Rollback.Data;
+import com.github.thxmasj.backend.core.EventType.Rollback.Data;
 import com.github.thxmasj.backend.core.EventTrigger.EventCondition;
 import com.github.thxmasj.backend.core.EventTrigger.Conditional;
 import com.github.thxmasj.backend.core.EventTrigger.Immediate;
@@ -129,7 +129,7 @@ public class TransitionModelBuilder<I, T, O> {
         inputStep -> inputStep.flatMap(i -> step(i, () -> Mono.just(new OutputStep<>(
             i,
             ProcessResult.accepted(
-                new Event<>(
+                Event.of(
                     i.log().entityId(),
                     i.log().lastEventNumber() + 1,
                     BuiltinEventTypes.StatusLookedUp,
@@ -158,7 +158,7 @@ public class TransitionModelBuilder<I, T, O> {
                   // Rollback to before start
                   || actualRollbackTo < 0
                   // Rollback more than one request
-                  || i.log().events().subList(actualRollbackTo, i.log().events().size()).stream().filter(e -> e.type() instanceof RequestEventType<?,?>).count() > 1
+                  || i.log().events().subList(actualRollbackTo, i.log().events().size()).stream().filter(e -> e.type() instanceof EventType.Request<?,?>).count() > 1
                   // Rollback from an event which is not the last
                   //|| rollbackFrom != i.log().lastEventNumber()
           ) {
@@ -212,7 +212,7 @@ public class TransitionModelBuilder<I, T, O> {
           return currentContext.flatMap(c -> step(c, () -> Mono.just(new OutputStep<>(
               c,
               ProcessResult.accepted(
-                  new Event<>(
+                  Event.of(
                       i.log().entityId(),
                       i.log().lastEventNumber() + 1,
                       eventType,
@@ -910,8 +910,8 @@ public class TransitionModelBuilder<I, T, O> {
     int number = inputStep.log().lastEventNumber() + 1;
     // Marshalled when the transition is calculated, after its mask, see TransitionModel#calculate
     return mask == null ?
-        Event.marshalledWhenAskedFor(entityId, number, modelContext.eventType(), inputStep.timestamp(), output) :
-        new Event<>(entityId, number, modelContext.eventType(), inputStep.timestamp(), output, mask);
+        Event.of(entityId, number, modelContext.eventType(), inputStep.timestamp(), output) :
+        Event.masked(entityId, number, modelContext.eventType(), inputStep.timestamp(), output, mask);
   }
 
 
@@ -947,11 +947,12 @@ public class TransitionModelBuilder<I, T, O> {
         builderFunction.andThen(a -> a.flatMap(b -> step(b, () -> Mono.just(new OutputStep<>(
             b,
             ProcessResult.accepted(
-                new Event<>(
+                Event.of(
                     b.inputStep().log().entityId(),
                     b.inputStep().log().lastEventNumber() + 1,
                     modelContext.eventType(),
-                    b.inputStep().timestamp()
+                    b.inputStep().timestamp(),
+                    null
                 ),
                 b.inputStep().log().entityModel(),
                 modelContext.severity()

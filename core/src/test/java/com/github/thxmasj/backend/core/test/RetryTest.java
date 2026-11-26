@@ -11,7 +11,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.github.thxmasj.backend.core.Action;
-import com.github.thxmasj.backend.core.BasicEventType;
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EntityModel;
 import com.github.thxmasj.backend.core.Event;
@@ -46,19 +45,19 @@ public class RetryTest {
 
   enum States implements State { Counting, Tallying }
 
-  static EventType<String, String> CountingStarted = BasicEventType.of("Counting started", UUID.fromString("5d0c8a3e-7b21-4f6a-9e4d-1c3b5a7f9e02"), DataType.string());
-  static EventType<String, String> Counted = BasicEventType.of("Counted", UUID.fromString("a2e4c6f8-0b1d-4e3f-8a5c-7d9e1f3b5c14"), DataType.string());
+  static EventType<String, String> CountingStarted = EventType.of("Counting started", UUID.fromString("5d0c8a3e-7b21-4f6a-9e4d-1c3b5a7f9e02"), DataType.string());
+  static EventType<String, String> Counted = EventType.of("Counted", UUID.fromString("a2e4c6f8-0b1d-4e3f-8a5c-7d9e1f3b5c14"), DataType.string());
   /// Runs the action reporting the count to the tally of the id
-  static EventType<UUID, UUID> CountRequested = BasicEventType.of("Count requested", UUID.fromString("c6a8e0b2-4d1f-4a7c-9b3e-5f7a9c1e3d38"), DataType.uuid());
+  static EventType<UUID, UUID> CountRequested = EventType.of("Count requested", UUID.fromString("c6a8e0b2-4d1f-4a7c-9b3e-5f7a9c1e3d38"), DataType.uuid());
   /// The outcome of the action, which triggers an event on the tally
-  static EventType<UUID, UUID> CountReported = BasicEventType.of("Count reported", UUID.fromString("e8c0a2d4-6f3b-4c9e-8d5a-7b9c1e3f5a4a"), DataType.uuid());
+  static EventType<UUID, UUID> CountReported = EventType.of("Count reported", UUID.fromString("e8c0a2d4-6f3b-4c9e-8d5a-7b9c1e3f5a4a"), DataType.uuid());
   /// Runs the action indexing the counter again
-  static EventType<UUID, UUID> IndexRequested = BasicEventType.of("Index requested", UUID.fromString("4e6a8c0e-2f9b-4c5e-a3d1-3b5c7e9a1d70"), DataType.uuid());
+  static EventType<UUID, UUID> IndexRequested = EventType.of("Index requested", UUID.fromString("4e6a8c0e-2f9b-4c5e-a3d1-3b5c7e9a1d70"), DataType.uuid());
   /// The outcome of the action, which triggers an event on the counter's index entity, which has the counter's id
-  static EventType<UUID, UUID> CountIndexed = BasicEventType.of("Count indexed", UUID.fromString("6a8c0e2a-4b1d-4e7a-b5f3-5d7e9b1c3f92"), DataType.uuid());
+  static EventType<UUID, UUID> CountIndexed = EventType.of("Count indexed", UUID.fromString("6a8c0e2a-4b1d-4e7a-b5f3-5d7e9b1c3f92"), DataType.uuid());
   static EventType<UUID, UUID> CounterReferenced = IndexEntityModel.referenceEventType("Counter referenced", UUID.fromString("8c0e2a4c-6d3f-4a9c-87b5-7f9b1d3e5ab4"));
   static IndexEntityModel CounterIndex = IndexEntityModel.of("Counter index", UUID.fromString("a0e2c4e6-8f5b-4c1e-99d7-9b1d3f5a7cd6"), CounterReferenced);
-  static EventType<Void, Void> Tallied = BasicEventType.of("Tallied", UUID.fromString("0a2c4e6a-8b5d-4e1a-9f7c-9d1e3a5b7c5c"));
+  static EventType<Void, Void> Tallied = EventType.of("Tallied", UUID.fromString("0a2c4e6a-8b5d-4e1a-9f7c-9d1e3a5b7c5c"));
 
   static Action<UUID> reporting = new Action<>() {
     @Override public String name() {return "Reporting";}
@@ -123,9 +122,9 @@ public class RetryTest {
         .blockFirst(Duration.ofSeconds(20));
 
     assertTrue(appended.get());
-    assertEquals("this", event.getUnmarshalledData());
+    assertEquals("this", event.data());
     // After the counter's first event and the one the other instance appended
-    assertEquals(3, event.eventNumber().intValue());
+    assertEquals(3, event.eventNumber());
   }
 
   /// The numbers of the events of the type stored by the transactions of the correlation id

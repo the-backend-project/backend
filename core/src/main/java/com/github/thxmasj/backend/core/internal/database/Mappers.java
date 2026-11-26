@@ -11,6 +11,7 @@ import com.github.thxmasj.backend.core.database.MappingFailure;
 import com.github.thxmasj.backend.core.database.Row;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -39,12 +40,11 @@ public class Mappers {
             eventTypes.stream().map(t -> t.id() + " -> " + t.name()).collect(joining("\n"))
         ));
       try {
-        return new Event<>(
+        return Event.stored(
             entityId,
             value(row, "EventNumber", Integer.class),
             eventType,
-            value(row, "Timestamp", LocalDateTime.class),
-            clock,
+            ZonedDateTime.of(value(row, "Timestamp", LocalDateTime.class), clock.getZone()),
             row.get("Data", byte[].class)
         );
       } catch (Exception e) {

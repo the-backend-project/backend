@@ -10,7 +10,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.github.thxmasj.backend.core.BasicEventType;
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EntityModel;
 import com.github.thxmasj.backend.core.EventLog;
@@ -36,8 +35,8 @@ public class EntitiesByIndexTest {
   static EventType<UUID, UUID> customerReferenced = IndexEntityModel.referenceEventType("Customer referenced", UUID.fromString("56e950a0-369a-4bf9-b126-e5c762fdb6bc"));
   static IndexEntityModel Index = IndexEntityModel.of("Index", UUID.fromString("6a0eb254-8e11-4f96-b4fe-c93d8b4e7232"), customerReferenced);
 
-  static EventType<UUID, UUID> OrderCreated = BasicEventType.of("Order created", UUID.fromString("38d58c97-6a1e-450f-a399-52e185859dc1"), DataType.uuid());
-  static EventType<Void, Void> OrderShipped = BasicEventType.of("Order shipped", UUID.fromString("617fb006-eb86-455b-bf98-0c6efea8cba3"));
+  static EventType<UUID, UUID> OrderCreated = EventType.of("Order created", UUID.fromString("38d58c97-6a1e-450f-a399-52e185859dc1"), DataType.uuid());
+  static EventType<Void, Void> OrderShipped = EventType.of("Order shipped", UUID.fromString("617fb006-eb86-455b-bf98-0c6efea8cba3"));
 
   private static Map<State, List<TransitionModel<?, ?>>> orderTransitions() {
     return Map.of(
@@ -135,8 +134,8 @@ public class EntitiesByIndexTest {
 
   static EntityModel Invoice = EntityModel.of("Invoice", UUID.fromString("0c0f4d0e-2a7b-4f53-9a43-b8f1e0b8d3a5"), EntitiesByIndexTest::invoiceTransitions);
   static EntityModel Shipper = EntityModel.of("Shipper", UUID.fromString("8a0d6c5e-5a8f-4d1f-8f25-0a7d1d0c6f4b"), EntitiesByIndexTest::shipperTransitions);
-  static EventType<UUID, UUID> InvoiceCreated = BasicEventType.of("Invoice created", UUID.fromString("4b8e2f0a-6c1d-4e7b-9a3f-2d5c8b1e7f60"), DataType.uuid());
-  static EventType<UUID, UUID> ShippingRequested = BasicEventType.of("Shipping requested", UUID.fromString("c3a9e1d7-0f4b-4c8e-b2d6-7e1f5a9c3b80"), DataType.uuid());
+  static EventType<UUID, UUID> InvoiceCreated = EventType.of("Invoice created", UUID.fromString("4b8e2f0a-6c1d-4e7b-9a3f-2d5c8b1e7f60"), DataType.uuid());
+  static EventType<UUID, UUID> ShippingRequested = EventType.of("Shipping requested", UUID.fromString("c3a9e1d7-0f4b-4c8e-b2d6-7e1f5a9c3b80"), DataType.uuid());
 
   /// The last created entity of the triggered model referencing the id is selected, not an earlier one or one of
   /// another model referencing the same id

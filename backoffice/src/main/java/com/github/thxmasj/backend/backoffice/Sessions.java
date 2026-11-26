@@ -11,7 +11,6 @@ import static com.github.thxmasj.backend.core.Validated.valid;
 import static com.github.thxmasj.backend.http.inbox.HttpInbox.Request;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
-import com.github.thxmasj.backend.core.BasicEventType;
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EntityModel;
 import com.github.thxmasj.backend.core.EntitySelector;
@@ -199,100 +198,100 @@ final class Sessions {
 
   /// A page requested, which is viewed if there is a valid session, and otherwise starts a sign-in. It is never stored,
   /// as one of its outcomes always is.
-  static final EventType<View, Void> ViewRequested = BasicEventType.of(
+  static final EventType<View, Void> ViewRequested = EventType.of(
       "View requested",
       UUID.fromString("1f9c6e3b-8a2d-4d70-b4e5-9c0a7f3d5b18"),
       DataType.json(View.class),
       DataType.none()
   );
-  static final EventType<Start, Start> SignInStarted = BasicEventType.of(
+  static final EventType<Start, Start> SignInStarted = EventType.of(
       "Sign-in started",
       UUID.fromString("c3f1a8e2-6b4d-4c79-8a15-2e9d7f0b5c46"),
       DataType.json(Start.class)
   );
   /// The provider can't be reached to start a sign-in
-  static final EventType<Failure, Failure> SignInUnavailable = BasicEventType.of(
+  static final EventType<Failure, Failure> SignInUnavailable = EventType.of(
       "Sign-in unavailable",
       UUID.fromString("5d2a9f4c-7e1b-4c38-b6a0-3f8d2c7e1a59"),
       DataType.json(Failure.class)
   );
   /// The user returned from the provider. It is never stored, as one of its outcomes always is.
-  static final EventType<Callback, Void> CallbackReceived = BasicEventType.of(
+  static final EventType<Callback, Void> CallbackReceived = EventType.of(
       "Callback received",
       UUID.fromString("a7e3c9d1-2f6b-4a84-9c05-6b1e8d4f2a73"),
       DataType.json(Callback.class),
       DataType.none()
   );
   /// The code dispatched to be redeemed by an outbox request. The code and the secret are masked in the event log.
-  static final EventType<Callback, Callback> CodeRedemptionRequested = BasicEventType.of(
+  static final EventType<Callback, Callback> CodeRedemptionRequested = EventType.of(
       "Code redemption requested",
       UUID.fromString("e9b1d5f3-8c2a-4e67-a3d0-7f4c1b9e6d25"),
       DataType.json(Callback.class)
   );
   /// The response of the provider to the token request, as the outbox tells it. It is never stored, as one of its
   /// outcomes always is.
-  static final EventType<String, Void> TokenReceived = BasicEventType.of(
+  static final EventType<String, Void> TokenReceived = EventType.of(
       "Token received",
       UUID.fromString("3b8f6d2e-1a9c-4f75-b0e4-8d2a6c3f9e17"),
       DataType.string(),
       DataType.none()
   );
   /// The token request failed, e.g. as the provider refused the code or couldn't be reached
-  static final EventType<Void, Void> TokenRequestFailed = BasicEventType.of(
+  static final EventType<Void, Void> TokenRequestFailed = EventType.of(
       "Token request failed",
       UUID.fromString("c6a4e8b2-5d1f-4c93-8e07-1f9b3d6a2c48")
   );
-  static final EventType<Failure, Failure> SignInFailed = BasicEventType.of(
+  static final EventType<Failure, Failure> SignInFailed = EventType.of(
       "Sign-in failed",
       UUID.fromString("e8b4f2a6-0d7c-4e39-9a51-6f3d1c8b2e94"),
       DataType.json(Failure.class)
   );
-  static final EventType<SignedIn, SignedIn> UserSignedIn = BasicEventType.of(
+  static final EventType<SignedIn, SignedIn> UserSignedIn = EventType.of(
       "User signed in",
       UUID.fromString("7e2b9d4f-3c18-4a6e-b5f0-1d8c6a2e9b73"),
       DataType.json(SignedIn.class)
   );
-  static final EventType<Refusal, Refusal> SignInRefused = BasicEventType.of(
+  static final EventType<Refusal, Refusal> SignInRefused = EventType.of(
       "Sign-in refused",
       UUID.fromString("a5d0c7e3-9f21-4b84-8e6a-3c1f5b9d7e20"),
       DataType.json(Refusal.class)
   );
-  static final EventType<View, View> PageViewed = BasicEventType.of(
+  static final EventType<View, View> PageViewed = EventType.of(
       "Page viewed",
       UUID.fromString("6d3a8f1c-2e5b-4b96-a7c0-8e4f2d9b1a35"),
       DataType.json(View.class)
   );
   /// The session expired, as told the user requesting the page
-  static final EventType<View, View> SessionExpired = BasicEventType.of(
+  static final EventType<View, View> SessionExpired = EventType.of(
       "Session expired",
       UUID.fromString("b2e7c4a9-5f06-4d1b-8c93-0a6e3f8d2b57"),
       DataType.json(View.class)
   );
   /// A page requested with the cookie of a session which has ended
-  static final EventType<View, View> ViewRefused = BasicEventType.of(
+  static final EventType<View, View> ViewRefused = EventType.of(
       "View refused",
       UUID.fromString("9a4d1e7b-6c3f-4a28-b0e5-5d2c8f4a1e69"),
       DataType.json(View.class)
   );
   /// A callback of a session which isn't signing in, e.g. the user going back to it
-  static final EventType<Callback, Callback> CallbackRefused = BasicEventType.of(
+  static final EventType<Callback, Callback> CallbackRefused = EventType.of(
       "Callback refused",
       UUID.fromString("2f7c4b9e-6a3d-4e18-9d52-8b1f6e3c7a04"),
       DataType.json(Callback.class)
   );
-  static final EventType<Void, Void> UserSignedOut = BasicEventType.of(
+  static final EventType<Void, Void> UserSignedOut = EventType.of(
       "User signed out",
       UUID.fromString("3c8e5b2a-7d4f-4e10-9b6c-2f1a8d5e7c03")
   );
   /// Not stored, so a resource is an entity of the session only
-  static final EventType<ResourceRequest, ResourceRequest> ResourceRequested = BasicEventType.notStored(
+  static final EventType<ResourceRequest, ResourceRequest> ResourceRequested = EventType.notStored(
       "Resource requested",
       UUID.fromString("4c9e2a7d-1b5f-4a63-8d0e-6f3b9a2c5e81"),
       DataType.json(ResourceRequest.class)
   );
 
   /// The hash of the token of the session cookie, which is the id of the session
-  static final EventType<String, String> TokenClaimed = BasicEventType.of(
+  static final EventType<String, String> TokenClaimed = EventType.of(
       "Token claimed",
       UUID.fromString("f0a6d3c9-4e2b-4f85-a1d7-8b5c2e9f6a14"),
       DataType.string()

@@ -10,9 +10,9 @@ import java.util.Map;
 import java.util.UUID;
 
 /// The `RequestRouting` entity model of an inbox, routing to its requests. Its entities are not stored, but are of the
-/// session of the request only (see [EntityModel#stored()]): the inbox requests store the requests and responses. The
+/// session of the request only (see [EntityModel.NotStored]): the inbox requests store the requests and responses. The
 /// models of all inboxes have the same id, and are in the group [#RequestRouting].
-final class RequestRoutingModel implements EntityModel {
+final class RequestRoutingModel implements EntityModel.NotStored {
 
   /// The routing model of any inbox, which an inbox request responds to by triggering [HttpInbox#ResponseCreated] on
   /// it, identified by the session
@@ -38,13 +38,6 @@ final class RequestRoutingModel implements EntityModel {
   @Override
   public UUID id() {
     return ID;
-  }
-
-  /// The routing is of the session of the request only, as the inbox request it routes to stores the request and the
-  /// response, which it reads back to recognise a retry
-  @Override
-  public boolean stored() {
-    return false;
   }
 
   @Override

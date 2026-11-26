@@ -128,7 +128,7 @@ public class HttpInboxListener {
         .skip(1)
         .next()
         // The response as given, which the event log may have masked
-        .map(event -> HttpResponse.raw(event.getUnmarshalledData()))
+        .map(event -> HttpResponse.raw(event.data()))
         .switchIfEmpty(Mono.error(() -> new IllegalStateException("No response event for " + requestMessage.requestLine())));
   }
 

@@ -11,7 +11,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.github.thxmasj.backend.core.BasicEventType;
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EntityModel;
 import com.github.thxmasj.backend.core.EntitySelector;
@@ -53,66 +52,66 @@ public class ConditionalTriggerTest {
       orderReferenced
   );
 
-  static EventType<UUID, UUID> OrderCreated = BasicEventType.of(
+  static EventType<UUID, UUID> OrderCreated = EventType.of(
       "Order created",
       UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b05"),
       DataType.uuid()
   );
-  static EventType<Void, Void> OrderShipped = BasicEventType.of(
+  static EventType<Void, Void> OrderShipped = EventType.of(
       "Order shipped",
       UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b06")
   );
-  static EventType<Void, Void> OrderCancelled = BasicEventType.of(
+  static EventType<Void, Void> OrderCancelled = EventType.of(
       "Order cancelled",
       UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b0b")
   );
-  static EventType<UUID, UUID> BatchCloseRequestedWhenShippedOrCancelled = BasicEventType.of(
+  static EventType<UUID, UUID> BatchCloseRequestedWhenShippedOrCancelled = EventType.of(
       "Batch close requested when shipped or cancelled",
       UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b0c"),
       DataType.uuid()
   );
-  static EventType<Void, Void> BatchOpened = BasicEventType.of(
+  static EventType<Void, Void> BatchOpened = EventType.of(
       "Batch opened",
       UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b07")
   );
-  static EventType<UUID, UUID> BatchCloseRequestedWhenShipped = BasicEventType.of(
+  static EventType<UUID, UUID> BatchCloseRequestedWhenShipped = EventType.of(
       "Batch close requested when shipped",
       UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b08"),
       DataType.uuid()
   );
-  static EventType<UUID, UUID> SessionBatchCloseRequestedWhenShipped = BasicEventType.of(
+  static EventType<UUID, UUID> SessionBatchCloseRequestedWhenShipped = EventType.of(
       "Session batch close requested when shipped",
       UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b0a"),
       DataType.uuid()
   );
-  static EventType<Void, Void> BatchClosed = BasicEventType.of(
+  static EventType<Void, Void> BatchClosed = EventType.of(
       "Batch closed",
       UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b09")
   );
 
-  static EventType<UUID, UUID> BatchCheckRequestedWhenShipped = BasicEventType.of(
+  static EventType<UUID, UUID> BatchCheckRequestedWhenShipped = EventType.of(
       "Batch check requested when shipped",
       UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b0d"),
       DataType.uuid()
   );
-  static EventType<Void, Void> BatchNoted = BasicEventType.of(
+  static EventType<Void, Void> BatchNoted = EventType.of(
       "Batch noted",
       UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b0f")
   );
   /// Not stored, so its conditional trigger is deleted by a change of its own when it fires, also as its transition
   /// stores another event on the batch
-  static EventType<Void, Void> BatchChecked = BasicEventType.notStored(
+  static EventType<Void, Void> BatchChecked = EventType.notStored(
       "Batch checked",
       UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b0e")
   );
 
-  static EventType<UUID, UUID> CheckRequestedWhenShipped = BasicEventType.of(
+  static EventType<UUID, UUID> CheckRequestedWhenShipped = EventType.of(
       "Check requested when shipped",
       UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b11"),
       DataType.uuid()
   );
   /// Its data is the id of the batch checked
-  static EventType<UUID, UUID> CheckRun = BasicEventType.of(
+  static EventType<UUID, UUID> CheckRun = EventType.of(
       "Check run",
       UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b12"),
       DataType.uuid()
