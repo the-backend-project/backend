@@ -1,41 +1,33 @@
 package com.github.thxmasj.backend.database.mssql.internal;
 
 import com.github.thxmasj.backend.core.EntityModel;
-import com.github.thxmasj.backend.core.IdEntityModel;
-import com.github.thxmasj.backend.core.IndexEntityModel;
+import com.github.thxmasj.backend.core.internal.database.Stored;
 import java.util.Arrays;
 
-/// The tables of the schema an event is stored in, named as in the schema. The id and index entities of an entity have
-/// its entity id, so the table of an event tells which of them it is on.
+/// The tables of the schema with entities and events, named as in the schema, with what the state machine stores in
+/// each
 enum EventTable {
 
-  /// The entities with their entity models, which has a row for the first event of an entity that is neither an id nor
-  /// an index entity, keyed by the entity id alone
-  Entity,
-  /// The events of the entities which are neither id nor index entities
-  Event,
-  /// The events of the index entities
-  IndexEvent,
-  /// The events of the id entities, with a unique index on their type and data
-  IdEvent;
+  Entity(Stored.Entity),
+  Event(Stored.Event),
+  IndexEvent(Stored.IndexEvent),
+  IdEvent(Stored.IdEvent);
+
+  private final Stored stored;
+
+  EventTable(Stored stored) {
+    this.stored = stored;
+  }
 
   /// The table with the events of the entity model
   static EventTable of(EntityModel entityModel) {
-    return switch (entityModel) {
-      case IdEntityModel _ -> IdEvent;
-      case IndexEntityModel _ -> IndexEvent;
-      default -> Event;
-    };
+    Stored stored = Stored.of(entityModel);
+    return Arrays.stream(values()).filter(table -> table.stored == stored).findFirst().orElseThrow();
   }
 
-  /// The table of the name, or null if no event is stored in it
-  static EventTable named(String name) {
-    return Arrays.stream(values()).filter(table -> table.name().equals(name)).findFirst().orElse(null);
-  }
-
-  /// Whether events of the entity model are stored in the table
-  boolean stores(EntityModel entityModel) {
-    return of(entityModel) == (this == Entity ? Event : this);
+  /// What is stored in the table of the name, or null if it has no entities or events
+  static Stored stored(String name) {
+    return Arrays.stream(values()).filter(table -> table.name().equals(name)).findFirst().map(table -> table.stored).orElse(null);
   }
 
 }

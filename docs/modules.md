@@ -25,8 +25,8 @@ exports `com.github.thxmasj.backend.http`: the HTTP messages (`HttpRequest`, `Ht
 packages under `core.internal`, such as the queries and updates of the databases and the steps of a transition, are
 exported only to the other modules of the library, as is `http.internal` to http-inbox and http-outbox. A database
 module exports only its `Database`, and provides the queries and updates of its schema to the state machine as a service
-from an internal package. It also tells the state machine what a conflict its database reports means, e.g. which event
-being stored exists or which id is taken, so core knows nothing of the tables, keys and errors of a database. The internal package of database-pgsql-jdbc is exported to the other PostgreSQL modules, which
+from an internal package. It also maps the tables of its schema to what the state machine stores in them, such as the
+events of id entities, so core tells from a conflict on a table which entity it is on without knowing the tables. The internal package of database-pgsql-jdbc is exported to the other PostgreSQL modules, which
 share it. To create a schema or look into a database without a state machine, use `Database.createSchema` and the [test
 API](testing.md).
 

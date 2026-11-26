@@ -5,18 +5,19 @@ import static java.util.Objects.requireNonNullElse;
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EntityModel;
 import com.github.thxmasj.backend.core.Event;
+import com.github.thxmasj.backend.core.IdEntityModel;
 import com.github.thxmasj.backend.core.Severity;
 import com.github.thxmasj.backend.core.StateMachine.ProcessResult;
 import com.github.thxmasj.backend.core.TriggerType;
 import com.github.thxmasj.backend.core.database.DatabaseClient;
+import com.github.thxmasj.backend.core.database.DatabaseClient.PrimaryKeyConstraintViolation;
 import com.github.thxmasj.backend.core.database.DatabaseClient.Query.Builder;
+import com.github.thxmasj.backend.core.database.DatabaseClient.UniqueIndexConstraintViolation;
 import com.github.thxmasj.backend.core.internal.DelayedEvent;
 import java.time.Clock;
 import java.time.ZonedDateTime;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import reactor.core.publisher.Flux;
 
@@ -268,27 +269,55 @@ public abstract class ChangeState {
   /// the index of their change, as in "p0_". It selects the outbox elements to process, if any.
   protected abstract String sql(List<Change> changes);
 
-  /// The conflict with what another transaction stored which the failure to store the changes is, in the terms of
-  /// the state machine, or null if it is none. It is an [EventAlreadyExists] if the number of an event being stored is
-  /// taken on its entity (see [#changeStoring]), and an [IdEventAlreadyExists] if the id of an id event being stored is
-  /// taken by another entity. The database module reads it from the failure, as it knows where it stores each change
-  /// and how its database reports a conflict.
-  protected abstract Throwable conflict(Throwable failure, List<Change> changes);
+  /// What is stored in the table of the database, or null if it has no entities or events
+  protected abstract Stored stored(String table);
 
-  /// The change storing the event of the number on the entity, of an entity model the predicate accepts. An entity's id
-  /// and index entities have its entity id, so the predicate tells them apart.
-  protected static Optional<Change> changeStoring(
-      List<Change> changes,
-      Predicate<EntityModel> entityModel,
-      UUID entityId,
-      int eventNumber
+  /// The key of an id event in its unique index, as reported by the database, i.e. its type and data
+  protected abstract String duplicateKey(Event<?> idEvent);
+
+  /// The conflict with what another transaction stored which the failure to store the changes is, or null if it is
+  /// none. A primary key violation where entities or events are stored (see [Stored]) is an [EventAlreadyExists] of the
+  /// change whose event exists, and a violation of the unique index of the id events an [IdEventAlreadyExists] of the
+  /// id event whose id is taken.
+  private Throwable conflict(Throwable failure, List<Change> changes) {
+    return switch (failure) {
+      case PrimaryKeyConstraintViolation violation when stored(violation.tableName()) != null ->
+          eventAlreadyExists(violation, stored(violation.tableName()), changes);
+      case UniqueIndexConstraintViolation violation when stored(violation.tableName()) == Stored.IdEvent ->
+          changes.stream()
+              .filter(change -> change.entityModel() instanceof IdEntityModel && change.newEvent() != null)
+              .map(Change::newEvent)
+              .filter(event -> violation.duplicateKey().equalsIgnoreCase(duplicateKey(event)))
+              .<Throwable>map(event -> new IdEventAlreadyExists(event, violation))
+              .findFirst()
+              .orElse(null);
+      default -> null;
+    };
+  }
+
+  /// The event which exists, of the change storing the event of the entity id and number of the key, of an entity
+  /// model whose events are stored where the violation is. The id and index entities of an entity have its entity id,
+  /// so where it is tells them apart.
+  private static EventAlreadyExists eventAlreadyExists(
+      PrimaryKeyConstraintViolation violation,
+      Stored stored,
+      List<Change> changes
   ) {
-    return changes.stream()
-        .filter(change -> change.newEvent() != null
-            && entityId.equals(change.entityId())
-            && change.newEvent().eventNumber() == eventNumber
-            && entityModel.test(change.entityModel()))
-        .findFirst();
+    try {
+      String[] key = violation.duplicateKey().split(",");
+      UUID entityId = UUID.fromString(key[0].trim());
+      int eventNumber = stored == Stored.Entity ? 1 : Integer.parseInt(key[1].trim());
+      return changes.stream()
+          .filter(change -> change.newEvent() != null
+              && entityId.equals(change.entityId())
+              && change.newEvent().eventNumber() == eventNumber
+              && stored.stores(change.entityModel()))
+          .findFirst()
+          .map(change -> new EventAlreadyExists(change, changes, violation))
+          .orElseGet(() -> new EventAlreadyExists(violation));
+    } catch (RuntimeException _) {
+      return new EventAlreadyExists(violation);
+    }
   }
 
   /// Whether the failure is the one the store's SQL fails with when the deletion of the trigger which fired the
