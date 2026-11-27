@@ -71,8 +71,8 @@ public class StorageTest {
   /// A person with a name, i.e. its first event and its name's id event
   private static Change[] person(UUID entityId, String name) {
     return new Change[] {
-        change(Person, Event.of(entityId, 1, PersonCreated, ZonedDateTime.now(clock), null)),
-        change(Names, Event.of(entityId, 1, NameClaimed, ZonedDateTime.now(clock), name))
+        change(Person, Event.of(entityId, 1, PersonCreated, ZonedDateTime.now(clock), null).marshalled()),
+        change(Names, Event.of(entityId, 1, NameClaimed, ZonedDateTime.now(clock), name).marshalled())
     };
   }
 

@@ -78,7 +78,8 @@ public class EventLogTest {
     assertEquals(2, log.count(NumberAssigned));
   }
 
-  /// The data of an event of the transaction is read as the transaction made it, not marshalled and unmarshalled again
+  /// The data of an event of the transaction is read as the transaction made it, not marshalled and unmarshalled again,
+  /// by every accessor
   @Test
   public void theDataOfAnEventOfTheTransactionIsReadAsItIs() {
     var data = new Assigned("8");
@@ -87,6 +88,10 @@ public class EventLogTest {
     assertSame(data, log.last(NumberAssigned));
     assertSame(data, log.all(NumberAssigned).getFirst());
     assertSame(data, log.oneIfExists(NumberAssigned).orElseThrow());
+    assertSame(data, log.one(NumberAssigned));
+    assertSame(data, log.number(1, NumberAssigned));
+    assertSame(data, log.numberIfExists(1, NumberAssigned).orElseThrow());
+    assertSame(data, log.one(DataType.json(Assigned.class)));
   }
 
 }

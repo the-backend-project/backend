@@ -616,7 +616,7 @@ public class StateMachine implements AutoCloseable {
             tuple.t2(),
             tuple.t3(),
             eventLog.lastEventNumber() + 1,
-            tuple.t1(),
+            tuple.t1().forTransition(),
             now,
             correlationId,
             input,
@@ -659,7 +659,7 @@ public class StateMachine implements AutoCloseable {
                       transitionModel,
                       initial.from(),
                       initial.eventNumber(),
-                      initial.log(),
+                      initial.log().forTransition(),
                       initial.timestamp(),
                       initial.correlationId(),
                       tuple(
@@ -702,7 +702,7 @@ public class StateMachine implements AutoCloseable {
         .filter(existing -> existing.idEvent().type().id().equals(type.id())
             && Arrays.equals(existing.idEvent().storedData(), type.inputDataType().marshal(data)))
         .findFirst()
-        .map(existing -> new IdExistsStep<>(tail, ProcessResult.idExists(type, existing.idEvent(), existing.log())))
+        .map(existing -> new IdExistsStep<>(tail, ProcessResult.idExists(type, existing.idEvent(), existing.log().forTransition())))
         .orElse(null);
   }
 
@@ -1198,7 +1198,7 @@ public class StateMachine implements AutoCloseable {
                 tuple.t2(),
                 tuple.t3(),
                 tuple.t1().lastEventNumber() + 1,
-                tuple.t1(),
+                tuple.t1().forTransition(),
                 tail.inputStep().timestamp(),
                 tail.inputStep().correlationId(),
                 adaptedData,

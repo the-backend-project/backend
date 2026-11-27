@@ -262,7 +262,7 @@ public class TestApi {
         .bind("entityId", entityId)
         .map(row -> row.get("EventNumber", Integer.class))
         .one()
-        .map(eventNumber -> Event.of(entityId, eventNumber, type, ZonedDateTime.now(clock), data))
+        .map(eventNumber -> Event.of(entityId, eventNumber, type, ZonedDateTime.now(clock), data).marshalled())
         .flatMap(event -> changeState.execute(ZonedDateTime.now(clock), UUID.randomUUID().toString(), List.of(change(entityType, entityId, event)))
             .then(Mono.just(event)));
   }

@@ -254,7 +254,7 @@ public class TransactionTest {
   }
 
   private static Event<String> idEvent(String id) {
-    return Event.of(UUID.randomUUID(), 1, NumberClaimed, ZonedDateTime.now(), id);
+    return Event.of(UUID.randomUUID(), 1, NumberClaimed, ZonedDateTime.now(), id).marshalled();
   }
 
 }

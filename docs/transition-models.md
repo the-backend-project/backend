@@ -34,6 +34,26 @@ sub-type of `EventType`, which the state machine tells apart by their type:
 | `EventType.request(name, id, …)`   | `EventType.Request`   | Are requests: a rollback goes back over one of them at most                    |
 | `EventType.rollback(name, id)`     | `EventType.Rollback`  | Roll the events of the entity back to an event number                          |
 
+### Event data is shared, so nothing may change it
+
+The data of an event is shared by everyone who reads it: the transitions reading it from the entity's event log
+(`c.log().one(..)`, `last(..)`, `all(..)` and the others alike), the transition triggering it, which gets it back, the
+one who triggered the first event of the transaction and the [listener](monitoring.md). Nothing may change it, as the
+change would be seen by the readers after it, but not stored: an event is marshalled by its transition, when it is
+made. Make event data immutable, e.g. records whose collections are immutable, with `List.copyOf` in the compact
+constructor:
+
+```java
+record Order(String id, List<OrderLine> lines) {
+  Order {
+    lines = List.copyOf(lines);
+  }
+}
+```
+
+An event of the transaction is read as the transition made it. An event read from the event log is unmarshalled when a
+transition first reads it, once per transition: the log a transition is given keeps the data of the events it has read.
+
 ## Steps
 
 `TransitionModelBuilder` builds the transition model. It starts with `onEvent(type).to(state)`, every call after it,

@@ -4,14 +4,16 @@ import static com.github.thxmasj.backend.core.TransitionModelBuilder.WithEvent.o
 import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.ZonedDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 public class MaskedEventTest {
@@ -32,7 +34,7 @@ public class MaskedEventTest {
     assertEquals("hunter2", log.oneIfExists(PasswordSet).orElseThrow());
     assertEquals("hunter2", log.one(DataType.string()));
     assertEquals("hunter2", log.number(1, PasswordSet));
-    assertEquals("***", new String(event.storedData()));
+    assertEquals("***", new String(event.marshalled().storedData()));
   }
 
   /// The transition creating an account, from `Begin`, from which every entity is created
@@ -74,21 +76,23 @@ public class MaskedEventTest {
 
   static EventType<Codes, Codes> CodesSet = EventType.of("Codes set", UUID.fromString("2e4a6c8f-0b1d-4f35-97a9-cbdfe1f3a5c7"), DataType.json(Codes.class));
 
-  /// A reader of a masked event of the transaction gets a copy of its whole data, like a reader of any other event, so
-  /// one changing it doesn't change what the next one reads
+  /// Every reader of a masked event of the transaction shares its whole data, as the readers of any other event do, by
+  /// every accessor
   @Test
-  public void eachReaderOfAMaskedEventGetsACopyOfItsWholeData() {
-    var event = Event.masked(UUID.randomUUID(), 1, CodesSet, ZonedDateTime.now(), new Codes(new ArrayList<>(List.of("c0de"))), _ -> new Codes(List.of("***")));
+  public void everyReaderOfAMaskedEventSharesItsWholeData() {
+    var codes = new Codes(List.of("c0de"));
+    var event = Event.masked(UUID.randomUUID(), 1, CodesSet, ZonedDateTime.now(), codes, _ -> new Codes(List.of("***")));
     var log = new EventLog(Account, event.entityId(), List.of(event));
-    log.one(CodesSet).values().add("changed");
-    assertEquals(List.of("c0de"), log.one(CodesSet).values());
-    assertEquals(List.of("c0de"), log.number(1, CodesSet).values());
+    assertSame(codes, log.one(CodesSet));
+    assertSame(codes, log.number(1, CodesSet));
+    assertSame(codes, log.one(DataType.json(Codes.class)));
+    assertSame(codes, log.last(CodesSet));
   }
 
   @Test
   public void aMaskGivingNullIsRefused() {
     var event = Event.masked(UUID.randomUUID(), 1, PasswordSet, ZonedDateTime.now(), "hunter2", _ -> null);
-    var e = assertThrows(IllegalStateException.class, event::storedData);
+    var e = assertThrows(IllegalStateException.class, event::marshalled);
     assertTrue(e.getMessage().contains("The mask of Password set gives null"), e.getMessage());
     assertEquals("hunter2", event.data());
   }
@@ -100,34 +104,48 @@ public class MaskedEventTest {
     assertTrue(e.getMessage().startsWith("The transition on Password set has no output, but its event type has data"), e.getMessage());
   }
 
-  /// The data is masked when it is first marshalled, which only storing it asks for
+  /// The data is masked when the event is marshalled, which its transition does if it is stored, once
   @Test
-  public void aMaskIsAppliedOnlyWhenTheDataStoredIsAskedFor() {
-    var masked = new java.util.concurrent.atomic.AtomicInteger();
+  public void aMaskIsAppliedOnceWhenTheEventIsMarshalled() {
+    var masked = new AtomicInteger();
     var event = Event.masked(UUID.randomUUID(), 1, PasswordSet, ZonedDateTime.now(), "hunter2", _ -> {
       masked.incrementAndGet();
       return "***";
     });
     assertEquals("hunter2", event.data());
     assertEquals(0, masked.get());
-    assertEquals("***", new String(event.storedData()));
-    assertEquals("***", new String(event.storedData()));
+    var marshalled = event.marshalled();
+    assertSame(marshalled, marshalled.marshalled());
+    assertEquals("***", new String(marshalled.storedData()));
+    assertEquals("***", new String(marshalled.storedData()));
+    assertEquals("hunter2", marshalled.data());
     assertEquals(1, masked.get());
   }
 
-  @SuppressWarnings({"unchecked", "rawtypes"})
-  static EventType<ArrayList<String>, ArrayList<String>> Scanned = EventType.of("Scanned", UUID.fromString("2b4d6f8a-0c1e-4a3c-95e7-a9cbedf10b46"), (DataType) DataType.json(ArrayList.class));
-
-  /// Each reader of the log gets the data of its own, which it may change, also of a masked event of the transaction,
-  /// whose whole data it gets
+  /// An event of a transition has no data as stored until it is marshalled, which its transition does if it is stored,
+  /// so storing one which isn't is a failure rather than marshalling it later
   @Test
-  public void eachReaderOfTheLogGetsTheDataOfItsOwn() {
-    var event = Event.of(UUID.randomUUID(), 1, Scanned, ZonedDateTime.now(), new ArrayList<>(List.of("a")));
-    var log = new EventLog(Account, event.entityId(), List.of(event));
-    log.one(Scanned).add("b");
-    assertEquals(List.of("a"), log.one(Scanned));
-    var masked = Event.masked(UUID.randomUUID(), 1, PasswordSet, ZonedDateTime.now(), "hunter2", _ -> "***");
-    assertEquals("hunter2", new EventLog(Account, masked.entityId(), List.of(masked)).one(PasswordSet));
+  public void anEventNotMarshalledHasNoDataAsStored() {
+    var event = Event.of(UUID.randomUUID(), 1, PasswordSet, ZonedDateTime.now(), "hunter2");
+    var e = assertThrows(IllegalStateException.class, event::storedData);
+    assertTrue(e.getMessage().contains("The event Password set is not marshalled"), e.getMessage());
+    assertEquals("hunter2", new String(event.marshalled().storedData()));
+  }
+
+  /// The log a transition is given unmarshals an event read from the event log once, and every accessor shares the
+  /// data, while any other log unmarshals it on every read
+  @Test
+  public void theLogOfATransitionUnmarshalsAnEventReadFromTheEventLogOnce() {
+    var stored = Event.stored(UUID.randomUUID(), 1, CodesSet, ZonedDateTime.now(), DataType.json(Codes.class).marshal(new Codes(List.of("c0de"))));
+    var log = new EventLog(Account, stored.entityId(), List.of(stored));
+    var ofTransition = log.forTransition();
+    var codes = ofTransition.one(CodesSet);
+    assertEquals(new Codes(List.of("c0de")), codes);
+    assertSame(codes, ofTransition.number(1, CodesSet));
+    assertSame(codes, ofTransition.last(CodesSet));
+    assertSame(codes, ofTransition.all(CodesSet).getFirst());
+    assertNotSame(log.one(CodesSet), log.one(CodesSet));
+    assertNotSame(codes, log.forTransition().one(CodesSet));
   }
 
   static IdEntityType AccountIds = IdEntityType.of("Account ids", UUID.fromString("4d6f8a0c-2e1b-4c5e-a7c9-ebdf1f3b5d79"), PasswordSet);

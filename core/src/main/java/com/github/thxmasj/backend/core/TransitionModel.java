@@ -83,7 +83,6 @@ public class TransitionModel<I, O> {
     // Without the input, which may be a secret, e.g. the credentials of a request
     log(modelContext, "calculate [" + eventType().name() + "] on [" + inputStep.log().entityType().name() + ":" + inputStep.log().entityId() + "]");
     return chain.apply(Mono.just(inputStep))
-        .map(TransitionModel::marshalledIfStored)
         .doOnError(e -> inputStep.stateMachine().transitionFailed(inputStep, e));
   }
 
@@ -154,15 +153,16 @@ public class TransitionModel<I, O> {
     return modelContext.withoutData();
   }
 
-  /// The output step with its event marshalled, after its mask, if it is stored, so that a failure of masking or
-  /// marshalling it is one of the transition, and the event is marshalled once. An event which isn't stored is never
-  /// marshalled for storing, nor is the event of a transition which chose another one, which isn't stored either.
-  private static <O> OutputStep<O> marshalledIfStored(OutputStep<O> step) {
+  /// The output step with its event marshalled, after its mask, if it is stored. The output step of a transition makes
+  /// it, so that a failure of masking or marshalling the event is one of the transition, the event is marshalled once,
+  /// and the step the transaction records is the one with the event as it is stored. An event which isn't stored is
+  /// never marshalled, nor is the event of a transition which chose another one, which isn't stored either.
+  static <O> OutputStep<O> marshalledIfStored(OutputStep<O> step) {
     if (!(step.previous() instanceof ChoiceStep<?>)
-        && step.stepOutput() instanceof Accepted<O>(Event<O> event, _, _)
+        && step.stepOutput() instanceof Accepted<O>(Event<O> event, EntityType entityType, Severity severity)
         && EventTypes.stored(event.type())
         && !step.inputStep().log().isSessionOnlyWith(event))
-      event.storedData();
+      return new OutputStep<>(step.previous(), new Accepted<>(event.marshalled(), entityType, severity));
     return step;
   }
 

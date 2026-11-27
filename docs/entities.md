@@ -14,7 +14,9 @@ from `Begin` which stays in `Begin`, as an entity in it couldn't be told from on
 entities, which have no states, are the exception: all their events are taken from `Begin`.
 
 The transitions of an entity type are declared with `TransitionModelBuilder`. A transition is taken on an event of a
-type, assembles data from the event and the entity's event log, and can trigger events on other entities:
+type, assembles data from the event and the entity's event log, and can trigger events on other entities. The data of
+the events it reads is [shared](transition-models.md#event-data-is-shared-so-nothing-may-change-it), so it must not
+change it:
 
 ```java
 onEvent(GreetingRequested).to(States.Greeted)
