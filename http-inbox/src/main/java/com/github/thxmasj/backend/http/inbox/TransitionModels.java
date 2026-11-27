@@ -503,7 +503,7 @@ interface TransitionModels {
   /// The request is accepted by the application, and indexed by the entity of the application, by which the requests of
   /// an entity are found. A request which is not stored is not indexed, as it can't be found.
   private static <T> TransitionModel<Tuple2<RoutedRequest<?>, EventReference>, Tuple2<HttpRequest<byte[]>, EventReference>> accepted(HttpInboxRequest<T> request) {
-    if (request instanceof EntityType.NotStored)
+    if (!EntityTypes.stored(request))
       return onEvent(RequestAccepted).to(Dispatched)
           .assembleInput()
           .output(d -> tuple(d.t1().request(), d.t2()));

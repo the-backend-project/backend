@@ -9,11 +9,11 @@ import java.util.stream.Stream;
 
 /// An event of an entity, as a transition makes it: its type, its number in the entity's event log, when it happened
 /// and its data, the output of its transition, or null if it has none. It is what the transition's triggers, the one who
-/// triggered it and the transitions of the same transaction see. The event log stores it as a [StoredEvent], which its
+/// triggered it and the transitions of the same transaction see. The event log stores it as a [Change.Event], which its
 /// transition makes if it is stored, masked if the transition masks it.
 ///
-/// Nothing may change the data of an event, neither the transitions reading it, nor the one who triggered it, nor a
-/// listener: they share it. Event data should therefore be immutable, e.g. records with immutable collections, made
+/// Nothing may change the data of an event, neither the transitions reading it, nor the transition triggering it, which
+/// gets it back, nor the one who triggered the transaction: they share it. Event data should therefore be immutable, e.g. records with immutable collections, made
 /// with `List.copyOf` in the compact constructor.
 public record Event<T>(
     UUID entityId,

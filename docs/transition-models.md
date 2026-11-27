@@ -37,12 +37,12 @@ sub-type of `EventType`, which the state machine tells apart by their type:
 ### Event data is shared, so nothing may change it
 
 The data of an event is shared by everyone who reads it: the transitions reading it from the entity's event log
-(`c.log().one(..)`, `last(..)`, `all(..)` and the others alike), the transition triggering it, which gets it back, the
-one who triggered the first event of the transaction and the [listener](monitoring.md). Nothing may change it, as the
-change would be seen by the readers after it, but not stored: the transition of an event which is stored makes its
-stored form, a `Change.Event` with the data marshalled, and masked if the transition masks it, when it makes the
-`Event`. Make event data immutable, e.g. records whose collections are immutable, with `List.copyOf` in the compact
-constructor:
+(`c.log().one(..)`, `last(..)`, `all(..)` and the others alike), the transition triggering it, which gets it back, and
+the one who triggered the first event of the transaction, which `onEvent(..)` gives the events of the transaction.
+Nothing may change it, as the change would be seen by the readers after it, but not stored: the transition of an event
+which is stored makes its stored form, a `Change.Event` with the data marshalled, and masked if the transition masks it,
+when it makes the `Event`. Make event data immutable, e.g. records whose collections are immutable, with `List.copyOf`
+in the compact constructor:
 
 ```java
 record Order(String id, List<OrderLine> lines) {

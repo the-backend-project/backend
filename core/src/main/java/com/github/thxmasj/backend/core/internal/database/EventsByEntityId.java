@@ -10,7 +10,6 @@ import com.github.thxmasj.backend.core.database.DatabaseClient;
 import com.github.thxmasj.backend.core.database.MappingFailure;
 import com.github.thxmasj.backend.core.database.UnknownEntity;
 import java.time.Clock;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -56,7 +55,7 @@ public class EventsByEntityId {
         .map(events -> {
           if (events.isEmpty())
             throw new UnknownEntity(entityType, entityId);
-          return new EventLog(entityType, entityId, Collections.unmodifiableList(events));
+          return new EventLog(entityType, entityId, events);
         });
   }
 

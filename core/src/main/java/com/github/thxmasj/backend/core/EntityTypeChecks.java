@@ -115,7 +115,7 @@ final class EntityTypeChecks {
   private boolean mayBeOfAnEntityOfTheSessionOnly(Set<State> reachedBySessionOnly, State from, TransitionModel<?, ?> transition) {
     if (reachedBySessionOnly.contains(from))
       return true;
-    return from == Begin && transition.leaves().stream().anyMatch(leaf -> leaf.eventType() instanceof EventType.NotStored);
+    return from == Begin && transition.leaves().stream().anyMatch(leaf -> !EventTypes.stored(leaf.eventType()));
   }
 
   /// A conditional trigger refers to the event of its transition, so the transition, and every transition it may
@@ -123,7 +123,7 @@ final class EntityTypeChecks {
   private void requireStoredEventOfConditionalTrigger(TransitionModel<?, ?> transition) {
     if (transition.triggers().stream().anyMatch(trigger -> trigger instanceof EventTrigger.Conditional<?, ?, ?>)) {
       for (var leaf : transition.leaves()) {
-        if (leaf.eventType() instanceof EventType.NotStored)
+        if (!EventTypes.stored(leaf.eventType()))
           refuse(String.format(
               "The transition on %s has a conditional trigger, which refers to its event, but the transition on %s, which " +
                   "it may choose, is not stored",
@@ -184,7 +184,7 @@ final class EntityTypeChecks {
   private static boolean endsNotStoredWithADelayedTrigger(TransitionModel<?, ?> transition, boolean delayedBefore) {
     boolean delayed = delayedBefore || !transition.delayedEventTypes().isEmpty();
     if (transition.filters().isEmpty())
-      return delayed && transition.eventType() instanceof EventType.NotStored;
+      return delayed && !EventTypes.stored(transition.eventType());
     return transition.filters().stream().anyMatch(filter -> endsNotStoredWithADelayedTrigger(filter.alternative().model(), delayed));
   }
 
@@ -325,7 +325,7 @@ final class EntityTypeChecks {
   /// The states an entity of the session only of a stored entity type reaches: from `Begin` by the events not stored, which
   /// create one, and from there by any event
   private Set<State> statesOfEntitiesOfTheSessionOnly() {
-    return statesReachedFromBegin(eventType -> eventType instanceof EventType.NotStored);
+    return statesReachedFromBegin(eventType -> !EventTypes.stored(eventType));
   }
 
   /// The states reached from the leaves from `Begin` whose event types are of the kind, and from there by any event
@@ -352,7 +352,7 @@ final class EntityTypeChecks {
   private void requireNotStoredToSelf(State from, List<TransitionModel<?, ?>> transitionsFromState) {
     for (var transition : transitionsFromState) {
       for (var leaf : transition.leaves()) {
-        if (leaf.eventType() instanceof EventType.NotStored && leaf.toState() != null && !leaf.toState().equals(from))
+        if (!EventTypes.stored(leaf.eventType()) && leaf.toState() != null && !leaf.toState().equals(from))
           refuse(String.format(
               "Event type %s is not stored, but its transition from %s goes to %s. The state of an entity is found " +
                   "from its stored events, so a transition on an event which is not stored must stay in its state",

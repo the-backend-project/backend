@@ -8,6 +8,8 @@ import static java.util.stream.Collectors.joining;
 
 import com.github.thxmasj.backend.core.Tuples.Tuple2;
 import com.github.thxmasj.backend.core.internal.Debug;
+import com.github.thxmasj.backend.core.internal.EntityTypes;
+import com.github.thxmasj.backend.core.internal.EventTypes;
 import java.util.List;
 import java.util.Map;
 
@@ -22,9 +24,9 @@ class Traverser {
 
   Traverser(EntityType model) {
     this.transitions = model.transitions();
-    this.hasEntitiesOfTheSessionOnly = model instanceof EntityType.NotStored || transitions.getOrDefault(Begin, List.of()).stream()
+    this.hasEntitiesOfTheSessionOnly = !EntityTypes.stored(model) || transitions.getOrDefault(Begin, List.of()).stream()
         .flatMap(transition -> transition.leaves().stream())
-        .anyMatch(leaf -> leaf.eventType() instanceof EventType.NotStored);
+        .anyMatch(leaf -> !EventTypes.stored(leaf.eventType()));
   }
 
   /// Whether entities of the session only are of the model, which the later transactions of a session find among the

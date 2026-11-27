@@ -7,7 +7,6 @@ import com.github.thxmasj.backend.core.database.DatabaseClient;
 import com.github.thxmasj.backend.core.database.MappingFailure;
 import java.time.Clock;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import reactor.core.publisher.Mono;
@@ -58,7 +57,7 @@ public class EventsByLastIndexEvent {
         .map(events -> new EventLog(
             entityType,
             events.getFirst().entityId(),
-            Collections.unmodifiableList(events)
+            events
         ));
   }
 

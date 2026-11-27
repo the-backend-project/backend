@@ -4,8 +4,11 @@ import static com.github.thxmasj.backend.core.Event.join;
 import static java.util.Collections.unmodifiableList;
 import static java.util.stream.Collectors.joining;
 
+import com.github.thxmasj.backend.core.internal.EntityTypes;
+import com.github.thxmasj.backend.core.internal.EventTypes;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -15,13 +18,14 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Stream;
 
-/// The event log of an entity: its events, oldest first. An event read from the event log is a [StoredEvent], with its
-/// data as stored, and an event of the transaction an [Event], with its data as the transition made it. The accessors
-/// give the data of the events, which every reader shares, so nothing may change it (see [Event]).
+/// The event log of an entity: its events, oldest first. An event read from the event log is a [Change.Event], with
+/// its data as stored, and an event of the transaction an [Event], with its data as the transition made it. The
+/// accessors give the data of the events, which every reader shares, so nothing may change it (see [Event]). Which of
+/// the events are effective, as rollbacks skip the ones they roll back, is found once, when the log is made.
 ///
-/// The log a transition is given unmarshals each stored event at most once, and shares the data within the
-/// transition. It is confined to the transition, whose steps are taken one after another, so it needs no locking. Any
-/// other log unmarshals the data of a stored event on every read.
+/// The log a transition is given, including its traversal to the current state, unmarshals each stored event at most
+/// once, and shares the data within the transition. It is confined to the transition, whose steps are taken one after
+/// another, so it needs no locking. Any other log unmarshals the data of a stored event on every read.
 public final class EventLog {
 
   /// An event in an event log, as stored or as its transition made it
@@ -43,19 +47,23 @@ public final class EventLog {
   private final EntityType entityType;
   private final UUID entityId;
   private final List<Entry<?>> events;
+  /// The events which aren't rolled back, see [#effectiveEvents()]
+  private final List<Entry<?>> effectiveEvents;
   /// The stored forms of the events of the transaction which are stored, by their numbers, which [#asStored()] gives
   private final Map<Integer, Change.Event<?>> storedForms;
   /// The data of the stored events which have been read, by their numbers, if the log is a transition's, or else null
   private final Map<Integer, Object> unmarshalled;
 
   public EventLog(EntityType entityType, UUID entityId, List<? extends Entry<?>> events) {
-    this(entityType, entityId, List.copyOf(events), Map.of(), null);
+    this(entityType, entityId, List.copyOf(events), null, Map.of(), null);
   }
 
+  /// @param effectiveEvents the effective events of the events, or null to find them
   private EventLog(
       EntityType entityType,
       UUID entityId,
       List<Entry<?>> events,
+      List<Entry<?>> effectiveEvents,
       Map<Integer, Change.Event<?>> storedForms,
       Map<Integer, Object> unmarshalled
   ) {
@@ -64,6 +72,7 @@ public final class EventLog {
     this.events = events;
     this.storedForms = storedForms;
     this.unmarshalled = unmarshalled;
+    this.effectiveEvents = effectiveEvents != null ? effectiveEvents : effective(events);
   }
 
   public EntityType entityType() {
@@ -81,7 +90,13 @@ public final class EventLog {
   /// The log as a transition is given it, which unmarshals the data of each stored event at most once, see
   /// [EventLog]. It must only be read by the transition, e.g. by its steps and the transitions it chooses.
   EventLog forTransition() {
-    return new EventLog(entityType, entityId, events, storedForms, new HashMap<>());
+    return new EventLog(entityType, entityId, events, effectiveEvents, storedForms, new HashMap<>());
+  }
+
+  /// The log without the data the log of a transition keeps, for another reader than the transition, see
+  /// [#forTransition()]
+  EventLog detached() {
+    return unmarshalled == null ? this : new EventLog(entityType, entityId, events, effectiveEvents, storedForms, null);
   }
 
   public int lastEventNumber() {
@@ -194,17 +209,22 @@ public final class EventLog {
     return events.stream().filter(e -> e.eventNumber() >= fromEventNumber).toList();
   }
 
-  /**
-   * Effective events, ignoring events that were rolled back.
-   */
+  /// The events which aren't rolled back: a rollback skips the events after the one it rolls back to, and is not
+  /// effective itself
   public List<Entry<?>> effectiveEvents() {
+    return effectiveEvents;
+  }
+
+  /// The effective events of the events, see [#effectiveEvents()]. The data of a rollback is unmarshalled once for
+  /// this, when the log is made.
+  private static List<Entry<?>> effective(List<Entry<?>> events) {
     // Traverse the event log backwards and skip events between a rollback and its target exclusively
     List<Entry<?>> effectiveEventsReversed = new ArrayList<>(events.size());
     int skipTo = Integer.MAX_VALUE;
     for (Entry<?> event : events.reversed()) {
       if (skipTo >= event.eventNumber()) {
         if (event.type() instanceof EventType.Rollback) {
-          int toNumber = this.<EventType.Rollback.Data>dataOf(event).toNumber();
+          int toNumber = ((EventType.Rollback.Data) dataOf(event, null)).toNumber();
           skipTo = toNumber >= 0 ? toNumber : event.eventNumber() - 1 + toNumber ;
         } else {
           effectiveEventsReversed.add(event);
@@ -215,14 +235,22 @@ public final class EventLog {
   }
 
   /// The log with its events as they are stored, e.g. masked, as a later transaction reads it
+  ///
+  /// @throws IllegalStateException if an event of the transaction in it has no stored form, which its transition
+  ///                               makes if it is stored, so that its whole data doesn't stand in for the stored
   EventLog asStored() {
-    return new EventLog(
-        entityType,
-        entityId,
-        events.stream().<Entry<?>>map(e -> e instanceof Event<?> && storedForms.containsKey(e.eventNumber()) ? storedForms.get(e.eventNumber()) : e).toList(),
-        Map.of(),
-        null
-    );
+    List<Entry<?>> stored = new ArrayList<>(events.size());
+    for (Entry<?> event : events) {
+      if (event instanceof Event<?>) {
+        Change.Event<?> form = storedForms.get(event.eventNumber());
+        if (form == null)
+          throw new IllegalStateException("The event " + event.typeName() + " of " + entityType.name() + " in the log has no stored form");
+        stored.add(form);
+      } else {
+        stored.add(event);
+      }
+    }
+    return new EventLog(entityType, entityId, List.copyOf(stored), null, Map.of(), null);
   }
 
   /// The log with the event after its events, e.g. one read from the event log
@@ -237,9 +265,12 @@ public final class EventLog {
     if (storedForm != null) {
       var added = new HashMap<>(storedForms);
       added.put(newEvent.eventNumber(), storedForm);
-      forms = Map.copyOf(added);
+      forms = Collections.unmodifiableMap(added);
     }
-    return new EventLog(entityType, entityId, join(events, newEvent), forms, null);
+    List<Entry<?>> joined = join(events, newEvent);
+    // A rollback changes which events are effective, any other event is one more
+    List<Entry<?>> effective = newEvent.type() instanceof EventType.Rollback ? null : join(effectiveEvents, newEvent);
+    return new EventLog(entityType, entityId, joined, effective, forms, null);
   }
 
   public static EventLog empty(UUID id, EntityType entityType) {
@@ -254,8 +285,13 @@ public final class EventLog {
     return this.<T>dataOf(entry);
   }
 
-  @SuppressWarnings("unchecked")
   private <T> T dataOf(Entry<?> entry) {
+    return dataOf(entry, unmarshalled);
+  }
+
+  /// The data of the event, unmarshalled once into the map if it isn't null, or else on every call
+  @SuppressWarnings("unchecked")
+  private static <T> T dataOf(Entry<?> entry, Map<Integer, Object> unmarshalled) {
     return switch ((Entry<T>) entry) {
       case Event<T> event -> event.data();
       case Change.Event<T> stored when unmarshalled == null -> stored.unmarshalled();
@@ -290,13 +326,13 @@ public final class EventLog {
   /// Whether the entity is one of the session only, whose events are not stored: of a model which is not stored, or
   /// created by an event which is not stored
   boolean isSessionOnly() {
-    return entityType instanceof EntityType.NotStored || (!events.isEmpty() && events.getFirst().type() instanceof EventType.NotStored);
+    return !EntityTypes.stored(entityType) || (!events.isEmpty() && !EventTypes.stored(events.getFirst().type()));
   }
 
   /// Whether the entity would be one of the session only with the event as its next, see [#isSessionOnly()]
   boolean isSessionOnlyWith(Entry<?> next) {
     Entry<?> first = events.isEmpty() ? next : events.getFirst();
-    return entityType instanceof EntityType.NotStored || first.type() instanceof EventType.NotStored;
+    return !EntityTypes.stored(entityType) || !EventTypes.stored(first.type());
   }
 
 

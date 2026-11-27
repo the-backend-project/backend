@@ -262,7 +262,7 @@ public class TestApi {
         .map(row -> row.get("EventNumber", Integer.class))
         .one()
         .map(eventNumber -> new Event<>(entityId, eventNumber, type, ZonedDateTime.now(clock), data))
-        .flatMap(event -> changeState.execute(ZonedDateTime.now(clock), UUID.randomUUID().toString(), List.of(change(entityType, entityId, event)))
+        .flatMap(event -> changeState.execute(ZonedDateTime.now(clock), UUID.randomUUID().toString(), List.of(change(entityType, event)))
             .then(Mono.just(event)));
   }
 
@@ -308,7 +308,7 @@ public class TestApi {
     return eventType;
   }
 
-  private static Change change(EntityType entityType, UUID entityId, Event<?> event) {
+  private static Change change(EntityType entityType, Event<?> event) {
     return Change.Event.of(entityType, event, null);
   }
 

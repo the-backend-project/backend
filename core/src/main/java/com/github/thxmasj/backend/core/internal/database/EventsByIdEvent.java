@@ -10,7 +10,6 @@ import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.database.DatabaseClient;
 import com.github.thxmasj.backend.core.database.MappingFailure;
 import java.time.Clock;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -64,7 +63,7 @@ public class EventsByIdEvent {
         .map(events -> new EventLog(
             events.getFirst().entityType(),
             events.getFirst().entityId(),
-            Collections.unmodifiableList(events.stream().<EventLog.Entry<?>>map(TypedEvent::event).toList())
+            events.stream().<EventLog.Entry<?>>map(TypedEvent::event).toList()
         ));
   }
 

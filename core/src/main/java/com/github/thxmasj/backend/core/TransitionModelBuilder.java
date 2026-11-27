@@ -9,6 +9,7 @@ import com.github.thxmasj.backend.core.EventTrigger.Conditional;
 import com.github.thxmasj.backend.core.EventTrigger.Immediate;
 import com.github.thxmasj.backend.core.StateMachine.CircularChange;
 import com.github.thxmasj.backend.core.StateMachine.ProcessResult;
+import com.github.thxmasj.backend.core.StateMachine.ProcessResult.Accepted;
 import com.github.thxmasj.backend.core.StateMachine.RejectedEvent;
 import com.github.thxmasj.backend.core.TransitionModelBuilder.WithFilter.Alternative;
 import com.github.thxmasj.backend.core.Tuples.Tuple2;
@@ -18,6 +19,7 @@ import com.github.thxmasj.backend.core.internal.Debug;
 import com.github.thxmasj.backend.core.internal.TransitionStep;
 import com.github.thxmasj.backend.core.internal.TransitionStep.ActionStep;
 import com.github.thxmasj.backend.core.internal.TransitionStep.AssembleStep;
+import com.github.thxmasj.backend.core.internal.EventTypes;
 import com.github.thxmasj.backend.core.internal.TransitionStep.ChoiceStep;
 import com.github.thxmasj.backend.core.internal.TransitionStep.ConditionalTriggerStep;
 import com.github.thxmasj.backend.core.internal.TransitionStep.DelayedTriggerStep;
@@ -124,19 +126,17 @@ public class TransitionModelBuilder<I, T, O> {
   public static TransitionModel<Void, State> statusOn() {
     return new TransitionModel<>(
         ModelContext.of(false, null, BuiltinEventTypes.StatusLookedUp),
-        inputStep -> inputStep.flatMap(i -> step(i, () -> Mono.just(new OutputStep<>(
+        inputStep -> inputStep.flatMap(i -> step(i, () -> Mono.just(acceptedStep(
             i,
-            ProcessResult.accepted(
-                new Event<>(
-                    i.log().entityId(),
-                    i.log().lastEventNumber() + 1,
-                    BuiltinEventTypes.StatusLookedUp,
-                    i.timestamp(),
-                    i.from()
-                ),
-                i.log().entityType(),
-                Severity.Info
-            )
+            new Event<>(
+                i.log().entityId(),
+                i.log().lastEventNumber() + 1,
+                BuiltinEventTypes.StatusLookedUp,
+                i.timestamp(),
+                i.from()
+            ),
+            Severity.Info,
+            null
         ))))
     );
   }
@@ -207,20 +207,18 @@ public class TransitionModelBuilder<I, T, O> {
               ));
             }
           }
-          return currentContext.flatMap(c -> step(c, () -> Mono.just(TransitionModel.withStoredForm(new OutputStep<>(
+          return currentContext.flatMap(c -> step(c, () -> Mono.just(acceptedStep(
               c,
-              ProcessResult.accepted(
-                  new Event<>(
-                      i.log().entityId(),
-                      i.log().lastEventNumber() + 1,
-                      eventType,
-                      i.timestamp(),
-                      i.stepOutput()
-                  ),
-                  i.log().entityType(),
-                  Severity.Info
-              )
-          ), null))));
+              new Event<>(
+                  i.log().entityId(),
+                  i.log().lastEventNumber() + 1,
+                  eventType,
+                  i.timestamp(),
+                  i.stepOutput()
+              ),
+              Severity.Info,
+              null
+          ))));
         })
     );
   }
@@ -885,14 +883,27 @@ public class TransitionModelBuilder<I, T, O> {
   /// The event is made, and masked, in the output step, which is recorded by the transaction, so that the same step is
   /// given when the changes are calculated again, and the steps after it are recognised.
   private Function<Mono<InputStep<I>>, Mono<OutputStep<O>>> outputChain(Function<T, O> f, UnaryOperator<O> mask) {
-    return builderFunction.andThen(a -> a.flatMap(b -> step(b, () -> Mono.just(TransitionModel.withStoredForm(new OutputStep<>(
+    return builderFunction.andThen(a -> a.flatMap(b -> step(b, () -> Mono.just(acceptedStep(
         b,
-        ProcessResult.accepted(
-            event(b, f.apply(b.stepOutput())),
-            b.inputStep().log().entityType(),
-            modelContext.severity()
-        )
-    ), mask)))));
+        event(b, f.apply(b.stepOutput())),
+        modelContext.severity(),
+        mask
+    )))));
+  }
+
+  /// The output step of a transition after the step, accepting the event on the entity of the step's log, with the
+  /// event's stored form, masked by the mask if it isn't null, if the event is stored. Every transition accepts its
+  /// event by this, which decides whether the event is stored, so an event is stored if and only if it has its stored
+  /// form. The output step makes it, so that a failure of masking or marshalling the event is one of the transition,
+  /// the event is marshalled once, and the step the transaction records has the event as it is stored. An event which
+  /// isn't stored is never marshalled: one of a type not stored, of an entity of the session only, or of a transition
+  /// which chose another one, which isn't stored either.
+  private static <O> OutputStep<O> acceptedStep(TransitionStep<?> previous, Event<O> event, Severity severity, UnaryOperator<O> mask) {
+    EntityType entityType = previous.inputStep().log().entityType();
+    boolean stored = !(previous instanceof ChoiceStep<?>)
+        && EventTypes.stored(event.type())
+        && !previous.inputStep().log().isSessionOnlyWith(event);
+    return new OutputStep<>(previous, new Accepted<>(event, entityType, severity, stored ? Change.Event.of(entityType, event, mask) : null));
   }
 
   /// The event of the transition with the output, masked when stored if the mask isn't null. A transition which
@@ -907,7 +918,7 @@ public class TransitionModelBuilder<I, T, O> {
     InputStep<?> inputStep = step.inputStep();
     UUID entityId = inputStep.log().entityId();
     int number = inputStep.log().lastEventNumber() + 1;
-    // Its stored form is made in the output step, after the mask, if it is stored, see TransitionModel#withStoredForm
+    // Its stored form is made in the output step, after the mask, if it is stored, see #acceptedStep
     return new Event<>(entityId, number, modelContext.eventType(), inputStep.timestamp(), output);
   }
 
@@ -941,20 +952,18 @@ public class TransitionModelBuilder<I, T, O> {
   public TransitionModel<I, O> output() {
     return new TransitionModel<>(
         modelContext.asWithoutData(),
-        builderFunction.andThen(a -> a.flatMap(b -> step(b, () -> Mono.just(TransitionModel.withStoredForm(new OutputStep<>(
+        builderFunction.andThen(a -> a.flatMap(b -> step(b, () -> Mono.just(acceptedStep(
             b,
-            ProcessResult.accepted(
-                new Event<>(
-                    b.inputStep().log().entityId(),
-                    b.inputStep().log().lastEventNumber() + 1,
-                    modelContext.eventType(),
-                    b.inputStep().timestamp(),
-                    null
-                ),
-                b.inputStep().log().entityType(),
-                modelContext.severity()
-            )
-        ), null)))))
+            new Event<>(
+                b.inputStep().log().entityId(),
+                b.inputStep().log().lastEventNumber() + 1,
+                modelContext.eventType(),
+                b.inputStep().timestamp(),
+                null
+            ),
+            modelContext.severity(),
+            null
+        )))))
     );
   }
 

@@ -68,6 +68,7 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -367,13 +368,6 @@ public class StateMachine implements AutoCloseable {
       throw new IllegalStateException("Result is " + this);
     }
 
-    static <T> Accepted<T> accepted(Event<T> event, EntityType entityType) {
-      return new Accepted<>(event, entityType, Severity.Info, null);
-    }
-
-    static <T> Accepted<T> accepted(Event<T> event, EntityType entityType, Severity severity) {
-      return new Accepted<>(event, entityType, severity, null);
-    }
 
     default boolean isAccepted() {
       return this instanceof Accepted;
@@ -557,13 +551,11 @@ public class StateMachine implements AutoCloseable {
   /// event of the transition if it is stored, as the next event stored follows one which isn't. An entity of the
   /// session only has its events in the session, as they are.
   private static <T> ActionTrigger<T> withEventAsRead(ActionTrigger<T> actionTrigger, Accepted<?> accepted) {
-    Event<?> event = accepted.event();
-    if (actionTrigger.eventLog().isSessionOnlyWith(event))
-      return actionTrigger.withEvent(event);
+    if (accepted.stored() == null && actionTrigger.eventLog().isSessionOnlyWith(accepted.event()))
+      return actionTrigger.withEvent(accepted.event());
     var asRead = new ActionTrigger<>(actionTrigger.action(), actionTrigger.data(), actionTrigger.eventLog().asStored());
-    if (!EventTypes.stored(event.type()))
-      return asRead;
-    return asRead.withEvent(accepted.stored() != null ? accepted.stored() : event);
+    // An event which is stored has its stored form, which its transition made, and one which isn't is not in the log
+    return accepted.stored() != null ? asRead.withEvent(accepted.stored()) : asRead;
   }
 
   private List<ActionTrigger<?>> actionTriggers(@NotNull TransitionStep<?> tail) {
@@ -616,7 +608,7 @@ public class StateMachine implements AutoCloseable {
             tuple.t2(),
             tuple.t3(),
             eventLog.lastEventNumber() + 1,
-            tuple.t1().forTransition(),
+            tuple.t1(),
             now,
             correlationId,
             input,
@@ -921,7 +913,7 @@ public class StateMachine implements AutoCloseable {
         // An event which is not stored is not in the log of a stored entity, which the next event stored follows. The
         // log the transition was given is the entity's as the transaction has it, without the event, so it is the log,
         // rather than one read from the database.
-        return new InTransaction(EventTypes.stored(event.type()) || log.isSessionOnlyWith(event) ? log.withNewEvent(event, stored) : log, null);
+        return new InTransaction(EventTypes.stored(event.type()) || log.isSessionOnlyWith(event) ? log.withNewEvent(event, stored) : log.detached(), null);
       }
     }
     return new InTransaction(null, previousTransaction(transitionStep));
@@ -966,15 +958,10 @@ public class StateMachine implements AutoCloseable {
       return new CalculatedChange(firedTrigger.entityType(), firedTrigger.entityId(), null, null, Severity.Info, null, null, firedTrigger);
     }
 
-    /// The change as it is stored
-    ///
-    /// @throws IllegalStateException if its new event has no stored form, which its transition makes if it is stored
+    /// The change as it is stored, of a change which is (see [Storing#isStored])
     Change stored() {
-      if (newEvent != null) {
-        if (storedEvent == null)
-          throw new IllegalStateException("The event " + newEvent.typeName() + " of " + entityType.name() + " has no stored form, which its transition makes if it is stored");
-        return storedEvent;
-      }
+      if (newEvent != null)
+        return Objects.requireNonNull(storedEvent, "The event of a change which is not stored has no stored form");
       if (delayedTrigger != null)
         return delayedTrigger;
       if (conditionalTrigger != null)
@@ -987,7 +974,7 @@ public class StateMachine implements AutoCloseable {
     public String toString() {
       if (newEvent != null)
         return entityType.name() + ":" + entityId + ":ev:[" + newEvent.typeName() + "]:" + newEvent.eventNumber() +
-            (newEvent.type() instanceof EventType.NotStored ? " (not stored)" : "");
+            (storedEvent == null ? " (not stored)" : "");
       return stored().toString();
     }
 
@@ -1093,15 +1080,16 @@ public class StateMachine implements AutoCloseable {
       return change.conditionalTrigger() != null ? conditionalTriggerOwners.get(change.conditionalTrigger()) : EntityKey.of(change);
     }
 
-    /// Whether the change is stored. The deletion of the trigger which fired the transaction always is, as the trigger
-    /// is stored whatever its entity, which may be one of the session only, e.g. of a model not stored, and would
-    /// otherwise fire again.
+    /// Whether the change is stored. An event is if its transition made its stored form, which its output step decides
+    /// (see [TransitionModel#withStoredForm]). The deletion of the trigger which fired the transaction always is, as the
+    /// trigger is stored whatever its entity, which may be one of the session only, e.g. of a model not stored, and would
+    /// otherwise fire again. A delayed or conditional trigger is unless its entity is one of the session only.
     boolean isStored(CalculatedChange change) {
+      if (change.newEvent() != null)
+        return change.storedEvent() != null;
       if (change.firedTrigger() != null)
         return true;
-      if (sessionOnly.contains(owner(change)))
-        return false;
-      return change.newEvent() == null || EventTypes.stored(change.newEvent().type());
+      return !sessionOnly.contains(owner(change));
     }
 
   }
@@ -1151,6 +1139,16 @@ public class StateMachine implements AutoCloseable {
     for (var change : changes) {
       if (storing.isStored(change))
         continue;
+      // An event is stored if its transition made its stored form, which every transition's output step does for an
+      // event of a stored type of an entity which is stored. One which has none would be lost, so it is refused.
+      if (change.newEvent() != null && EventTypes.stored(change.newEvent().type()) && !storing.sessionOnly().contains(EntityKey.of(change)))
+        throw new IllegalStateException(String.format(
+            "%s on %s/%s is an event of a stored type of an entity which is stored, but its transition made no stored " +
+                "form of it, which every transition's output step makes",
+            change.newEvent().type().name(),
+            change.entityType().name(),
+            change.entityId()
+        ));
       if (change.delayedTrigger() != null || change.conditionalTrigger() != null)
         throw new IllegalStateException(String.format(
             "%s on %s/%s is a delayed or conditional trigger of an entity of the session only, whose events are not " +
@@ -1240,7 +1238,7 @@ public class StateMachine implements AutoCloseable {
                 return tuple;
               throw new RejectedEvent(
                   eventTrigger.eventType(),
-                  tuple.t1(),
+                  tuple.t1().detached(),
                   tuple.t3()
               );
             })
@@ -1261,7 +1259,7 @@ public class StateMachine implements AutoCloseable {
                 tuple.t2(),
                 tuple.t3(),
                 tuple.t1().lastEventNumber() + 1,
-                tuple.t1().forTransition(),
+                tuple.t1(),
                 tail.inputStep().timestamp(),
                 tail.inputStep().correlationId(),
                 adaptedData,
@@ -1386,10 +1384,13 @@ public class StateMachine implements AutoCloseable {
     }
   }
 
+  /// The log as the transition on the event type is given it, which its traversal reads too, the transition model
+  /// and the current state
   private <I, O> Tuple3<EventLog, TransitionModel<I, O>, State> transitionModel(
-      EventLog eventLog,
+      EventLog entityLog,
       EventType<I, O> eventType
   ) {
+    EventLog eventLog = entityLog.forTransition();
     var traverser = traversers.get(eventLog.entityType());
     if (traverser == null) throw new IllegalStateException("No traverser for " + eventLog.entityType().name());
     var currentStateAndTransition = traverser.accept(eventLog, eventType);

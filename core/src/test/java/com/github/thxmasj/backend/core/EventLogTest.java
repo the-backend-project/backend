@@ -3,6 +3,7 @@ package com.github.thxmasj.backend.core;
 import static java.util.UUID.randomUUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.github.thxmasj.backend.core.EventType.Rollback.Data;
 import java.time.Clock;
@@ -44,6 +45,31 @@ public class EventLogTest {
     );
     EventLog log = new EventLog(null, null, events);
     assertEquals(List.of(), log.effectiveEvents());
+  }
+
+  /// The effective events of a log follow the events added to it, also a rollback, which rolls the events after the
+  /// one it rolls back to back
+  @Test
+  public void theEffectiveEventsFollowTheEventsAdded() {
+    var first = new Event<>(randomUUID(), 1, EventType.of("Test1", randomUUID()), ZonedDateTime.now(), null);
+    var second = new Event<>(randomUUID(), 2, EventType.of("Test2", randomUUID()), ZonedDateTime.now(), null);
+    var log = EventLog.empty(null, null).withNewEvent(first).withNewEvent(second);
+    assertEquals(List.of(first, second), log.effectiveEvents());
+    var rolledBack = log.withNewEvent(new Event<>(randomUUID(), 3, BuiltinEventTypes.EventsRolledBack, ZonedDateTime.now(), new Data(1, "testing")));
+    assertEquals(List.of(first), rolledBack.effectiveEvents());
+  }
+
+  /// The log as stored has the stored form of every event of the transaction, so an event without one is refused,
+  /// rather than its whole data standing in for the stored form
+  @Test
+  public void theLogAsStoredRefusesAnEventOfTheTransactionWithoutItsStoredForm() {
+    var numbers = EntityType.of("Numbers", randomUUID(), Map::of);
+    var event = new Event<>(randomUUID(), 1, NumberAssigned, ZonedDateTime.now(), new Assigned("7"));
+    var log = EventLog.empty(event.entityId(), numbers).withNewEvent(event);
+    var e = assertThrows(IllegalStateException.class, log::asStored);
+    assertEquals("The event Number assigned of Numbers in the log has no stored form", e.getMessage());
+    var withForm = EventLog.empty(event.entityId(), numbers).withNewEvent(event, Change.Event.of(numbers, event, null));
+    assertEquals(new Assigned("7"), withForm.asStored().one(NumberAssigned));
   }
 
   @Test

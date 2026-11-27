@@ -4,6 +4,7 @@ import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static java.util.Collections.unmodifiableList;
 
 import com.github.thxmasj.backend.core.EventType.Rollback;
+import com.github.thxmasj.backend.core.internal.EntityTypes;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -208,7 +209,7 @@ public final class Replay {
         match(step, steps);
     }
     List<EntityType> notStored = entityTypes.isEmpty() ? List.of() : EntityType.reachable(entityTypes).stream()
-        .filter(model -> model instanceof EntityType.NotStored)
+        .filter(model -> !EntityTypes.stored(model))
         .toList();
     List<Step> all = new ArrayList<>();
     List<EventLog> allLogs = new ArrayList<>(logs);
