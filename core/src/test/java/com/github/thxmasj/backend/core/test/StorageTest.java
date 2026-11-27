@@ -16,7 +16,6 @@ import com.github.thxmasj.backend.core.StoredEvent;
 import com.github.thxmasj.backend.core.IdEntityType;
 import com.github.thxmasj.backend.core.State;
 import com.github.thxmasj.backend.core.database.UnknownEntity;
-import com.github.thxmasj.backend.core.internal.DelayedEvent;
 import com.github.thxmasj.backend.core.internal.database.ChangeState.Change;
 import com.github.thxmasj.backend.core.internal.database.IdEventAlreadyExists;
 import com.github.thxmasj.backend.core.internal.database.Storage;
@@ -78,13 +77,7 @@ public class StorageTest {
   }
 
   private static Change change(EntityType entityType, Event<?> event) {
-    return new Change() {
-      @Override public EntityType entityType() {return entityType;}
-      @Override public UUID entityId() {return event.entityId();}
-      @Override public Event<?> newEvent() {return event;}
-      @Override public StoredEvent<?> storedEvent() {return StoredEvent.of(event, null);}
-      @Override public DelayedEvent<?> delayedEvent() {return null;}
-    };
+    return Change.ofEvent(entityType, StoredEvent.of(event, null));
   }
 
   @Test

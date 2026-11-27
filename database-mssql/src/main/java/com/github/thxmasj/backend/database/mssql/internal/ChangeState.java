@@ -3,7 +3,6 @@ package com.github.thxmasj.backend.database.mssql.internal;
 import static java.util.stream.Collectors.joining;
 
 import com.github.thxmasj.backend.core.EntityType;
-import com.github.thxmasj.backend.core.Event;
 import com.github.thxmasj.backend.core.IdEntityType;
 import com.github.thxmasj.backend.core.IndexEntityType;
 import com.github.thxmasj.backend.core.StoredEvent;
@@ -63,7 +62,7 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
       Change change
   ) {
     EntityType entityType = change.entityType();
-    Event<?> event = change.newEvent();
+    StoredEvent<?> event = change.newEvent();
     DelayedEvent<?> delayedEvent = change.delayedEvent();
     ConditionalTrigger<?> conditionalTrigger = change.conditionalTrigger();
     FiredTrigger firedTrigger = change.firedTrigger();

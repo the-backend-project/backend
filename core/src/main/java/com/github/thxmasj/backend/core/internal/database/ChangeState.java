@@ -4,11 +4,8 @@ import static java.util.Objects.requireNonNullElse;
 
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EntityType;
-import com.github.thxmasj.backend.core.Event;
 import com.github.thxmasj.backend.core.IdEntityType;
-import com.github.thxmasj.backend.core.Severity;
 import com.github.thxmasj.backend.core.StoredEvent;
-import com.github.thxmasj.backend.core.StateMachine.ProcessResult;
 import com.github.thxmasj.backend.core.TriggerType;
 import com.github.thxmasj.backend.core.database.DatabaseClient;
 import com.github.thxmasj.backend.core.database.DatabaseClient.PrimaryKeyConstraintViolation;
@@ -22,7 +19,6 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import reactor.core.publisher.Flux;
-import com.github.thxmasj.backend.core.EventType;
 
 /// Stores the changes of a transition atomically
 public abstract class ChangeState {
@@ -36,7 +32,7 @@ public abstract class ChangeState {
   }
 
   private void bind(Builder spec, ZonedDateTime timestamp, String correlationId, Change change) {
-    Event<?> event = change.newEvent();
+    StoredEvent<?> event = change.newEvent();
     if (change.entityId() != null)
       spec.bind("entityId", change.entityId());
     spec.bind("entityTypeId", change.entityType().id());
@@ -44,7 +40,7 @@ public abstract class ChangeState {
     if (event != null) {
       spec.bind("eventNumber", event.eventNumber())
           .bind("type", event.type().id())
-          .bindNullable("data", byte[].class, storedData(change));
+          .bindNullable("data", byte[].class, event.data());
     }
     if (change.firedTrigger() != null) {
       if (change.firedTrigger().type() == TriggerType.CONDITIONAL)
@@ -89,38 +85,21 @@ public abstract class ChangeState {
     return conditionalTrigger.type().inputDataType().marshal(conditionalTrigger.data());
   }
 
-  /// The data of the new event of the change as it is stored
+  /// A change to store: a new event, as it is stored, a delayed or conditional trigger, or the deletion of a stored
+  /// trigger which fired an event not stored
   ///
-  /// @throws IllegalStateException if the event has no stored form, which its transition makes if it is stored
-  private static byte[] storedData(Change change) {
-    if (change.storedEvent() == null)
-      throw new IllegalStateException("The event " + change.newEvent().typeName() + " of " + change.entityType().name() + " has no stored form, which its transition makes if it is stored");
-    return change.storedEvent().data();
-  }
-
-  public interface Change {
-
-    EntityType entityType();
-    
-    UUID entityId();
-    
-    Event<?> newEvent();
-
-    /// The new event as it is stored, if it is, or else null
-    default StoredEvent<?> storedEvent() {
-      return null;
-    }
-
-    DelayedEvent<?> delayedEvent();
-
-    default ConditionalTrigger<?> conditionalTrigger() {
-      return null;
-    }
-
-    /// The severity of this change's new event, for the listener of the state machine. It is not stored.
-    default Severity severity() {
-      return Severity.Info;
-    }
+  /// @param newEvent           the new event as it is stored, or null
+  /// @param delayedEvent       the delayed event to store, or null
+  /// @param conditionalTrigger the conditional trigger to store, or null
+  /// @param firedTrigger       the stored trigger this change deletes, as it fired an event not stored, or null
+  public record Change(
+      EntityType entityType,
+      UUID entityId,
+      StoredEvent<?> newEvent,
+      DelayedEvent<?> delayedEvent,
+      ConditionalTrigger<?> conditionalTrigger,
+      FiredTrigger firedTrigger
+  ) {
 
     /// A stored trigger which fired an event not stored, which is deleted by this change, as no event stored deletes it
     ///
@@ -128,141 +107,34 @@ public abstract class ChangeState {
     /// @param eventNumber the number of the event it fired, which a delayed trigger has
     /// @param eventTypeId the type of the event it fired, by which a delayed trigger is told from one which replaced
     ///                    it with the same number
-    record FiredTrigger(TriggerType type, UUID id, int eventNumber, UUID eventTypeId) {}
+    public record FiredTrigger(TriggerType type, UUID id, int eventNumber, UUID eventTypeId) {}
 
-    /// The stored trigger this change deletes, as it fired an event not stored, or null
-    default FiredTrigger firedTrigger() {
-      return null;
+    public static Change ofEvent(EntityType entityType, StoredEvent<?> newEvent) {
+      return new Change(entityType, newEvent.entityId(), newEvent, null, null, null);
     }
 
-    static Change fromFiredTrigger(EntityType entityType, UUID entityId, FiredTrigger firedTrigger) {
-      return new Change() {
-        @Override public EntityType entityType() {return entityType;}
-        @Override public UUID entityId() {return entityId;}
-        @Override public Event<?> newEvent() {return null;}
-        @Override public DelayedEvent<?> delayedEvent() {return null;}
-        @Override public FiredTrigger firedTrigger() {return firedTrigger;}
-        @Override public String toString() {
-          return entityType.name() + ":" + entityId + ":fired(" + firedTrigger.type() + "):" + firedTrigger.eventNumber();
-        }
-      };
+    public static Change ofDelayedEvent(DelayedEvent<?> delayedEvent) {
+      return new Change(delayedEvent.entityType(), delayedEvent.entityId(), null, delayedEvent, null, null);
     }
 
-    static Change fromConditionalTrigger(ConditionalTrigger<?> conditionalTrigger) {
-      return new Change() {
-        @Override
-        public EntityType entityType() {
-          return conditionalTrigger.entityType();
-        }
-
-        @Override
-        public UUID entityId() {
-          return conditionalTrigger.entityId();
-        }
-
-        @Override
-        public Event<?> newEvent() {
-          return null;
-        }
-
-        @Override
-        public DelayedEvent<?> delayedEvent() {
-          return null;
-        }
-
-        @Override
-        public ConditionalTrigger<?> conditionalTrigger() {
-          return conditionalTrigger;
-        }
-
-        @Override
-        public String toString() {
-          return entityType().name() + ":" +
-              conditionalTrigger.entityId() + ":trigger(conditional):[" +
-              conditionalTrigger.type().name() + "]";
-        }
-
-      };
+    public static Change ofConditionalTrigger(ConditionalTrigger<?> conditionalTrigger) {
+      return new Change(conditionalTrigger.entityType(), conditionalTrigger.entityId(), null, null, conditionalTrigger, null);
     }
 
-    static Change fromAcceptedEvent(ProcessResult.Accepted<?> acceptedEvent) {
-      return new Change() {
-        @Override
-        public EntityType entityType() {
-          return acceptedEvent.entityType();
-        }
-
-        @Override
-        public UUID entityId() {
-          return acceptedEvent.event().entityId();
-        }
-
-        @Override
-        public Event<?> newEvent() {
-          return acceptedEvent.event();
-        }
-
-        @Override
-        public StoredEvent<?> storedEvent() {
-          return acceptedEvent.stored();
-        }
-
-        @Override
-        public Severity severity() {
-          return acceptedEvent.severity();
-        }
-
-
-        @Override
-        public DelayedEvent<?> delayedEvent() {
-          return null;
-        }
-
-        @Override
-        public String toString() {
-          return entityType().name() + ":" +
-              entityId() + ":ev:[" +
-              newEvent().typeName() + "]:" +
-              // Without the data, which may be a secret, and which would be marshalled just for the debug output
-              newEvent().eventNumber() +
-              (newEvent().type() instanceof EventType.NotStored ? " (not stored)" : "");
-        }
-
-      };
+    public static Change ofFiredTrigger(EntityType entityType, UUID entityId, FiredTrigger firedTrigger) {
+      return new Change(entityType, entityId, null, null, null, firedTrigger);
     }
 
-    static Change fromDelayedEvent(DelayedEvent<?> delayedEvent) {
-      return new Change() {
-        @Override
-        public EntityType entityType() {
-          return delayedEvent.entityType();
-        }
-
-        @Override
-        public UUID entityId() {
-          return delayedEvent.entityId();
-        }
-
-        @Override
-        public Event<?> newEvent() {
-          return null;
-        }
-
-        @Override
-        public DelayedEvent<?> delayedEvent() {
-          return delayedEvent;
-        }
-
-        @Override
-        public String toString() {
-          return entityType().name() + ":" +
-              delayedEvent.entityId() + ":ev:[" +
-              delayedEvent.type().name() + "]:" +
-              delayedEvent.eventNumber() +
-              " after " + delayedEvent.after();
-        }
-
-      };
+    /// The change without the data of its event, which may be a secret
+    @Override
+    public String toString() {
+      if (newEvent != null)
+        return entityType.name() + ":" + entityId + ":ev:[" + newEvent.typeName() + "]:" + newEvent.eventNumber();
+      if (delayedEvent != null)
+        return entityType.name() + ":" + entityId + ":ev:[" + delayedEvent.type().name() + "]:" + delayedEvent.eventNumber() + " after " + delayedEvent.after();
+      if (conditionalTrigger != null)
+        return entityType.name() + ":" + entityId + ":trigger(conditional):[" + conditionalTrigger.type().name() + "]";
+      return entityType.name() + ":" + entityId + ":fired(" + firedTrigger.type() + "):" + firedTrigger.eventNumber();
     }
 
   }
@@ -304,8 +176,8 @@ public abstract class ChangeState {
           eventAlreadyExists(violation, changes);
       case UniqueIndexConstraintViolation violation when violation.tableType() == TableType.IdEvent ->
           changes.stream()
-              .filter(change -> change.entityType() instanceof IdEntityType && change.storedEvent() != null)
-              .<StoredEvent<?>>map(Change::storedEvent)
+              .filter(change -> change.entityType() instanceof IdEntityType && change.newEvent() != null)
+              .<StoredEvent<?>>map(Change::newEvent)
               .filter(event -> violation.duplicateKey().equalsIgnoreCase(duplicateKey(event)))
               .<Throwable>map(event -> new IdEventAlreadyExists(event, violation))
               .findFirst()

@@ -519,8 +519,8 @@ public class StateMachine implements AutoCloseable {
   /// entity takes: it fires unless another event is stored first. The event of the transition, or of the one it
   /// chooses, is the first one accepted on the entity after the delayed trigger, as the events it triggers on its own
   /// entity are calculated after it.
-  private List<Change> changes(@NotNull TransitionStep<?> tail) {
-    ArrayList<Change> changes = new ArrayList<>();
+  private List<CalculatedChange> changes(@NotNull TransitionStep<?> tail) {
+    ArrayList<CalculatedChange> changes = new ArrayList<>();
     var nextEvents = new HashMap<EntityKey, Event<?>>();
     for (var c = tail; c != null; c = c.previous()) {
       switch (c) {
@@ -528,11 +528,11 @@ public class StateMachine implements AutoCloseable {
             when occ.stepOutput().isAccepted() && !(occ.previous() instanceof ChoiceStep<?>) -> {
           var accepted = occ.stepOutput().accepted();
           nextEvents.put(new EntityKey(accepted.entityType().id(), accepted.event().entityId()), accepted.event());
-          changes.add(Change.fromAcceptedEvent(accepted));
+          changes.add(CalculatedChange.fromAcceptedEvent(accepted));
         }
         case OutputStep<?> _ -> {}
-        case DelayedTriggerStep<?, ?> dtcc -> changes.add(Change.fromDelayedEvent(numbered(dtcc.delayedEvent(), nextEvents)));
-        case ConditionalTriggerStep<?, ?> ctcc -> changes.add(Change.fromConditionalTrigger(ctcc.conditionalTrigger()));
+        case DelayedTriggerStep<?, ?> dtcc -> changes.add(CalculatedChange.fromDelayedEvent(numbered(dtcc.delayedEvent(), nextEvents)));
+        case ConditionalTriggerStep<?, ?> ctcc -> changes.add(CalculatedChange.fromConditionalTrigger(ctcc.conditionalTrigger()));
         case AssembleStep<?> _ -> {}
         case ChoiceStep<?> _ -> {}
         case InputStep<?> _ -> {}
@@ -937,8 +937,60 @@ public class StateMachine implements AutoCloseable {
     return traverser == null || traverser.hasEntitiesOfTheSessionOnly();
   }
 
+  /// A change the transaction calculated: a new event, with its stored form if it is stored, a delayed or conditional
+  /// trigger, or the deletion of a stored trigger which fired an event not stored. Those which are stored are stored
+  /// as [Change]s, while the listener and the one who triggered the transaction are told the new events as they are.
+  ///
+  /// @param severity the severity of the new event, for the listener, which is not stored
+  private record CalculatedChange(
+      EntityType entityType,
+      UUID entityId,
+      Event<?> newEvent,
+      StoredEvent<?> storedEvent,
+      Severity severity,
+      DelayedEvent<?> delayedEvent,
+      ConditionalTrigger<?> conditionalTrigger,
+      Change.FiredTrigger firedTrigger
+  ) {
+
+    static CalculatedChange fromAcceptedEvent(Accepted<?> accepted) {
+      return new CalculatedChange(accepted.entityType(), accepted.event().entityId(), accepted.event(), accepted.stored(), accepted.severity(), null, null, null);
+    }
+
+    static CalculatedChange fromDelayedEvent(DelayedEvent<?> delayedEvent) {
+      return new CalculatedChange(delayedEvent.entityType(), delayedEvent.entityId(), null, null, Severity.Info, delayedEvent, null, null);
+    }
+
+    static CalculatedChange fromConditionalTrigger(ConditionalTrigger<?> conditionalTrigger) {
+      return new CalculatedChange(conditionalTrigger.entityType(), conditionalTrigger.entityId(), null, null, Severity.Info, null, conditionalTrigger, null);
+    }
+
+    static CalculatedChange fromFiredTrigger(EntityType entityType, UUID entityId, Change.FiredTrigger firedTrigger) {
+      return new CalculatedChange(entityType, entityId, null, null, Severity.Info, null, null, firedTrigger);
+    }
+
+    /// The change as it is stored
+    ///
+    /// @throws IllegalStateException if its new event has no stored form, which its transition makes if it is stored
+    Change stored() {
+      if (newEvent != null && storedEvent == null)
+        throw new IllegalStateException("The event " + newEvent.typeName() + " of " + entityType.name() + " has no stored form, which its transition makes if it is stored");
+      return new Change(entityType, entityId, storedEvent, delayedEvent, conditionalTrigger, firedTrigger);
+    }
+
+    /// The change without the data of its event, which may be a secret
+    @Override
+    public String toString() {
+      if (newEvent != null)
+        return entityType.name() + ":" + entityId + ":ev:[" + newEvent.typeName() + "]:" + newEvent.eventNumber() +
+            (newEvent.type() instanceof EventType.NotStored ? " (not stored)" : "");
+      return new Change(entityType, entityId, null, delayedEvent, conditionalTrigger, firedTrigger).toString();
+    }
+
+  }
+
   private record EntityKey(UUID entityTypeId, UUID entityId) {
-    static EntityKey of(Change change) {
+    static EntityKey of(CalculatedChange change) {
       return new EntityKey(change.entityType().id(), change.entityId());
     }
   }
@@ -961,15 +1013,15 @@ public class StateMachine implements AutoCloseable {
   /// entity too, which deletes the delayed triggers it follows, so this is only needed if no event is stored on it, e.g.
   /// as the transition chosen isn't. It comes first, as a delayed event the transaction triggers on the entity
   /// replaces the trigger.
-  private static List<Change> withFiredTrigger(List<Change> changes, TransitionStep<?> tail, Storing storing) {
+  private static List<CalculatedChange> withFiredTrigger(List<CalculatedChange> changes, TransitionStep<?> tail, Storing storing) {
     InputStep<?> initial = initial(tail);
     if (initial == null || initial.triggerType() == null)
       return changes;
     var entity = new EntityKey(initial.log().entityType().id(), initial.log().entityId());
     if (initial.triggerType() == TriggerType.DELAYED && hasStoredEvent(changes, entity, storing))
       return changes;
-    var withDeletion = new ArrayList<Change>(changes.size() + 1);
-    withDeletion.add(Change.fromFiredTrigger(
+    var withDeletion = new ArrayList<CalculatedChange>(changes.size() + 1);
+    withDeletion.add(CalculatedChange.fromFiredTrigger(
         initial.log().entityType(),
         initial.log().entityId(),
         new Change.FiredTrigger(initial.triggerType(), initial.triggerId(), initial.eventNumber(), initial.transitionModel().eventType().id())
@@ -978,7 +1030,7 @@ public class StateMachine implements AutoCloseable {
     return withDeletion;
   }
 
-  private static boolean hasStoredEvent(List<Change> changes, EntityKey entity, Storing storing) {
+  private static boolean hasStoredEvent(List<CalculatedChange> changes, EntityKey entity, Storing storing) {
     return changes.stream().anyMatch(change -> change.newEvent() != null && EntityKey.of(change).equals(entity) && storing.isStored(change));
   }
 
@@ -986,15 +1038,15 @@ public class StateMachine implements AutoCloseable {
   /// event: by number, those of the entity type coming first among the changes first, as an id or index entity, which
   /// has the entity id of its entity, follows the entity, and the events with the same number on an entity, of which
   /// all but the last aren't stored, in the order they were calculated, the reverse of the order they are collected in
-  private static List<Change> inEmitOrder(List<Change> collected) {
-    var position = new IdentityHashMap<Change, Integer>();
+  private static List<CalculatedChange> inEmitOrder(List<CalculatedChange> collected) {
+    var position = new IdentityHashMap<CalculatedChange, Integer>();
     var modelRank = new HashMap<UUID, Integer>();
-    for (Change change : collected) {
+    for (CalculatedChange change : collected) {
       position.put(change, position.size());
       modelRank.putIfAbsent(change.entityType().id(), modelRank.size());
     }
     return collected.stream()
-        .sorted(Comparator.<Change>comparingInt(change -> change.newEvent().eventNumber())
+        .sorted(Comparator.<CalculatedChange>comparingInt(change -> change.newEvent().eventNumber())
             .thenComparingInt(change -> modelRank.get(change.entityType().id()))
             .thenComparingInt(change -> -position.get(change)))
         .toList();
@@ -1030,14 +1082,14 @@ public class StateMachine implements AutoCloseable {
 
     /// The entity whose storing decides that of the change: that of its event or delayed event, or, for a conditional
     /// trigger, the entity whose transition created it, whose event it refers to, rather than the one it fires on
-    EntityKey owner(Change change) {
+    EntityKey owner(CalculatedChange change) {
       return change.conditionalTrigger() != null ? conditionalTriggerOwners.get(change.conditionalTrigger()) : EntityKey.of(change);
     }
 
     /// Whether the change is stored. The deletion of the trigger which fired the transaction always is, as the trigger
     /// is stored whatever its entity, which may be one of the session only, e.g. of a model not stored, and would
     /// otherwise fire again.
-    boolean isStored(Change change) {
+    boolean isStored(CalculatedChange change) {
       if (change.firedTrigger() != null)
         return true;
       if (sessionOnly.contains(owner(change)))
@@ -1050,7 +1102,7 @@ public class StateMachine implements AutoCloseable {
   /// The changes without the delayed events which a later event stored on their entity in the transaction replaces, as
   /// the event the delayed one is numbered for is taken. The changes are stored from the last calculated to the first,
   /// so such a delayed event would otherwise be stored after the event which replaces it, and be left pending.
-  private static List<Change> withoutReplacedDelayedEvents(List<Change> changes, Storing storing) {
+  private static List<CalculatedChange> withoutReplacedDelayedEvents(List<CalculatedChange> changes, Storing storing) {
     var lastStored = new HashMap<EntityKey, Integer>();
     for (var change : changes)
       if (change.newEvent() != null && storing.isStored(change))
@@ -1065,9 +1117,9 @@ public class StateMachine implements AutoCloseable {
   /// on an event not stored which it triggers on its own entity, as an entity has at most one pending delayed trigger.
   /// One followed by a later event stored on the entity is left out, as that event replaces it, but of two with the same
   /// number one would quietly replace the other.
-  private static void requireAtMostOneDelayedTriggerPerEntity(List<Change> changes) {
+  private static void requireAtMostOneDelayedTriggerPerEntity(List<CalculatedChange> changes) {
     record Key(EntityKey entity, int eventNumber) {}
-    var delayed = new HashMap<Key, Change>();
+    var delayed = new HashMap<Key, CalculatedChange>();
     for (var change : changes) {
       if (change.delayedEvent() == null)
         continue;
@@ -1087,7 +1139,7 @@ public class StateMachine implements AutoCloseable {
 
   /// Fails for a change which is not stored but would have to be: a delayed or conditional trigger of an entity of the
   /// session only, which fires in a session of its own
-  private static void requireStorable(List<Change> changes, Storing storing) {
+  private static void requireStorable(List<CalculatedChange> changes, Storing storing) {
     requireAtMostOneDelayedTriggerPerEntity(changes);
     for (var change : changes) {
       if (storing.isStored(change))
@@ -1340,7 +1392,7 @@ public class StateMachine implements AutoCloseable {
   /// The changes for the listener, in the order they were calculated, which is the reverse of the order they are
   /// collected in, so the accepted events of an entity are in the order of their numbers: the events and the delayed
   /// events and conditional triggers created, not the deletion of the trigger which fired the transaction
-  private List<Listener.Change> toListenerFormat(List<Change> changes, Storing storing) {
+  private List<Listener.Change> toListenerFormat(List<CalculatedChange> changes, Storing storing) {
     return changes.reversed().stream()
         .filter(change -> change.firedTrigger() == null)
         .map(change -> new Listener.Change(
@@ -1370,7 +1422,7 @@ public class StateMachine implements AutoCloseable {
       TransitionStep<?> transitionStep
   ) {
     var storing = Storing.of(transitionStep);
-    List<Change> changes = withoutReplacedDelayedEvents(withFiredTrigger(changes(transitionStep), transitionStep, storing), storing);
+    List<CalculatedChange> changes = withoutReplacedDelayedEvents(withFiredTrigger(changes(transitionStep), transitionStep, storing), storing);
     Debug.log("Changes to store:\n" + changes.stream().map(Object::toString).collect(joining("\n")));
     return Mono.fromRunnable(() -> requireStorable(changes, storing))
         // Refused when stored, after the transition is calculated, so told the listener as a failure of the transition
@@ -1390,6 +1442,7 @@ public class StateMachine implements AutoCloseable {
                     correlationId,
                     changes.stream()
                         .filter(storing::isStored)
+                        .map(CalculatedChange::stored)
                         .toList()
                 )
                 .collectList()
@@ -1408,7 +1461,7 @@ public class StateMachine implements AutoCloseable {
                           changes.stream()
                               .filter(change -> change.newEvent() != null)
                               .collect(Collectors.groupingBy(
-                                  Change::entityId,
+                                  CalculatedChange::entityId,
                                   toList()
                               ))
                               .forEach((entityId, collected) -> {

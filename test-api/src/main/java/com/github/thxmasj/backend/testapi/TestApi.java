@@ -12,7 +12,6 @@ import com.github.thxmasj.backend.core.StoredEvent;
 import com.github.thxmasj.backend.core.database.Database;
 import com.github.thxmasj.backend.core.database.DatabaseClient;
 import com.github.thxmasj.backend.core.database.UnknownEntity;
-import com.github.thxmasj.backend.core.internal.DelayedEvent;
 import com.github.thxmasj.backend.core.internal.database.ChangeState;
 import com.github.thxmasj.backend.core.internal.ResolvedModels;
 import com.github.thxmasj.backend.core.internal.database.ChangeState.Change;
@@ -311,13 +310,7 @@ public class TestApi {
   }
 
   private static Change change(EntityType entityType, UUID entityId, Event<?> event) {
-    return new Change() {
-      @Override public EntityType entityType() {return entityType;}
-      @Override public UUID entityId() {return entityId;}
-      @Override public Event<?> newEvent() {return event;}
-      @Override public StoredEvent<?> storedEvent() {return StoredEvent.of(event, null);}
-      @Override public DelayedEvent<?> delayedEvent() {return null;}
-    };
+    return new Change(entityType, entityId, StoredEvent.of(event, null), null, null, null);
   }
 
 }
