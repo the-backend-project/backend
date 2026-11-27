@@ -1,0 +1,55 @@
+# syntax=docker/sandbox-kit:3
+schemaVersion: "3"
+kind: mixin
+displayName: The Backend
+description: The JDK, Maven and Graphviz, and the hosts that building and testing the project need
+
+capabilities:
+  - type: com.docker.sandbox/network-policy@1
+    config:
+      install:
+        # The package sources of the agents' images, which the install hooks below update: Claude Code's image is
+        # Debian, and Vibe's is Ubuntu.
+        allow:
+          - deb.debian.org:80
+          - dhi.io:80
+          - dhi.io:443
+          - archive.ubuntu.com:80
+          - security.ubuntu.com:80
+          - ports.ubuntu.com:80
+          - cli.github.com:443
+          - download.docker.com:443
+      runtime:
+        allow:
+          # Maven Central, where the build resolves dependencies and plugins from.
+          - repo.maven.apache.org:443
+          # git and gh.
+          - github.com:443
+          - api.github.com:443
+          # Zensical, which bin/serve-docs.sh installs into .venv.
+          - pypi.org:443
+          - files.pythonhosted.org:443
+          # The test databases, SQL Server and PostgreSQL, which run on the host. The proxy takes connections to
+          # host.docker.internal to the host's localhost.
+          - localhost:11433
+          - localhost:15432
+
+  - type: com.docker.sandbox/lifecycle@1
+    config:
+      install:
+        # The diagrams of the documentation are drawn with Graphviz. socat forwards the database ports.
+        - command: apt-get update && apt-get install -y --no-install-recommends graphviz socat
+          user: "0"
+        # The sandbox's proxy signs the connections it adds credentials to with a CA of its own, which Java has to trust
+        # as well.
+        - command: >-
+            /opt/jdk/bin/keytool -importcert -noprompt -cacerts -storepass changeit -alias sandbox-proxy
+            -file /usr/local/share/ca-certificates/proxy-ca.crt
+          user: "0"
+      startup:
+        # The tests connect to the databases on localhost, so their ports are forwarded to the host. SQL Server can't
+        # run inside the sandbox on Apple silicon, where the sandbox's kernel uses 16 KB pages.
+        - command: >-
+            for port in 11433 15432; do
+            nohup socat TCP-LISTEN:$port,bind=127.0.0.1,fork,reuseaddr TCP:host.docker.internal:$port > /dev/null 2>&1 &
+            done

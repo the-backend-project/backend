@@ -36,6 +36,7 @@ The project aims for stable, robust and long-lived systems, and it judges change
 | [deploy](deploy)                                    | Deployment of the apps to Azure Functions with Pulumi                            |
 | [docs](docs)                                        | The documentation site, see [Documentation](#documentation)                      |
 | [bin](bin), [test](test)                            | Scripts to start the test databases and serve the docs, and the databases' setup |
+| [sandbox](sandbox)                                  | The kit for running the coding agents in a sandbox, see [below](#running-the-agents-in-a-sandbox) |
 | [.mvn/checksums](.mvn/checksums)                    | The pinned checksums of all dependencies, see [below](#dependency-checksums)     |
 
 The [Modules](docs/modules.md) page describes what an application depends on.
@@ -144,3 +145,74 @@ the network, such as `perl`, `python` or `curl`, still ask, so agents look up de
   applied to it, so that Vibe doesn't rewrite it. Put your own settings in `~/.vibe/config.toml`, and your own
   instructions, such as how tools get on the PATH, in `~/.vibe/AGENTS.md`. Vibe can't keep the docs server running, so
   `/serve-docs` only does the strict build there; run `bin/serve-docs.sh` yourself for live reload.
+
+### Running the agents in a sandbox
+
+The lists of allowed commands are a convenience, not a boundary: an allowed `mvn` runs whatever the build runs, and Vibe
+matches commands by their beginning only. To limit what an agent can do, run it in a
+[Docker Sandbox](https://docs.docker.com/ai/sandboxes/), a microVM of its own that can write only to the directories
+it is given and reach only the hosts that are allowed. Both agents run in it the same way, with the kit in
+[sandbox/backend](sandbox/backend), which adds the JDK, Maven and Graphviz to the agent's image and allows the hosts
+the `/fix` workflow needs: Maven Central, GitHub, PyPI (for the docs) and the test databases on the host. Each agent's
+kit allows its own API.
+
+Docker Sandboxes run on macOS 14 or later on Apple silicon, Windows 11 and Ubuntu 24.04 or later, and need neither
+Docker Desktop nor Docker Engine. Once per machine:
+
+1. Install `sbx` and sign in with a Docker account, see
+   [Install Docker Sandboxes](https://docs.docker.com/ai/sandboxes/install/) (on macOS: `brew trust docker/tap`,
+   `brew install docker/tap/sbx`, `sbx login`).
+2. Block every host that isn't allowed, and allow kits from this repository:
+
+   ```shell
+   sbx policy init deny-all
+   sbx settings set kit.allowedSources '["docker.io/","dhi.io/","git+https://github.com/the-backend-project/"]'
+   ```
+
+3. Start the test databases on the host with `bin/start-mssql.sh` and `bin/start-postgres.sh`, with Docker or Podman.
+   They run on the host, not in the sandbox, because SQL Server can't run in the sandbox on Apple silicon. The kit
+   forwards ports 11433 and 15432 in the sandbox to the same ports on the host's `127.0.0.1`, so nothing else on the
+   host may listen on them there, such as the port forwarding of another container runtime.
+
+Then create a sandbox for each agent, from the main checkout (`~/src/backend` below). It mounts the main checkout,
+because the worktrees under `.worktrees` need its `.git`:
+
+```shell
+kit='git+https://github.com/the-backend-project/backend.git#ref=main&dir=sandbox/backend'
+sbx create --name backend-claude --kit "$kit" claude ~/src/backend
+sbx create --name backend-vibe --kit "$kit" docker.io/sbx/vibe:latest ~/src/backend
+```
+
+The kit is taken from `main` on GitHub rather than from the checkout, which the agent can change. A local path such as
+`./sandbox/backend` works too, e.g. to try a change to the kit, but then an agent in an earlier sandbox could have
+changed it.
+
+Give each sandbox the GitHub token of the account its agent works as, and the agent's own key. The sandbox's proxy adds
+the token to requests to GitHub, so `git` and `gh` work in the sandbox, but the token itself never enters it and your
+own login stays out of reach. `--command` takes a command run on the host that prints the token, for example from a
+`gh` login of the agent's account in a configuration directory of its own:
+
+```shell
+sbx secret set github --sandbox backend-claude --command 'GH_CONFIG_DIR=$HOME/.config/gh-claude gh auth token'
+sbx secret set github --sandbox backend-vibe --command 'GH_CONFIG_DIR=$HOME/.config/gh-vibe gh auth token'
+sbx secret set anthropic --sandbox backend-claude
+sbx secret set mistral --sandbox backend-vibe
+```
+
+The commits are made as the user git is configured with in the sandbox, which starts out without one. Set the agent's
+account once, in each sandbox:
+
+```shell
+sbx exec backend-claude git config --global user.name <account>
+sbx exec backend-claude git config --global user.email <id>+<account>@users.noreply.github.com
+```
+
+Run the agent with `sbx run --name backend-claude` (or `backend-vibe`), stop it with `sbx stop`, and remove it with
+`sbx rm`, which also removes the Maven repository that the sandbox keeps in its own `~/.m2`.
+
+In the sandbox both agents start without asking before they run a command, Claude Code with
+`--dangerously-skip-permissions` and Vibe with its `auto-approve` agent, as the sandbox is what limits them. What the
+agent's GitHub account can do still matters: the rules of `main` require a pull request and refuse force pushes, but a
+branch that has been pushed can be force-pushed by any account that can write to the repository. `mvn deploy` fails, as
+the sandbox can't reach where the artifacts are deployed. `sbx policy log <sandbox>` shows the requests the sandbox
+made and those it blocked, and `sbx policy allow network --sandbox <sandbox> <host>:443` allows another host.
