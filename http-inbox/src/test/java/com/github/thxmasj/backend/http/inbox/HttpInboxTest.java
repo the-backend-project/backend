@@ -51,7 +51,7 @@ import com.github.thxmasj.backend.core.Tuples.Tuple2;
 import com.github.thxmasj.backend.core.Validated.Valid;
 import com.github.thxmasj.backend.core.internal.EventTypes;
 import com.github.thxmasj.backend.core.test.Init;
-import com.github.thxmasj.backend.diagram.PlantUMLFormatter;
+import com.github.thxmasj.backend.diagram.StateDiagramFormatter;
 import com.github.thxmasj.backend.http.Headers;
 import com.github.thxmasj.backend.http.HttpRequest.Method;
 import com.github.thxmasj.backend.http.HttpRequest;
@@ -1199,7 +1199,7 @@ public class HttpInboxTest {
 
   @Test
   public void diagramOfContentRequestShowsTheChoiceOfProcess() throws IOException {
-    File file = new PlantUMLFormatter(ContentRequest).formatToImage(Files.createTempDirectory("inbox").toString());
+    File file = new StateDiagramFormatter(ContentRequest).formatToImage(Files.createTempDirectory("inbox").toString());
     assertThat(Files.readString(file.toPath()))
         .contains("Request dispatched [a == internal]", "Request dispatched [a == unavailable]", "Request dispatched [a == zero]");
   }
@@ -1467,8 +1467,8 @@ public class HttpInboxTest {
 
   @Test
   public void formatModel() throws IOException {
-    System.out.println(new PlantUMLFormatter(HttpInbox.of(requests).requestRouting()).formatToImage("/tmp"));
-    System.out.println(new PlantUMLFormatter(InternalRequest).formatToImage("/tmp"));
+    System.out.println(new StateDiagramFormatter(HttpInbox.of(requests).requestRouting()).formatToImage("/tmp"));
+    System.out.println(new StateDiagramFormatter(InternalRequest).formatToImage("/tmp"));
   }
 
   @JsonIgnoreProperties(ignoreUnknown = true)

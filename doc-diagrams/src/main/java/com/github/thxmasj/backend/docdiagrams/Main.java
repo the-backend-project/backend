@@ -1,13 +1,17 @@
 package com.github.thxmasj.backend.docdiagrams;
 
 import static com.github.thxmasj.backend.http.inbox.HttpInbox.MessageIds;
+import static com.github.thxmasj.backend.docdiagrams.ExampleLogs.at;
+import static com.github.thxmasj.backend.docdiagrams.ExampleLogs.log;
 import static com.github.thxmasj.backend.templates.cardpayment.Identifiers.Ids;
 
 import com.github.thxmasj.backend.backoffice.Backoffice;
 import com.github.thxmasj.backend.core.EntityType;
-import com.github.thxmasj.backend.diagram.ERDiagramFormatter;
+import com.github.thxmasj.backend.core.EventLog;
+import com.github.thxmasj.backend.diagram.EntityRelationshipDiagramFormatter;
 import com.github.thxmasj.backend.diagram.GraphvizFormatter;
-import com.github.thxmasj.backend.diagram.PlantUMLFormatter;
+import com.github.thxmasj.backend.diagram.StateDiagramFormatter;
+import com.github.thxmasj.backend.diagram.SequenceDiagramFormatter;
 import com.github.thxmasj.backend.helloworld.Greetings;
 import com.github.thxmasj.backend.http.inbox.HttpInbox;
 import com.github.thxmasj.backend.identityprovider.Authorizations;
@@ -15,6 +19,7 @@ import com.github.thxmasj.backend.identityprovider.Clients;
 import com.github.thxmasj.backend.identityprovider.Inbox;
 import com.github.thxmasj.backend.identityprovider.Tokens;
 import com.github.thxmasj.backend.templates.cardpayment.DummyTransitions;
+import com.github.thxmasj.backend.templates.cardpayment.PaymentState;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
@@ -31,6 +36,8 @@ public class Main {
   static void main() throws IOException {
     httpOutbox();
     httpInbox();
+    sequenceDiagrams();
+    diagramExamples();
     cardPayments();
     identityProvider();
     helloWorld();
@@ -59,6 +66,50 @@ public class Main {
     stateDiagram(name + ".RequestRouting", HttpInbox.of(List.of(withRollback)).requestRouting());
     stateDiagram(MessageIds);
     graphviz("http-inbox-rollback.dot", name + ".Rollback");
+  }
+
+  /// The example of a sequence diagram on the diagrams page, with the entity types of its state machine, from which the
+  /// routing of the inbox request, which isn't stored, is deduced: a payment of the card payment template, requested
+  /// from the inbox, and authenticated and authorised by outbox requests, in three transactions
+  private static void sequenceDiagrams() throws IOException {
+    var name = "com.github.thxmasj.backend.diagram.sequence.";
+    var models = EntityType.reachable(DocExamples.PaymentInbox.entityTypes());
+    sequenceDiagram(
+        name + "Payment",
+        models,
+        log(DocExamples.CardPayments.payment(),
+            at(1, "Payment request validated"), at(2, "Authorization requested"), at(3, "Authorization approved")),
+        log(DocExamples.PaymentRequest, at(1, "Request accepted"), at(2, "Request completed")),
+        log(model(models, "Authentication"), at(1, "Request dispatched"), at(2, "Request accepted")),
+        log(model(models, "Authorisation"), at(2, "Request dispatched"), at(3, "Request accepted")),
+        // Opened before the payment, by the cut-off of the previous settlement
+        log(DocExamples.CardPayments.settlement(), at(0, "Settlement opened"), at(3, "Merchant credited"))
+    );
+  }
+
+  /// The examples of the state and entity relationship diagrams on the diagrams page, of the bounded context of the
+  /// payment of the sequence diagram example: the main path of a payment, from its request to its authorisation, and
+  /// the relations of the payments, merchants and settlements, without the inbox and outbox requests
+  private static void diagramExamples() throws IOException {
+    var name = "com.github.thxmasj.backend.diagram.";
+    var cardPayments = DocExamples.CardPayments;
+    System.out.println(new StateDiagramFormatter(cardPayments.payment())
+        .only(PaymentState.ProcessingAuthentication, PaymentState.ProcessingAuthorisation, PaymentState.Authorised)
+        .formatToImage(new File(directory, name + "state.Payment.svg")));
+    System.out.println(new EntityRelationshipDiagramFormatter(name + "cardpayment", cardPayments.entityTypes())
+        .only(cardPayments.merchant(), cardPayments.payment(), cardPayments.settlement())
+        .compact()
+        .formatToImage(directory));
+  }
+
+  private static EntityType model(List<EntityType> models, String name) {
+    return models.stream().filter(m -> m.name().equals(name)).findFirst().orElseThrow();
+  }
+
+  private static void sequenceDiagram(String fileName, List<? extends EntityType> models, EventLog log, EventLog... related)
+      throws IOException {
+    var formatter = new SequenceDiagramFormatter(log, List.of(related), models);
+    System.out.println(formatter.formatToImage(new File(directory, fileName + ".svg")));
   }
 
   private static void cardPayments() throws IOException {
@@ -96,13 +147,13 @@ public class Main {
   }
 
   private static void stateDiagram(EntityType model) throws IOException {
-    System.out.println(new PlantUMLFormatter(model).formatToImage(directory));
+    System.out.println(new StateDiagramFormatter(model).formatToImage(directory));
   }
 
   /// For the entity types of the apps, which are created with `EntityType.of` and so would be named after the
   /// package of the core library
   private static void stateDiagram(String fileName, EntityType model) throws IOException {
-    System.out.println(new PlantUMLFormatter(model).formatToImage(new File(directory, fileName + ".svg")));
+    System.out.println(new StateDiagramFormatter(model).formatToImage(new File(directory, fileName + ".svg")));
   }
 
   /// A diagram drawn by hand in Graphviz, from a resource next to this class
@@ -116,7 +167,7 @@ public class Main {
   }
 
   private static void erDiagram(String name, List<EntityType> entityTypes) throws IOException {
-    System.out.println(new ERDiagramFormatter(name, entityTypes).compact().formatToImage(directory));
+    System.out.println(new EntityRelationshipDiagramFormatter(name, entityTypes).compact().formatToImage(directory));
   }
 
 }

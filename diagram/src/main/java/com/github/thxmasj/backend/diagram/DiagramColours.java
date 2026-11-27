@@ -47,11 +47,28 @@ final class DiagramColours {
       g.link polygon,g.start_entity ellipse{fill:%1$s}
       g.link text[fill="#000"]{fill:%2$s}
       """.formatted(ARROW, TEXT)
-      + Stream.concat(Stream.of(REVERSAL), SEVERITIES.values().stream())
-          .map(c -> "g.link text[fill=\"" + c.light() + "\"]{fill:" + c.dark() + "}\n")
-          .sorted()
-          .collect(joining())
+      + colouredText("g.link")
       + "}\n";
+
+  /// CSS for the `style` element of a sequence diagram's SVG, whose messages are groups of class `message`. The
+  /// lifelines are drawn in the colour of the arrows, as their dark border colour can't be seen on a dark page.
+  static final String SEQUENCE_STYLE = """
+      svg{color-scheme:light dark}
+      @media (prefers-color-scheme:dark){
+      g.message line,g.message polygon,g.participant-lifeline line{stroke:%1$s!important}
+      g.message polygon{fill:%1$s}
+      g.message text[fill="#000"]{fill:%2$s}
+      """.formatted(ARROW, TEXT)
+      + colouredText("g.message")
+      + "}\n";
+
+  /// The rules giving the coloured text in the groups of the selector its colour in dark mode
+  private static String colouredText(String group) {
+    return Stream.concat(Stream.of(REVERSAL), SEVERITIES.values().stream())
+        .map(c -> group + " text[fill=\"" + c.light() + "\"]{fill:" + c.dark() + "}\n")
+        .sorted()
+        .collect(joining());
+  }
 
   /// CSS for the `style` element of an SVG written by Graphviz, whose edges are groups of class `edge`
   static final String GRAPHVIZ_STYLE = """
@@ -70,7 +87,16 @@ final class DiagramColours {
 
   /// Adds [#STYLE] to an SVG written by PlantUML
   static String addStyle(String svg) {
+    return addStyle(svg, STYLE);
+  }
+
+  /// Adds [#SEQUENCE_STYLE] to a sequence diagram written by PlantUML
+  static String addSequenceStyle(String svg) {
+    return addStyle(svg, SEQUENCE_STYLE);
+  }
+
+  private static String addStyle(String svg, String style) {
     return svg.replaceFirst("<defs/>", "<defs></defs>")
-        .replaceFirst("<defs>", "<defs><style type=\"text/css\">" + Matcher.quoteReplacement(STYLE) + "</style>");
+        .replaceFirst("<defs>", "<defs><style type=\"text/css\">" + Matcher.quoteReplacement(style) + "</style>");
   }
 }

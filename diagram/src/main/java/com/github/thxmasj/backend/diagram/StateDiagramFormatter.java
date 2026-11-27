@@ -35,15 +35,41 @@ import net.sourceforge.plantuml.FileFormat;
 import net.sourceforge.plantuml.FileFormatOption;
 import net.sourceforge.plantuml.SourceStringReader;
 
-public class PlantUMLFormatter {
+/// A state diagram of the state machine of an entity type, drawn with PlantUML from its transitions: the lifecycle of
+/// its entities. The details of an event, its data and the events and actions it triggers, are shown when the mouse
+/// hovers over its name.
+public class StateDiagramFormatter {
 
   private final EntityType model;
   Map<State, List<TransitionModel<?, ?>>> transitions;
+  /// The states shown, besides `Begin`, or null for all
+  private final Set<State> only;
 
   /// A state diagram of the transitions of the entity type
-  public PlantUMLFormatter(EntityType model) {
+  public StateDiagramFormatter(EntityType model) {
+    this(model, null);
+  }
+
+  private StateDiagramFormatter(EntityType model, Set<State> only) {
     this.model = model;
     this.transitions = Map.copyOf(model.transitions());
+    this.only = only;
+  }
+
+  /// This formatter with only the states and the transitions between them, e.g. the main path of an entity type too
+  /// large to show in full. A transition with choices is shown with the alternatives leading to the states.
+  public StateDiagramFormatter only(State... states) {
+    return new StateDiagramFormatter(model, Set.of(states));
+  }
+
+  /// Whether the transition from the state is shown: one to a shown state, or a choice with an alternative which is
+  private boolean shown(State ownerState, TransitionModel<?, ?> transition) {
+    if (only == null)
+      return true;
+    if (!transition.filters().isEmpty())
+      return transition.filters().stream().anyMatch(filter -> shown(ownerState, filter.alternative().model()));
+    State target = transition.toState() != null ? transition.toState() : ownerState;
+    return target.equals(Begin) || only.contains(target);
   }
 
   public File formatToFile(String directory) throws IOException {
@@ -126,7 +152,7 @@ public class PlantUMLFormatter {
             Locale.ROOT,
             "<foreignObject class=\"details\" id=\"%s-details\" x=\"%.1f\" y=\"%.1f\" width=\"1600\" height=\"400\">"
                 + "<div xmlns=\"http://www.w3.org/1999/xhtml\"><div>%s</div></div></foreignObject>",
-            id, x - 800, y, label.details().stream().map(PlantUMLFormatter::detailHtml).collect(joining("<br/>"))
+            id, x - 800, y, label.details().stream().map(StateDiagramFormatter::detailHtml).collect(joining("<br/>"))
         ));
         rules.append(String.format("svg:has(#%1$s:hover) #%1$s-details{visibility:visible}\n", id));
       }
@@ -217,6 +243,7 @@ public class PlantUMLFormatter {
       """,
       // States, declared in the order the transitions reach them, as the layout depends on the declaration order
       transitions.keySet().stream()
+          .filter(state -> only == null || state.equals(Begin) || only.contains(state))
           .filter(state -> !state.name().equals("Intermediate"))
           .sorted(comparingInt(state -> firstOccurrence(transitionLines, state)))
           .map(state -> state(state))
@@ -275,6 +302,7 @@ public class PlantUMLFormatter {
   private String choiceBranches(State ownerState, TransitionModel<?, ?> transition) {
     State choice = new Choice("?");
     return transition.filters().stream()
+        .filter(filter -> shown(ownerState, filter.alternative().model()))
         .map(filter -> {
           TransitionModel<?, ?> alternative = filter.alternative().model();
           if (!alternative.filters().isEmpty())
@@ -293,6 +321,7 @@ public class PlantUMLFormatter {
     List<TransitionModel<?, ?>> transitionsForState = this.transitions.get(state);
     if (transitionsForState == null) throw new IllegalStateException(state.toString());
     for (TransitionModel<?, ?> transition : transitionsForState) {
+      if (!shown(state, transition)) continue;
       s.append(traverseForChoices(state, transition, visited));
     }
     return s.toString();
@@ -310,6 +339,7 @@ public class PlantUMLFormatter {
         return "";
       s.append(String.format("state %s <<choice>>\n", choiceName));
       for (var filter : transition.filters()) {
+        if (!shown(ownerState, filter.alternative().model())) continue;
         s.append(traverseForChoices(ownerState, filter.alternative().model(), visited));
       }
     } else {
@@ -328,6 +358,7 @@ public class PlantUMLFormatter {
     System.out.println("Formatting transitions from " + sourceState.name());
     StringBuilder s = new StringBuilder();
     for (TransitionModel<?, ?> transition : transitionsFromState) {
+      if (!shown(sourceState, transition)) continue;
       s.append(formatTransitionTree(sourceState, sourceState, visited, transition));
     }
     return s.toString();
@@ -348,6 +379,7 @@ public class PlantUMLFormatter {
       // The branches of a choice shared by several transitions are drawn once
       if (formattedChoices.add(choiceName)) {
         for (var filter : transition.filters()) {
+          if (!shown(ownerState, filter.alternative().model())) continue;
           s.append(formatTransitionTree(ownerState, choiceState, visited, filter.alternative().model()));
         }
       }
@@ -380,7 +412,7 @@ public class PlantUMLFormatter {
   // Events of transitions with a severity above Info are named in bold, after a symbol for their severity, in the colour
   // of their severity. The symbols have a text presentation by default, so they are drawn in that colour rather than as
   // emoji. Events of types which are not stored are named in italics.
-  private static String eventName(EventType<?, ?> eventType, Severity severity) {
+  static String eventName(EventType<?, ?> eventType, Severity severity) {
     String name = eventType instanceof EventType.NotStored ? "<i>" + eventType.name() + "</i>" : eventType.name();
     String symbol = switch (severity) {
       case Info -> null;

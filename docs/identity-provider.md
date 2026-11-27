@@ -31,7 +31,7 @@ A refused token request is an event of [severity](monitoring.md#severity) `Warni
 show up in the monitoring. So are an authorization request with an unknown client or redirect URI, and a failed
 sign-in with the upstream provider.
 
-The [state diagrams](diagrams.md) are generated from the model. Hover over the name of an event for its details.
+The [state diagrams](diagrams.md#state-diagrams-of-entity-types) are generated from the model. Hover over the name of an event for its details.
 
 `Client`:
 

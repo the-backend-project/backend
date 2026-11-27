@@ -26,40 +26,50 @@ import net.sourceforge.plantuml.FileFormat;
 import net.sourceforge.plantuml.FileFormatOption;
 import net.sourceforge.plantuml.SourceStringReader;
 
-/// An ER diagram of a state machine's complete model, i.e. the transitions of all its entity types, as given to the
-/// state machine. Each entity type is an entity listing the event types it accepts, and the entity types are related
-/// through the triggers of their transitions: an arrow from one entity to another tells that an event on the first
-/// triggers an event on the other. A trigger on an [EntityTypeGroup] relates to each entity type of the group in
-/// the model. Triggers of reversals are red. Id and index entities are left out, with the triggers of events on them,
-/// as they take much space and tell little about how the entities relate.
-public class ERDiagramFormatter {
+/// An entity relationship diagram of a bounded context, i.e. a state machine's complete model: the transitions of all
+/// its entity types, as given to the state machine. Each entity type is an entity listing the event types it accepts,
+/// and the entity types are related through the triggers of their transitions: an arrow from one entity to another
+/// tells that an event on the first triggers an event on the other. A trigger on an [EntityTypeGroup] relates to each
+/// entity type of the group in the model. Triggers of reversals are red. Id and index entities are left out, with the
+/// triggers of events on them, as they take much space and tell little about how the entities relate.
+public class EntityRelationshipDiagramFormatter {
 
   private final String name;
   private final List<EntityType> entityTypes;
   private final boolean compact;
+  /// The entity types shown, or null for all but id and index entities
+  private final Set<EntityType> only;
 
   /// @param name the name of the model, used for the names of the files the diagram is written to
   /// @param entityTypes the entity types given to the state machine, which with those their transitions trigger events
   ///                     on are the entities of the diagram
-  public ERDiagramFormatter(String name, List<? extends EntityType> entityTypes) {
-    this(name, EntityType.reachable(entityTypes), false);
+  public EntityRelationshipDiagramFormatter(String name, List<? extends EntityType> entityTypes) {
+    this(name, EntityType.reachable(entityTypes), false, null);
   }
 
 
-  private ERDiagramFormatter(
+  private EntityRelationshipDiagramFormatter(
       String name,
       List<EntityType> entityTypes,
-      boolean compact
+      boolean compact,
+      Set<EntityType> only
   ) {
     this.name = name;
     this.entityTypes = entityTypes;
     this.compact = compact;
+    this.only = only;
   }
 
   /// This formatter without the event types of the entities, for models with many entities or event types. The event
   /// types involved in the triggers are still shown on the relations.
-  public ERDiagramFormatter compact() {
-    return new ERDiagramFormatter(name, entityTypes, true);
+  public EntityRelationshipDiagramFormatter compact() {
+    return new EntityRelationshipDiagramFormatter(name, entityTypes, true, only);
+  }
+
+  /// This formatter with only the entity types, and the relations between them, e.g. those of the domain, without the
+  /// inbox and outbox requests, which relate to most of them
+  public EntityRelationshipDiagramFormatter only(EntityType... entityTypes) {
+    return new EntityRelationshipDiagramFormatter(name, this.entityTypes, compact, Set.of(entityTypes));
   }
 
   public File formatToFile(String directory) throws IOException {
@@ -90,7 +100,7 @@ public class ERDiagramFormatter {
     Map<EntityType, Set<EventType<?, ?>>> eventTypes = new LinkedHashMap<>();
     Set<Relation> relations = new LinkedHashSet<>();
     entityTypes.stream()
-        .filter(ERDiagramFormatter::shown)
+        .filter(this::shown)
         .sorted(comparing(EntityType::name))
         .forEach(model -> {
           eventTypes.computeIfAbsent(model, _ -> new LinkedHashSet<>());
@@ -184,7 +194,9 @@ public class ERDiagramFormatter {
         .toList();
   }
 
-  private static boolean shown(EntityType entity) {
+  private boolean shown(EntityType entity) {
+    if (only != null)
+      return only.contains(entity);
     return !(entity instanceof IdEntityType) && !(entity instanceof IndexEntityType);
   }
 

@@ -29,7 +29,7 @@ The project aims for stable, robust and long-lived systems, and it judges change
 | [http-inbox](http-inbox), [http-outbox](http-outbox) | Receiving and sending HTTP requests as entities                                  |
 | [backoffice](backoffice)                            | The web application for looking into the entities of an application              |
 | [test-api](test-api)                                | The API for tests to look into and manipulate the database of a state machine    |
-| [diagram](diagram)                                  | State diagrams and ER diagrams generated from a model                            |
+| [diagram](diagram)                                  | State, ER and sequence diagrams of entity types, bounded contexts and event logs |
 | [doc-diagrams](doc-diagrams)                        | Generates the diagrams of the documentation, from the templates and the apps     |
 | [templates](templates)                              | Ready-made models of a domain, such as card payments                             |
 | [apps](apps)                                        | The identity provider, the hello world demo and their backoffices, compiled to native executables |

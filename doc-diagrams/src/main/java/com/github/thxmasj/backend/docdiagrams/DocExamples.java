@@ -1,31 +1,45 @@
 package com.github.thxmasj.backend.docdiagrams;
 
+import static com.github.thxmasj.backend.core.Tuples.tuple;
 import static com.github.thxmasj.backend.core.Validated.valid;
 import static com.github.thxmasj.backend.http.inbox.HttpInboxRequest.entityId;
 import static com.github.thxmasj.backend.http.inbox.HttpInboxRequest.newEntity;
 import static com.github.thxmasj.backend.http.inbox.HttpInboxRequest.parseMessageId;
 import static com.github.thxmasj.backend.http.inbox.HttpInboxRequest.when;
+import static com.github.thxmasj.backend.templates.cardpayment.DummyTransitions.atLeastOnce;
+import static com.github.thxmasj.backend.templates.cardpayment.DummyTransitions.dispatcher;
+import static com.github.thxmasj.backend.templates.cardpayment.DummyTransitions.reversibleDispatcher;
 
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EventType;
+import com.github.thxmasj.backend.core.Identifiable;
 import com.github.thxmasj.backend.http.HttpClient;
-import com.github.thxmasj.backend.http.HttpRequest;
 import com.github.thxmasj.backend.http.HttpRequest.Method;
+import com.github.thxmasj.backend.http.HttpRequest;
 import com.github.thxmasj.backend.http.HttpResponse;
 import com.github.thxmasj.backend.http.inbox.Authorization;
-import com.github.thxmasj.backend.http.inbox.HttpInbox;
 import com.github.thxmasj.backend.http.inbox.HttpInbox.RoutedRequest;
-import com.github.thxmasj.backend.http.inbox.HttpInboxRequest;
+import com.github.thxmasj.backend.http.inbox.HttpInbox;
 import com.github.thxmasj.backend.http.inbox.HttpInboxRequest.Rollback;
+import com.github.thxmasj.backend.http.inbox.HttpInboxRequest;
 import com.github.thxmasj.backend.http.outbox.AtLeastOnce;
 import com.github.thxmasj.backend.http.outbox.AtMostOnce;
+import com.github.thxmasj.backend.http.outbox.AtMostOnceDispatcher;
+import com.github.thxmasj.backend.http.outbox.AtMostOnceWithRollbackDispatcher;
 import com.github.thxmasj.backend.http.outbox.HttpOutboxRequest;
 import com.github.thxmasj.backend.http.outbox.JsonResponseValidator;
+import com.github.thxmasj.backend.templates.cardpayment.CardPayments;
+import com.github.thxmasj.backend.templates.cardpayment.DummyTransitions;
+import com.github.thxmasj.backend.templates.cardpayment.PaymentEvent;
+import com.github.thxmasj.backend.templates.cardpayment.PaymentTransitions.OutboxRequestModelIds;
+import com.github.thxmasj.backend.templates.cardpayment.SettlementTransitions;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.BiFunction;
+import reactor.core.publisher.Mono;
 
 /// The models of the code examples in the documentation, written as the examples show them, so that the diagram under
 /// an example is drawn from the model the example creates. What the examples take from their surroundings, such as an
@@ -104,6 +118,85 @@ final class DocExamples {
           Reject, PaymentToken, (_, result) -> entityId(result.tokenReference())
       )
       .build("EnrolmentResultReceived", UUID.fromString("5f1c8b3e-7a2d-4c96-8e4b-1d9a6f3c2e70"));
+
+  // docs/diagrams.md: a payment of the card payment template, requested by a request to the inbox. The template leaves
+  // the inbox requests to the application.
+
+  // The outboxes of the template that the payment of the example takes call back to the payment, as an application's
+  // own do, while the others are those of DummyTransitions, which create no requests
+  static final CardPayments CardPayments = new CardPayments(
+      null,
+      p -> AtMostOnceDispatcher.of(callingBack(OutboxRequestModelIds.Authentication, p, PaymentEvent.AuthenticationResult.class, PaymentEvent.AuthorisationRequested), _ -> null),
+      p -> reversibleDispatcher(OutboxRequestModelIds.Preauthorisation, OutboxRequestModelIds.PreauthorisationRollbackOnAccepted, OutboxRequestModelIds.PreauthorisationRollbackOnUnknown, p),
+      p -> AtMostOnceWithRollbackDispatcher.of(
+          callingBack(OutboxRequestModelIds.Authorisation, OutboxRequestModelIds.AuthorisationRollbackOnAccepted, OutboxRequestModelIds.AuthorisationRollbackOnUnknown, p),
+          _ -> null,
+          (_, _) -> Mono.empty()
+      ),
+      p -> dispatcher(atLeastOnce(OutboxRequestModelIds.Capture, p)),
+      p -> reversibleDispatcher(OutboxRequestModelIds.Refund, OutboxRequestModelIds.RefundRollbackOnAccepted, OutboxRequestModelIds.RefundRollbackOnUnknown, p),
+      p -> dispatcher(atLeastOnce(OutboxRequestModelIds.CaptureRequestedTooLate, p)),
+      p -> dispatcher(atLeastOnce(OutboxRequestModelIds.FailedAuthentication, p)),
+      s -> dispatcher(atLeastOnce(SettlementTransitions.OutboxRequestModelIds.Reconciliation, s)),
+      p -> dispatcher(atLeastOnce(OutboxRequestModelIds.RolledBackAuthorisation, p)),
+      p -> dispatcher(atLeastOnce(OutboxRequestModelIds.RolledBackPreauthorisation, p)),
+      p -> dispatcher(atLeastOnce(OutboxRequestModelIds.ApprovedPreauthorisation, p)),
+      p -> dispatcher(atLeastOnce(OutboxRequestModelIds.FailedAuthorisation, p)),
+      p -> dispatcher(atLeastOnce(OutboxRequestModelIds.ApprovedAuthorisation, p)),
+      p -> dispatcher(atLeastOnce(OutboxRequestModelIds.DeclinedAuthorisation, p)),
+      p -> dispatcher(atLeastOnce(OutboxRequestModelIds.ApprovedCapture, p)),
+      p -> dispatcher(atLeastOnce(OutboxRequestModelIds.FailedRefund, p)),
+      p -> dispatcher(atLeastOnce(OutboxRequestModelIds.ApprovedRefund, p)),
+      p -> dispatcher(atLeastOnce(OutboxRequestModelIds.DeclinedRefund, p)),
+      s -> dispatcher(atLeastOnce(SettlementTransitions.OutboxRequestModelIds.ApprovedCutOff, s))
+  );
+
+  /// An outbox request of the template which triggers the event on the payment with its response when it is accepted
+  private static <R> AtMostOnce<DummyTransitions.Request, Void> callingBack(Identifiable id, EntityType payment, Class<R> response, EventType<R, ?> onSuccess) {
+    return HttpOutboxRequest.atMostOnce()
+        .requestPayloadType(DataType.json(DummyTransitions.Request.class))
+        .responsePayloadType(DataType.json(response))
+        .forwarder(httpClient)
+        .processModel(payment)
+        .contentParser(JsonResponseValidator.json(response))
+        .onSuccess(onSuccess, HttpResponse::body)
+        .isAccepted(_ -> true)
+        .isRejected(_ -> false)
+        .isRejectedByInvalidResponse(_ -> false)
+        .build(id.name(), id.id());
+  }
+
+  /// The acquirer authorisation of the template, which triggers `Acquirer responded` on the payment with the response
+  private static AtMostOnce<DummyTransitions.Request, DummyTransitions.Request> callingBack(
+      Identifiable id,
+      Identifiable rollbackOnAcceptedId,
+      Identifiable rollbackOnUnknownId,
+      EntityType payment
+  ) {
+    return HttpOutboxRequest.atMostOnce()
+        .requestPayloadType(DataType.json(DummyTransitions.Request.class))
+        .responsePayloadType(DataType.json(com.github.thxmasj.backend.templates.cardpayment.AcquirerResponse.class))
+        .forwarder(httpClient)
+        .processModel(payment)
+        .contentParser(JsonResponseValidator.json(com.github.thxmasj.backend.templates.cardpayment.AcquirerResponse.class))
+        .onSuccess(PaymentEvent.AcquirerResponded, HttpResponse::body)
+        .isAccepted(_ -> true)
+        .isRejected(_ -> false)
+        .isRejectedByInvalidResponse(_ -> false)
+        .rollbackOnAcceptedModel(DummyTransitions.atLeastOnce(rollbackOnAcceptedId, payment))
+        .rollbackOnUnknownModel(DummyTransitions.atLeastOnce(rollbackOnUnknownId, payment))
+        .build(id.name(), id.id());
+  }
+
+  static final HttpInboxRequest<PaymentEvent.Authorisation> PaymentRequest = HttpInboxRequest
+      .matching(m -> m.requestLine().matches("POST /payments"))
+      .contentParser(HttpInbox.jsonParser(PaymentEvent.Authorisation.class))
+      .authorizer(bearerToken())
+      .process(PaymentEvent.PaymentRequested, CardPayments.payment(), r -> tuple(r.body(), new byte[0]), newEntity())
+      .build("PaymentRequest", UUID.fromString("6a1d4e8b-2c7f-4b93-a5e0-8f3c9d1b7e24"));
+
+  /// The inbox of the payment request, with the models of the card payment template
+  static final HttpInbox PaymentInbox = HttpInbox.of(List.of(PaymentRequest));
 
   // docs/http-outbox.md
 

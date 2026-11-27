@@ -13,7 +13,7 @@ executable which boots in a few tens of milliseconds, and is packaged in a conta
 The request itself is an entity of the [HTTP inbox](http-inbox.md), of the inbox request `GreetingRequest`: the
 transition of the greeting triggers the response on the request, which the listener sends to the client.
 
-The [state diagram](diagrams.md) is generated from the model. Hover over the name of an event for its details.
+The [state diagram](diagrams.md#state-diagrams-of-entity-types) is generated from the model. Hover over the name of an event for its details.
 
 `Greeting`:
 
@@ -160,7 +160,7 @@ work around.
   makes the setting unnecessary should be checked on each Netty upgrade.
 - **Runtime dependencies the server does not use.** The HTTP modules depend on Hibernate Validator, and reactor-netty
   brings QUIC and macOS DNS support. They end up on the runtime classpath of every application, lengthening native
-  compilation. They could be optional, the way diagram generation with PlantUML is kept in the separate `diagram`
+  compilation. They could be optional, the way diagram generation is kept in the separate `diagram`
   module.
 - **No fully static executable on arm64.** Fully static executables require musl, which the GraalVM builder images only
   support on amd64. The demo links glibc dynamically and copies it into the image, which works on both architectures.
