@@ -1,7 +1,7 @@
 package com.github.thxmasj.backend.http.inbox;
 
-import com.github.thxmasj.backend.core.EntityModel;
-import com.github.thxmasj.backend.core.EntityModelGroup;
+import com.github.thxmasj.backend.core.EntityType;
+import com.github.thxmasj.backend.core.EntityTypeGroup;
 import com.github.thxmasj.backend.core.State;
 import com.github.thxmasj.backend.core.TransitionModel;
 import com.github.thxmasj.backend.core.internal.Memoized;
@@ -9,14 +9,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/// The `RequestRouting` entity model of an inbox, routing to its requests. Its entities are not stored, but are of the
-/// session of the request only (see [EntityModel#stored()]): the inbox requests store the requests and responses. The
+/// The `RequestRouting` entity type of an inbox, routing to its requests. Its entities are not stored, but are of the
+/// session of the request only (see [EntityType.NotStored]): the inbox requests store the requests and responses. The
 /// models of all inboxes have the same id, and are in the group [#RequestRouting].
-final class RequestRoutingModel implements EntityModel {
+final class RequestRoutingModel implements EntityType.NotStored {
 
   /// The routing model of any inbox, which an inbox request responds to by triggering [HttpInbox#ResponseCreated] on
   /// it, identified by the session
-  static final EntityModelGroup RequestRouting = EntityModelGroup.of(
+  static final EntityTypeGroup RequestRouting = EntityTypeGroup.of(
       "RequestRouting",
       UUID.fromString("7c2e9a41-5d8b-4f36-b0e7-1a4c6f8d2b95"),
       model -> model instanceof RequestRoutingModel
@@ -38,13 +38,6 @@ final class RequestRoutingModel implements EntityModel {
   @Override
   public UUID id() {
     return ID;
-  }
-
-  /// The routing is of the session of the request only, as the inbox request it routes to stores the request and the
-  /// response, which it reads back to recognise a retry
-  @Override
-  public boolean stored() {
-    return false;
   }
 
   @Override

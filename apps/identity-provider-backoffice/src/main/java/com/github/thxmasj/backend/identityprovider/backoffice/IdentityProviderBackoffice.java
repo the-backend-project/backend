@@ -5,7 +5,7 @@ import com.github.thxmasj.backend.identityprovider.Inbox;
 import java.time.Duration;
 
 /// The backoffice of the identity provider, an application of its own which reads the entities of the
-/// identity provider from its schema, with the identity provider's entity models. See [BackofficeApp].
+/// identity provider from its schema, with the identity provider's entity types. See [BackofficeApp].
 ///
 /// Usage:
 ///
@@ -19,7 +19,7 @@ public final class IdentityProviderBackoffice {
 
   public static void main(String[] args) {
     // The token lifetime is configuration of the identity provider, and doesn't change its model
-    BackofficeApp.run("Identity provider", "identity_provider", Inbox.inbox(Duration.ofMinutes(5)).entityModels(), args, System.getenv());
+    BackofficeApp.run("Identity provider", "identity_provider", Inbox.inbox(Duration.ofMinutes(5)).entityTypes(), args, System.getenv());
   }
 
 }

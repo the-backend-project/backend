@@ -1,6 +1,6 @@
 package com.github.thxmasj.backend.templates.cardpayment;
 
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static com.github.thxmasj.backend.http.inbox.HttpInbox.InvalidRequestCompleted;
 import static com.github.thxmasj.backend.http.inbox.HttpInbox.RequestCompleted;
 import static com.github.thxmasj.backend.http.inbox.HttpInbox.Request;
@@ -28,7 +28,7 @@ import static com.github.thxmasj.backend.templates.cardpayment.SettlementEvent.I
 import static java.util.Optional.ofNullable;
 
 import com.github.thxmasj.backend.core.DataType;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.State;
 import com.github.thxmasj.backend.core.TransitionModelBuilder.TransitionContext;
 import com.github.thxmasj.backend.core.TransitionModel;
@@ -39,10 +39,10 @@ import java.util.Map;
 
 public class MerchantTransitions {
 
-  private final EntityModel settlement;
+  private final EntityType settlement;
 
   /// @param settlement the model of the settlements of the merchants
-  MerchantTransitions(EntityModel settlement) {
+  MerchantTransitions(EntityType settlement) {
     this.settlement = settlement;
   }
 

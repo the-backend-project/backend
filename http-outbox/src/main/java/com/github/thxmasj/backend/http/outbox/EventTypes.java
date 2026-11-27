@@ -1,8 +1,7 @@
 package com.github.thxmasj.backend.http.outbox;
 
-import static com.github.thxmasj.backend.core.BasicEventType.of;
+import static com.github.thxmasj.backend.core.EventType.of;
 
-import com.github.thxmasj.backend.core.BasicEventType;
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.http.HttpDataType;
@@ -15,21 +14,21 @@ public interface EventTypes {
   EventType<String, String>
       InvalidResponseReceived = of("Invalid response received", UUID.fromString("450679ab-bc60-46cb-bb97-d171c34c2750"), DataType.string());
 
-  EventType<HttpResponse<byte[]>, Void> ResponseReceived = BasicEventType.of(
+  EventType<HttpResponse<byte[]>, Void> ResponseReceived = EventType.of(
       "Response received",
       UUID.fromString("cd730efa-286d-4e29-b8bf-55df708fe889"),
       HttpDataType.forResponse(),
       DataType.none()
   );
-  EventType<Void, Void> TimeoutExpired = BasicEventType.of(
+  EventType<Void, Void> TimeoutExpired = EventType.of(
       "Timeout expired",
       UUID.fromString("7ff41071-2411-405d-acf2-c3b66823f17d")
   );
-  EventType<Void, Void> ConnectionFailed = BasicEventType.of(
+  EventType<Void, Void> ConnectionFailed = EventType.of(
       "Connection failed",
       UUID.fromString("14be9085-1f7c-427c-9963-2c72cdc0888f")
   );
-  EventType<Void, Void> ConnectionDropped = BasicEventType.of(
+  EventType<Void, Void> ConnectionDropped = EventType.of(
       "Connection dropped",
       UUID.fromString("94ba4ab3-3b87-4ceb-9fd3-0e8ab0c21a34")
   );

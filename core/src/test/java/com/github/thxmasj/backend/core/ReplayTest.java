@@ -1,6 +1,6 @@
 package com.github.thxmasj.backend.core;
 
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static com.github.thxmasj.backend.core.EntitySelector.entityIdFromSession;
 import static com.github.thxmasj.backend.core.EntitySelector.newEntityId;
 import static com.github.thxmasj.backend.core.TransitionModelBuilder.WithEvent.onEvent;
@@ -23,18 +23,18 @@ class ReplayTest {
 
   enum States implements State {Waiting, Answered, Placed}
 
-  static final EventType<Void, Void> Received = BasicEventType.of("Received", UUID.randomUUID());
-  static final EventType<Void, Void> Answered = BasicEventType.of("Answered", UUID.randomUUID());
-  static final EventType<Void, Void> Placed = BasicEventType.of("Placed", UUID.randomUUID());
+  static final EventType<Void, Void> Received = EventType.of("Received", UUID.randomUUID());
+  static final EventType<Void, Void> Answered = EventType.of("Answered", UUID.randomUUID());
+  static final EventType<Void, Void> Placed = EventType.of("Placed", UUID.randomUUID());
 
-  static final EntityModel Order = EntityModel.of("Order", UUID.randomUUID(), () -> Map.of(
+  static final EntityType Order = EntityType.of("Order", UUID.randomUUID(), () -> Map.of(
       Begin, List.<TransitionModel<?, ?>>of(
           onEvent(Placed).to(States.Placed).trigger(Answered).on(ReplayTest.Requests).identifiedBy(entityIdFromSession()).output()
       ),
       States.Placed, List.of()
   ));
 
-  static final EntityModel Request = EntityModel.of("Request", UUID.randomUUID(), () -> Map.of(
+  static final EntityType Request = EntityType.of("Request", UUID.randomUUID(), () -> Map.of(
       Begin, List.<TransitionModel<?, ?>>of(
           onEvent(Received).to(States.Waiting).trigger(Placed).on(Order).identifiedBy(newEntityId()).output()
       ),
@@ -42,15 +42,15 @@ class ReplayTest {
       States.Answered, List.of()
   ));
 
-  static final EntityModelGroup Requests = EntityModelGroup.of("Requests", UUID.randomUUID(), Request::equals);
+  static final EntityTypeGroup Requests = EntityTypeGroup.of("Requests", UUID.randomUUID(), Request::equals);
 
   private static final ZonedDateTime time = ZonedDateTime.of(2026, 11, 26, 12, 0, 0, 0, ZoneOffset.UTC);
 
-  private static EventLog log(EntityModel model, UUID id, ZonedDateTime... timestamps) {
+  private static EventLog log(EntityType model, UUID id, ZonedDateTime... timestamps) {
     List<EventType<Void, Void>> types = model == Order ? List.of(Placed) : List.of(Received, Answered);
     List<Event<?>> events = new ArrayList<>();
     for (int i = 0; i < timestamps.length; i++)
-      events.add(new Event<>(id, i + 1, types.get(i), timestamps[i]));
+      events.add(new Event<>(id, i + 1, types.get(i), timestamps[i], null));
     return new EventLog(model, id, List.copyOf(events));
   }
 
@@ -72,13 +72,13 @@ class ReplayTest {
 
   enum RoutedStates implements State {Routed, Accepted}
 
-  static final EventType<Void, Void> Arrived = BasicEventType.of("Arrived", UUID.randomUUID());
-  static final EventType<Void, Void> Routed = BasicEventType.of("Routed", UUID.randomUUID());
-  static final EventType<Void, Void> Submitted = BasicEventType.of("Submitted", UUID.randomUUID());
-  static final EventType<Void, Void> Accepted = BasicEventType.of("Accepted", UUID.randomUUID());
+  static final EventType<Void, Void> Arrived = EventType.of("Arrived", UUID.randomUUID());
+  static final EventType<Void, Void> Routed = EventType.of("Routed", UUID.randomUUID());
+  static final EventType<Void, Void> Submitted = EventType.of("Submitted", UUID.randomUUID());
+  static final EventType<Void, Void> Accepted = EventType.of("Accepted", UUID.randomUUID());
 
   /// A request stored as accepted when it is submitted, which is triggered with the type starting its choice
-  static final EntityModel Submission = EntityModel.of("Submission", UUID.randomUUID(), () -> Map.of(
+  static final EntityType Submission = EntityType.of("Submission", UUID.randomUUID(), () -> Map.of(
       Begin, List.<TransitionModel<?, ?>>of(
           onEvent(Submitted).to(RoutedStates.Accepted).assembleInput()
               .when(_ -> false).then(onEvent(Routed).to(RoutedStates.Accepted).output())
@@ -88,7 +88,7 @@ class ReplayTest {
   ));
 
   /// Routes what arrives to a submission, like the routing of an inbox, and isn't stored
-  static final EntityModel Router = EntityModel.notStored("Router", UUID.randomUUID(), () -> Map.of(
+  static final EntityType Router = EntityType.notStored("Router", UUID.randomUUID(), () -> Map.of(
       Begin, List.<TransitionModel<?, ?>>of(
           onEvent(Arrived).to(RoutedStates.Routed).assembleInput()
               .when(_ -> false).then(onEvent(Accepted).to(RoutedStates.Routed).output())
@@ -102,29 +102,29 @@ class ReplayTest {
   @Test
   void theStepOfAnEntityWhichIsNotStoredIsDeducedFromTheOnlyTransitionTriggeringTheEvent() {
     UUID id = UUID.randomUUID();
-    EventLog submission = new EventLog(Submission, id, List.of(new Event<>(id, 1, Accepted, time)));
+    EventLog submission = new EventLog(Submission, id, List.of(new Event<>(id, 1, Accepted, time, null)));
     Replay replay = Replay.of(submission, List.of(), List.of(Router, Submission));
     Step routed = replay.roots().getFirst();
     assertTrue(routed.isDeduced());
     assertEquals(Routed, routed.event().type());
-    assertSame(Router, routed.log().entityModel());
+    assertSame(Router, routed.log().entityType());
     // The trigger of Submitted takes the choice storing Accepted
     assertSame(submission, routed.triggered().getFirst().step().orElseThrow().log());
   }
 
   @Test
-  void nothingIsDeducedWithoutTheEntityModels() {
+  void nothingIsDeducedWithoutTheEntityTypes() {
     UUID id = UUID.randomUUID();
-    EventLog submission = new EventLog(Submission, id, List.of(new Event<>(id, 1, Accepted, time)));
+    EventLog submission = new EventLog(Submission, id, List.of(new Event<>(id, 1, Accepted, time, null)));
     Step root = Replay.of(submission).roots().getFirst();
     assertSame(submission, root.log());
   }
 
   enum OutboxStates implements State {Waiting, Done}
 
-  static final EventType<Void, Void> Sent = BasicEventType.of("Sent", UUID.randomUUID());
-  static final EventType<Void, Void> Replied = BasicEventType.of("Replied", UUID.randomUUID());
-  static final EventType<Void, Void> Expired = BasicEventType.of("Expired", UUID.randomUUID());
+  static final EventType<Void, Void> Sent = EventType.of("Sent", UUID.randomUUID());
+  static final EventType<Void, Void> Replied = EventType.of("Replied", UUID.randomUUID());
+  static final EventType<Void, Void> Expired = EventType.of("Expired", UUID.randomUUID());
 
   static final Action<Void> Forward = new Action<>() {
     @Override public String name() {return "Forward";}
@@ -132,7 +132,7 @@ class ReplayTest {
   };
 
   /// Sends a request by an action, whose outcome is Replied, and expires by a delayed trigger, like an outbox request
-  static final EntityModel Outbox = EntityModel.of("Outbox", UUID.randomUUID(), () -> Map.of(
+  static final EntityType Outbox = EntityType.of("Outbox", UUID.randomUUID(), () -> Map.of(
       Begin, List.<TransitionModel<?, ?>>of(
           onEvent(Sent).to(OutboxStates.Waiting).assembleInput()
               .trigger(Expired).with(d -> d).after(_ -> Duration.ofSeconds(5))
@@ -148,7 +148,7 @@ class ReplayTest {
 
   private static EventLog outbox(EventType<Void, Void> outcome) {
     UUID id = UUID.randomUUID();
-    return new EventLog(Outbox, id, List.of(new Event<>(id, 1, Sent, time), new Event<>(id, 2, outcome, time.plusSeconds(1))));
+    return new EventLog(Outbox, id, List.of(new Event<>(id, 1, Sent, time, null), new Event<>(id, 2, outcome, time.plusSeconds(1), null)));
   }
 
   @Test

@@ -21,14 +21,14 @@ final class Queries {
     return
         """
         SET NOCOUNT ON;
-        DECLARE @entityId BINARY(16), @entityModelId BINARY(16);
+        DECLARE @entityId BINARY(16), @entityTypeId BINARY(16);
 
-        SELECT TOP(1) @entityId=e.EntityId, @entityModelId=e.EntityModelId
+        SELECT TOP(1) @entityId=e.EntityId, @entityTypeId=e.EntityTypeId
         FROM [{schema}].[IdEvent] ie WITH (INDEX(ixType_Data))
           INNER JOIN [{schema}].[Entity] e ON e.EntityId = ie.EntityId
         WHERE ie.Type=:type AND ie.Data=:data;
 
-        SELECT @entityId AS EntityId, @entityModelId AS EntityModelId, EventNumber, Type, Timestamp, Data
+        SELECT @entityId AS EntityId, @entityTypeId AS EntityTypeId, EventNumber, Type, Timestamp, Data
         FROM [{schema}].[Event] WITH (INDEX(pkEvent))
         WHERE EntityId=@entityId
         ORDER BY EventNumber;
@@ -62,7 +62,7 @@ final class Queries {
         """
         SELECT
           e.EntityId,
-          ent.EntityModelId,
+          ent.EntityTypeId,
           e.EventNumber,
           e.Type,
           e.Timestamp,
@@ -80,7 +80,7 @@ final class Queries {
         """
         DECLARE @processing TABLE (
           EntityId BINARY(16),
-          EntityModelId BINARY(16),
+          EntityTypeId BINARY(16),
           EventNumber SMALLINT,
           Type BINARY(16),
           Data VARBINARY(MAX),
@@ -93,7 +93,7 @@ final class Queries {
         INSERT INTO @processing
         SELECT TOP (1)
           EntityId,
-          EntityModelId,
+          EntityTypeId,
           EventNumber,
           Type,
           Data,
@@ -122,10 +122,10 @@ final class Queries {
           Deadline=(SELECT Deadline FROM @processing)
 
         IF @@ROWCOUNT = 1
-          SELECT EntityId, EntityModelId, EventNumber, Type, Data, NextAttemptAt, CorrelationId
+          SELECT EntityId, EntityTypeId, EventNumber, Type, Data, NextAttemptAt, CorrelationId
           FROM @processing
         ELSE
-          SELECT TOP 0 EntityId, EntityModelId, EventNumber, Type, Data, NextAttemptAt, CorrelationId
+          SELECT TOP 0 EntityId, EntityTypeId, EventNumber, Type, Data, NextAttemptAt, CorrelationId
           FROM @processing
         """.replace("{schema}", schema);
   }
@@ -140,7 +140,7 @@ final class Queries {
   static String conditionalTriggers(String schema) {
     return
         """
-        SELECT TOP (:limit) ce.Id, ce.EntityId, ce.EntityModelId, ce.TriggerEntityId, ce.TriggerEventNumber, ce.Type, ce.Data, ce.Timestamp, ce.LastTypes, ce.ReferenceType, ce.IndexKey, ce.CorrelationId
+        SELECT TOP (:limit) ce.Id, ce.EntityId, ce.EntityTypeId, ce.TriggerEntityId, ce.TriggerEventNumber, ce.Type, ce.Data, ce.Timestamp, ce.LastTypes, ce.ReferenceType, ce.IndexKey, ce.CorrelationId
         FROM [{schema}].[ConditionalTrigger] ce
         WHERE EXISTS (
             SELECT 1 FROM [{schema}].[IndexEvent] ie

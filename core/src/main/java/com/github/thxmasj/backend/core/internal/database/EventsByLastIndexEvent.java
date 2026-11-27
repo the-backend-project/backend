@@ -1,13 +1,12 @@
 package com.github.thxmasj.backend.core.internal.database;
 
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EventLog;
 import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.database.DatabaseClient;
 import com.github.thxmasj.backend.core.database.MappingFailure;
 import java.time.Clock;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import reactor.core.publisher.Mono;
@@ -36,8 +35,8 @@ public class EventsByLastIndexEvent {
   /// the first one is given.
   ///
   /// @param group the marshalled group, i.e. the prefix of the data of its index events
-  public Mono<EventLog> execute(EntityModel entityModel, List<EventType<?, ?>> eventTypes, UUID type, byte[] group, int position) {
-    var eventMapper = Mappers.eventMapper(eventTypes, clock);
+  public Mono<EventLog> execute(EntityType entityType, List<EventType<?, ?>> eventTypes, UUID type, byte[] group, int position) {
+    var eventMapper = Mappers.eventMapper(entityType, eventTypes, clock);
     return client.sql(sql)
         .name("EventsByLastIndexEvent")
         .bind("type", type)
@@ -49,16 +48,16 @@ public class EventsByLastIndexEvent {
           try {
             return eventMapper.apply(entityId, row);
           } catch (MappingFailure e) {
-            throw new MappingFailure("EventsByLastIndexEvent: Failed to map row to event for entity model " + entityModel.name(), e);
+            throw new MappingFailure("EventsByLastIndexEvent: Failed to map row to event for entity type " + entityType.name(), e);
           }
         })
         .all()
         .collectList()
         .filter(events -> !events.isEmpty())
         .map(events -> new EventLog(
-            entityModel,
+            entityType,
             events.getFirst().entityId(),
-            Collections.unmodifiableList(events)
+            events
         ));
   }
 

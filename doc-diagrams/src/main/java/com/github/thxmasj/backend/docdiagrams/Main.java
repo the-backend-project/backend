@@ -6,7 +6,7 @@ import static com.github.thxmasj.backend.docdiagrams.ExampleLogs.log;
 import static com.github.thxmasj.backend.templates.cardpayment.Identifiers.Ids;
 
 import com.github.thxmasj.backend.backoffice.Backoffice;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EventLog;
 import com.github.thxmasj.backend.diagram.EntityRelationshipDiagramFormatter;
 import com.github.thxmasj.backend.diagram.GraphvizFormatter;
@@ -68,12 +68,12 @@ public class Main {
     graphviz("http-inbox-rollback.dot", name + ".Rollback");
   }
 
-  /// The example of a sequence diagram on the diagrams page, with the entity models of its state machine, from which the
+  /// The example of a sequence diagram on the diagrams page, with the entity types of its state machine, from which the
   /// routing of the inbox request, which isn't stored, is deduced: a payment of the card payment template, requested
   /// from the inbox, and authenticated and authorised by outbox requests, in three transactions
   private static void sequenceDiagrams() throws IOException {
     var name = "com.github.thxmasj.backend.diagram.sequence.";
-    var models = EntityModel.reachable(DocExamples.PaymentInbox.entityModels());
+    var models = EntityType.reachable(DocExamples.PaymentInbox.entityTypes());
     sequenceDiagram(
         name + "Payment",
         models,
@@ -96,17 +96,17 @@ public class Main {
     System.out.println(new StateDiagramFormatter(cardPayments.payment())
         .only(PaymentState.ProcessingAuthentication, PaymentState.ProcessingAuthorisation, PaymentState.Authorised)
         .formatToImage(new File(directory, name + "state.Payment.svg")));
-    System.out.println(new EntityRelationshipDiagramFormatter(name + "cardpayment", cardPayments.entityModels())
+    System.out.println(new EntityRelationshipDiagramFormatter(name + "cardpayment", cardPayments.entityTypes())
         .only(cardPayments.merchant(), cardPayments.payment(), cardPayments.settlement())
         .compact()
         .formatToImage(directory));
   }
 
-  private static EntityModel model(List<EntityModel> models, String name) {
+  private static EntityType model(List<EntityType> models, String name) {
     return models.stream().filter(m -> m.name().equals(name)).findFirst().orElseThrow();
   }
 
-  private static void sequenceDiagram(String fileName, List<? extends EntityModel> models, EventLog log, EventLog... related)
+  private static void sequenceDiagram(String fileName, List<? extends EntityType> models, EventLog log, EventLog... related)
       throws IOException {
     var formatter = new SequenceDiagramFormatter(log, List.of(related), models);
     System.out.println(formatter.formatToImage(new File(directory, fileName + ".svg")));
@@ -117,7 +117,7 @@ public class Main {
     var cardPayments = DummyTransitions.cardPayments();
     stateDiagram(name + ".Payment", cardPayments.payment());
     stateDiagram(name + ".Settlement", cardPayments.settlement());
-    erDiagram(name, cardPayments.entityModels());
+    erDiagram(name, cardPayments.entityTypes());
     stateDiagram(Ids);
   }
 
@@ -129,14 +129,14 @@ public class Main {
     stateDiagram(name + ".ClientRegistration", Clients.ClientRegistration);
     stateDiagram(name + ".TokenRequest", Tokens.tokenRequest(tokenLifetime));
     stateDiagram(name + ".Authorization", Authorizations.Authorization);
-    erDiagram(name, Inbox.inbox(tokenLifetime).entityModels());
+    erDiagram(name, Inbox.inbox(tokenLifetime).entityTypes());
   }
 
   private static void helloWorld() throws IOException {
     var name = "com.github.thxmasj.backend.helloworld";
     stateDiagram(name + ".Greeting", Greetings.Greeting);
     stateDiagram(name + ".GreetingRequest", Greetings.GreetingRequest);
-    erDiagram(name, Greetings.Inbox.entityModels());
+    erDiagram(name, Greetings.Inbox.entityTypes());
   }
 
   private static void backoffice() throws IOException {
@@ -146,13 +146,13 @@ public class Main {
     stateDiagram("com.github.thxmasj.backend.backoffice.BackofficeSession", backoffice.sessionModel());
   }
 
-  private static void stateDiagram(EntityModel model) throws IOException {
+  private static void stateDiagram(EntityType model) throws IOException {
     System.out.println(new StateDiagramFormatter(model).formatToImage(directory));
   }
 
-  /// For the entity models of the apps, which are created with `EntityModel.of` and so would be named after the
+  /// For the entity types of the apps, which are created with `EntityType.of` and so would be named after the
   /// package of the core library
-  private static void stateDiagram(String fileName, EntityModel model) throws IOException {
+  private static void stateDiagram(String fileName, EntityType model) throws IOException {
     System.out.println(new StateDiagramFormatter(model).formatToImage(new File(directory, fileName + ".svg")));
   }
 
@@ -166,8 +166,8 @@ public class Main {
     }
   }
 
-  private static void erDiagram(String name, List<EntityModel> entityModels) throws IOException {
-    System.out.println(new EntityRelationshipDiagramFormatter(name, entityModels).compact().formatToImage(directory));
+  private static void erDiagram(String name, List<EntityType> entityTypes) throws IOException {
+    System.out.println(new EntityRelationshipDiagramFormatter(name, entityTypes).compact().formatToImage(directory));
   }
 
 }

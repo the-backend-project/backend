@@ -23,7 +23,7 @@ class EntityIdTest {
   @Test
   void idOfTheEntityATransitionIsOn() {
     UUID entityId = Identifiers.newId();
-    EventLog log = EventLog.empty(entityId, EntityModel.of("Test", UUID.randomUUID(), Map::of));
+    EventLog log = EventLog.empty(entityId, EntityType.of("Test", UUID.randomUUID(), Map::of));
     var context = new TransitionStep.InputStep<>(null, null, null, null, null, 1, log, null, null, null, null, null);
     assertEquals(EntityId.of(entityId), context.entityId());
   }

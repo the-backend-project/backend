@@ -1,6 +1,6 @@
 package com.github.thxmasj.backend.backoffice;
 
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static com.github.thxmasj.backend.core.EntitySelector.entityIdFromSession;
 import static com.github.thxmasj.backend.core.EntitySelector.newEntityId;
 import static com.github.thxmasj.backend.core.TransitionModelBuilder.WithEvent.onEvent;
@@ -12,11 +12,10 @@ import static com.github.thxmasj.backend.http.inbox.HttpInboxRequest.newEntity;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.github.thxmasj.backend.core.BasicEventType;
 import com.github.thxmasj.backend.core.DataType;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EventType;
-import com.github.thxmasj.backend.core.IdEntityModel;
+import com.github.thxmasj.backend.core.IdEntityType;
 import com.github.thxmasj.backend.core.State;
 import com.github.thxmasj.backend.core.StateMachine;
 import com.github.thxmasj.backend.core.TransitionModel;
@@ -56,10 +55,10 @@ public class BackofficeTest {
   /// An application placing orders, each found by its order number
   enum OrderStates implements State {Placed}
 
-  static final EntityModel Order = EntityModel.of("Order", UUID.fromString("0a3e6c1d-7b92-4f58-a4e0-2d9c5f8b1e63"), BackofficeTest::orderTransitions);
-  static final EventType<String, String> OrderPlaced = BasicEventType.of("Order placed", UUID.fromString("b6d1f8a3-2c4e-4a97-8e05-9f3b7d1c5a28"), DataType.string());
-  static final EventType<String, String> OrderNumberClaimed = BasicEventType.of("Order number claimed", UUID.fromString("e2c9a5f7-4b1d-4d63-9a80-6c2e8f4b1d95"), DataType.string());
-  static final IdEntityModel OrderNumbers = IdEntityModel.of("OrderNumbers", UUID.fromString("5f8b2d6e-9a3c-4e17-b0d4-1e7a3c9f5b82"), OrderNumberClaimed);
+  static final EntityType Order = EntityType.of("Order", UUID.fromString("0a3e6c1d-7b92-4f58-a4e0-2d9c5f8b1e63"), BackofficeTest::orderTransitions);
+  static final EventType<String, String> OrderPlaced = EventType.of("Order placed", UUID.fromString("b6d1f8a3-2c4e-4a97-8e05-9f3b7d1c5a28"), DataType.string());
+  static final EventType<String, String> OrderNumberClaimed = EventType.of("Order number claimed", UUID.fromString("e2c9a5f7-4b1d-4d63-9a80-6c2e8f4b1d95"), DataType.string());
+  static final IdEntityType OrderNumbers = IdEntityType.of("OrderNumbers", UUID.fromString("5f8b2d6e-9a3c-4e17-b0d4-1e7a3c9f5b82"), OrderNumberClaimed);
   static final HttpInboxRequest<String> PlaceOrder = HttpInboxRequest
       .matching(m -> m.method() == Method.PUT && m.uri().getPath().startsWith("/orders/"))
       .contentParser(r -> valid(r.uri().getPath().substring("/orders/".length())))
@@ -87,7 +86,7 @@ public class BackofficeTest {
   @BeforeAll
   static void setUp() {
     inbox = HttpInbox.of(List.of(PlaceOrder));
-    stateMachine = Init.stateMachine(schema, inbox.entityModels());
+    stateMachine = Init.stateMachine(schema, inbox.entityTypes());
     BackofficeTest.application = new HttpInboxListener(stateMachine, inbox).listen(0);
     int port = freePort();
     var backoffice = backoffice(config(port, Duration.ofHours(1)));
@@ -114,7 +113,7 @@ public class BackofficeTest {
 
   /// The backoffice of the application
   private static Backoffice backoffice(Backoffice.Config config) {
-    return new Backoffice("Orders", config, Init.client(), schema, inbox.entityModels());
+    return new Backoffice("Orders", config, Init.client(), schema, inbox.entityTypes());
   }
 
   /// The state machine of a backoffice, in a schema of its own, reading the schema of the application. It has a
@@ -123,7 +122,7 @@ public class BackofficeTest {
   private static StateMachine backofficeStateMachine(String backofficeSchema, Backoffice backoffice) {
     return new StateMachine(
         _ -> Mono.empty(),
-        backoffice.inbox().entityModels(),
+        backoffice.inbox().entityTypes(),
         Init.database(),
         Init.newClient(),
         Init.migrationDataSource(),
@@ -344,7 +343,7 @@ public class BackofficeTest {
   void resourcesAreNotStored() throws Exception {
     assertThat(get(server, "/health", null).statusCode()).isEqualTo(200);
     assertThat(get(server, "/backoffice/static/backoffice.css", null).statusCode()).isEqualTo(200);
-    long resources = Init.client().sql("SELECT CAST(COUNT(*) AS INT) AS N FROM \"" + backofficeSchema + "\".\"Entity\" WHERE EntityModelId=:model")
+    long resources = Init.client().sql("SELECT CAST(COUNT(*) AS INT) AS N FROM \"" + backofficeSchema + "\".\"Entity\" WHERE EntityTypeId=:model")
         .name("Test.Resources")
         .bind("model", UUID.fromString("8e3c1a6f-4b2d-4d97-a5e0-2f7b9c4d1e83"))
         .map(row -> row.get("N", Integer.class).longValue())

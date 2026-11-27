@@ -1,6 +1,6 @@
 package com.github.thxmasj.backend.core.test;
 
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static com.github.thxmasj.backend.core.EntitySelector.entityIdFromSession;
 import static com.github.thxmasj.backend.core.EntitySelector.newEntityId;
 import static com.github.thxmasj.backend.core.EventTrigger.trigger;
@@ -8,9 +8,8 @@ import static com.github.thxmasj.backend.core.TransitionModelBuilder.WithEvent.o
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import com.github.thxmasj.backend.core.Action;
-import com.github.thxmasj.backend.core.BasicEventType;
-import com.github.thxmasj.backend.core.EntityModel;
-import com.github.thxmasj.backend.core.EntityModelGroup;
+import com.github.thxmasj.backend.core.EntityType;
+import com.github.thxmasj.backend.core.EntityTypeGroup;
 import com.github.thxmasj.backend.core.Event;
 import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.InputEvent;
@@ -37,12 +36,12 @@ public class SessionTest {
 
   enum NoteStates implements State {Noted, Recalled}
 
-  static EntityModel Request = EntityModel.of("Request", id(1), SessionTest::requestTransitions);
-  static EntityModel Worker = EntityModel.of("Worker", id(2), SessionTest::workerTransitions);
+  static EntityType Request = EntityType.of("Request", id(1), SessionTest::requestTransitions);
+  static EntityType Worker = EntityType.of("Worker", id(2), SessionTest::workerTransitions);
   /// An entity of the session only, never stored
-  static EntityModel Note = EntityModel.notStored("Note", id(3), SessionTest::noteTransitions);
+  static EntityType Note = EntityType.notStored("Note", id(3), SessionTest::noteTransitions);
   /// Stands for the request without naming its model, as `HttpInbox.Request` does for the inbox requests
-  static EntityModelGroup Requests = EntityModelGroup.of("Requests", id(4), Request::equals);
+  static EntityTypeGroup Requests = EntityTypeGroup.of("Requests", id(4), Request::equals);
 
   static EventType<Void, Void> StartedOnce = event("Started once", 10);
   static EventType<Void, Void> StartedTwice = event("Started twice", 11);
@@ -68,7 +67,7 @@ public class SessionTest {
   }
 
   private static EventType<Void, Void> event(String name, int n) {
-    return BasicEventType.of(name, id(n));
+    return EventType.of(name, id(n));
   }
 
   /// An action whose outcome is the event, as of an outbox request getting its response
@@ -129,7 +128,7 @@ public class SessionTest {
   }
 
   /// Answers the request of the session, not knowing which one it is
-  private static TransitionModel<?, ?> answer(EntityModel request) {
+  private static TransitionModel<?, ?> answer(EntityType request) {
     return onEvent(HopsDone).to(WorkerStates.Done)
         .trigger(Answered).with(_ -> null).on(request).identifiedBy(entityIdFromSession())
         .output();

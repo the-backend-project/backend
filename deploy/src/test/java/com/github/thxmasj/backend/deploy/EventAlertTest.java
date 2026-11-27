@@ -50,7 +50,7 @@ public class EventAlertTest {
           .containsEntry("operator", "GreaterThan")
           .containsEntry("threshold", 0.0)
           .containsEntry("dimensions", List.of(
-              Map.of("name", "entityModel", "operator", "Include", "values", List.of("*")),
+              Map.of("name", "entityType", "operator", "Include", "values", List.of("*")),
               Map.of("name", "eventType", "operator", "Include", "values", List.of("*"))
           ));
     }

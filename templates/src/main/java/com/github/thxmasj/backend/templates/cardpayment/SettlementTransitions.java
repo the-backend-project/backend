@@ -1,6 +1,6 @@
 package com.github.thxmasj.backend.templates.cardpayment;
 
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static com.github.thxmasj.backend.core.EntitySelector.entityIdFromSession;
 import static com.github.thxmasj.backend.core.EntitySelector.newEntityId;
 import static com.github.thxmasj.backend.core.EntitySelector.idEvent;
@@ -42,7 +42,7 @@ import static com.github.thxmasj.backend.templates.cardpayment.SettlementEvent.I
 import static com.github.thxmasj.backend.templates.cardpayment.SettlementEvent.ReconciliationRequested;
 import static com.github.thxmasj.backend.templates.cardpayment.SettlementEvent.SettlementTimedOut;
 
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EventLog;
 import com.github.thxmasj.backend.core.Identifiable;
 import com.github.thxmasj.backend.core.Severity;
@@ -76,9 +76,9 @@ public class SettlementTransitions {
     @Override public UUID id() {return id;}
   }
   private final Map<State, List<TransitionModel<?, ?>>> transitions;
-  private final EntityModel merchant;
-  private final EntityModel settlement;
-  private final List<EntityModel> outboxRequestModels;
+  private final EntityType merchant;
+  private final EntityType settlement;
+  private final List<EntityType> outboxRequestModels;
   private final Dispatcher<Tuple3<BatchNumber, AcquirerBatchNumber, Merchant>, ?> reconciliation;
   private final Dispatcher<Tuple2<CutOff, ReconciliationValues>, ?> approvedCutOff;
 
@@ -94,7 +94,7 @@ public class SettlementTransitions {
     return approvedCutOff;
   }
 
-  public List<EntityModel> outboxRequestModels() {
+  public List<EntityType> outboxRequestModels() {
     return outboxRequestModels;
   }
 
@@ -103,8 +103,8 @@ public class SettlementTransitions {
   /// @param merchantModel   the model of the merchants
   /// @param settlementModel the model of the settlements, whose transitions these are
   <I1, I2> SettlementTransitions(
-      EntityModel merchantModel,
-      EntityModel settlementModel,
+      EntityType merchantModel,
+      EntityType settlementModel,
       // validateSettlementResponse()
       Dispatcher<Tuple3<BatchNumber, AcquirerBatchNumber, Merchant>, I1> reconciliationToAcquirer,
       Dispatcher<Tuple2<CutOff, ReconciliationValues>, I2> approvedCutOffToMerchant
@@ -260,7 +260,7 @@ public class SettlementTransitions {
             .trigger(reconciliation.requestDispatched())
             // A rolled back request is settled too, as its reversal is a request referencing the batch on its own
             .when(BatchReferenced, d -> d.t1().t5()).is(HttpOutboxRequest.requestAccepted(), HttpOutboxRequest.rollbackDispatched())
-            .withReactive(d -> reconciliation.input(d.t1().t6(), tuple(d.t1().t2(), d.t1().t3(), d.t2().accepted().event().getUnmarshalledData())))
+            .withReactive(d -> reconciliation.input(d.t1().t6(), tuple(d.t1().t2(), d.t1().t3(), d.t2().accepted().event().data())))
             .on(reconciliation.outbox())
             .identifiedBy(newEntityId())
             .trigger(SettlementEvent.SettlementOpened).with(d -> new Opened(d.t1().t2().next(), d.t1().t3().next())).on(settlement).identifiedBy(newEntityId())

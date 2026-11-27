@@ -16,13 +16,13 @@ public class TriggerConditionTest {
 
   enum States implements State {Begin, Processing, Accepted}
 
-  static final EntityModel Banana = EntityModel.of("Banana", UUID.fromString("f01199a0-d2f0-4cc3-8c05-b44e0da7c3d1"), Map::of);
+  static final EntityType Banana = EntityType.of("Banana", UUID.fromString("f01199a0-d2f0-4cc3-8c05-b44e0da7c3d1"), Map::of);
 
   static EventType<Void, Void>
-      BananaForwarded = BasicEventType.of("Banana forwarded", UUID.fromString("7f1a8a3e-4c52-4e0b-9b0e-2f6d1f1c2a01")),
-      BananaRipened = BasicEventType.of("Banana ripened", UUID.fromString("7f1a8a3e-4c52-4e0b-9b0e-2f6d1f1c2a02")),
-      BatchReferenced = BasicEventType.of("Batch referenced", UUID.fromString("7f1a8a3e-4c52-4e0b-9b0e-2f6d1f1c2a03")),
-      BananaAccepted = BasicEventType.of("Banana accepted", UUID.fromString("7f1a8a3e-4c52-4e0b-9b0e-2f6d1f1c2a04"));
+      BananaForwarded = EventType.of("Banana forwarded", UUID.fromString("7f1a8a3e-4c52-4e0b-9b0e-2f6d1f1c2a01")),
+      BananaRipened = EventType.of("Banana ripened", UUID.fromString("7f1a8a3e-4c52-4e0b-9b0e-2f6d1f1c2a02")),
+      BatchReferenced = EventType.of("Batch referenced", UUID.fromString("7f1a8a3e-4c52-4e0b-9b0e-2f6d1f1c2a03")),
+      BananaAccepted = EventType.of("Banana accepted", UUID.fromString("7f1a8a3e-4c52-4e0b-9b0e-2f6d1f1c2a04"));
 
   @Test
   public void conditionIsStoredOnTrigger() {

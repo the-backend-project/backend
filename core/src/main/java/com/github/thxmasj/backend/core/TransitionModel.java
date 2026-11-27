@@ -3,12 +3,13 @@ package com.github.thxmasj.backend.core;
 import static com.github.thxmasj.backend.core.TransitionModelBuilder.log;
 import static java.util.Collections.unmodifiableList;
 
-import com.github.thxmasj.backend.core.BasicEventType.Rollback.Data;
+import com.github.thxmasj.backend.core.EventType.Rollback.Data;
 import com.github.thxmasj.backend.core.TransitionModelBuilder.Filter;
 import com.github.thxmasj.backend.core.TransitionModelBuilder.ModelContext;
 import com.github.thxmasj.backend.core.StateMachine.ProcessResult;
 import com.github.thxmasj.backend.core.StateMachine.ProcessResult.Accepted;
 import com.github.thxmasj.backend.core.Tuples.Tuple4;
+import com.github.thxmasj.backend.core.internal.EventTypes;
 import com.github.thxmasj.backend.core.internal.TransitionStep.ChoiceStep;
 import com.github.thxmasj.backend.core.internal.TransitionStep.InputStep;
 import com.github.thxmasj.backend.core.internal.TransitionStep.OutputStep;
@@ -24,7 +25,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import reactor.core.publisher.Mono;
 
-/// The model of a transition of an entity model on an event type, built by [TransitionModelBuilder]. It calculates the
+/// The model of a transition of an entity type on an event type, built by [TransitionModelBuilder]. It calculates the
 /// steps of the transition from its input step to its output step.
 public class TransitionModel<I, O> {
 
@@ -71,7 +72,7 @@ public class TransitionModel<I, O> {
     return modelContext.reverseModel();
   }
 
-  TransitionModel<Tuple4<I, EntityModel, EventType<?, ?>, String>, O> rejectModel() {
+  TransitionModel<Tuple4<I, EntityType, EventType<?, ?>, String>, O> rejectModel() {
     return null;
   }
 
@@ -80,9 +81,8 @@ public class TransitionModel<I, O> {
   /// machine, and the tests of the transitions of the library's modules.
   public Mono<OutputStep<O>> calculate(InputStep<I> inputStep) {
     // Without the input, which may be a secret, e.g. the credentials of a request
-    log(modelContext, "calculate [" + eventType().name() + "] on [" + inputStep.log().entityModel().name() + ":" + inputStep.log().entityId() + "]");
+    log(modelContext, "calculate [" + eventType().name() + "] on [" + inputStep.log().entityType().name() + ":" + inputStep.log().entityId() + "]");
     return chain.apply(Mono.just(inputStep))
-        .map(TransitionModel::marshalledIfStored)
         .doOnError(e -> inputStep.stateMachine().transitionFailed(inputStep, e));
   }
 
@@ -151,18 +151,6 @@ public class TransitionModel<I, O> {
   /// Whether the transition's event has no data, as it ends in `output()` without a data adapter
   boolean withoutData() {
     return modelContext.withoutData();
-  }
-
-  /// The output step with its event marshalled, after its mask, if it is stored, so that a failure of masking or
-  /// marshalling it is one of the transition, and the event is marshalled once. An event which isn't stored is never
-  /// marshalled for storing, nor is the event of a transition which chose another one, which isn't stored either.
-  private static <O> OutputStep<O> marshalledIfStored(OutputStep<O> step) {
-    if (!(step.previous() instanceof ChoiceStep<?>)
-        && step.stepOutput() instanceof Accepted<O>(Event<O> event, _, _)
-        && event.type().stored()
-        && !step.inputStep().log().isSessionOnlyWith(event))
-      event.getMarshalledData();
-    return step;
   }
 
   /// A transition with an output, which may be masked when its event is stored

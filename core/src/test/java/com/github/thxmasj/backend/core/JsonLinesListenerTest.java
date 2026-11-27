@@ -35,7 +35,7 @@ public class JsonLinesListenerTest {
         List.of(
             "{\"time\":\"2026-11-13T12:00:00.123Z\",\"severity\":\"ERROR\","
                 + "\"message\":\"Attempts exhausted on Notification 9f0c5a2e-1b3d-4c5e-8f7a-6b5c4d3e2f1a\","
-                + "\"entityModel\":\"Notification\",\"entityId\":\"9f0c5a2e-1b3d-4c5e-8f7a-6b5c4d3e2f1a\","
+                + "\"entityType\":\"Notification\",\"entityId\":\"9f0c5a2e-1b3d-4c5e-8f7a-6b5c4d3e2f1a\","
                 + "\"eventNumber\":7,\"eventType\":\"Attempts exhausted\",\"correlationId\":\"SYS-1234\"}"
         ),
         lines
@@ -59,7 +59,7 @@ public class JsonLinesListenerTest {
   public void delayedEventsAndConditionalTriggersAreNotWritten() {
     Change.Entity entity = new Change.Entity("Notification", entityId);
     listener.changeAccepted("1", List.of(
-        new Change(entity, new Change.DelayedEvent(2, "Timeout expired", timestamp.plusSeconds(30))),
+        new Change(entity, new Change.DelayedTrigger(2, "Timeout expired", timestamp.plusSeconds(30))),
         new Change(entity, null)
     ));
 

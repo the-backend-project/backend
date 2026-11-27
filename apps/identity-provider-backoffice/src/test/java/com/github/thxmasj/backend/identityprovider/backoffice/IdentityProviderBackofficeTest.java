@@ -64,7 +64,7 @@ public class IdentityProviderBackofficeTest {
     BackofficeApp.migrate(BackofficeApp.Config.fromEnvironment(admin, "identity_provider", false));
     var config = BackofficeApp.Config.fromEnvironment(env("testlogin", "Please_hide_me!", issuer), "identity_provider", true);
     DataSource dataSource = new DataSourceBuilder(Database.named(config.database()), config.databaseConfig()).buildPooled();
-    var backoffice = BackofficeApp.backoffice("Identity provider", config, dataSource, Inbox.inbox(Duration.ofMinutes(5)).entityModels());
+    var backoffice = BackofficeApp.backoffice("Identity provider", config, dataSource, Inbox.inbox(Duration.ofMinutes(5)).entityTypes());
     stateMachine = BackofficeApp.stateMachine(config, dataSource, backoffice);
     server = BackofficeApp.serve(config, stateMachine, backoffice);
   }

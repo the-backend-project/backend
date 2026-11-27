@@ -18,7 +18,7 @@ public class MerchantTest {
   public static void setup() {
     stateMachine = new StateMachine(
         _ -> Mono.empty(),
-        DummyTransitions.cardPayments().entityModels(),
+        DummyTransitions.cardPayments().entityTypes(),
         Init.database(),
         Init.client(),
         migrationDataSource,

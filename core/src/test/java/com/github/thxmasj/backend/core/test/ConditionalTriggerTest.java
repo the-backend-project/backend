@@ -1,6 +1,6 @@
 package com.github.thxmasj.backend.core.test;
 
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static com.github.thxmasj.backend.core.EntitySelector.entityId;
 import static com.github.thxmasj.backend.core.EntitySelector.entityIdFromSession;
 import static com.github.thxmasj.backend.core.EntitySelector.newEntityId;
@@ -11,13 +11,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.github.thxmasj.backend.core.BasicEventType;
 import com.github.thxmasj.backend.core.DataType;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EntitySelector;
 import com.github.thxmasj.backend.core.EventLog;
 import com.github.thxmasj.backend.core.EventType;
-import com.github.thxmasj.backend.core.IndexEntityModel;
+import com.github.thxmasj.backend.core.IndexEntityType;
 import com.github.thxmasj.backend.core.State;
 import com.github.thxmasj.backend.core.StateMachine;
 import com.github.thxmasj.backend.core.TransitionModel;
@@ -38,81 +37,81 @@ public class ConditionalTriggerTest {
 
   enum CheckStates implements State {Done}
 
-  static EntityModel Order = EntityModel.of("Order", UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b01"), ConditionalTriggerTest::orderTransitions);
-  static EntityModel Batch = EntityModel.of("Batch", UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b02"), ConditionalTriggerTest::batchTransitions);
+  static EntityType Order = EntityType.of("Order", UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b01"), ConditionalTriggerTest::orderTransitions);
+  static EntityType Batch = EntityType.of("Batch", UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b02"), ConditionalTriggerTest::batchTransitions);
   /// A check of a batch, which is not stored, so it is an entity of the session only. Its conditional trigger is on the
   /// batch, which is stored, and must be deleted as it fires.
-  static EntityModel Check = EntityModel.notStored("Check", UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b10"), ConditionalTriggerTest::checkTransitions);
-  static EventType<UUID, UUID> orderReferenced = IndexEntityModel.referenceEventType(
+  static EntityType Check = EntityType.notStored("Check", UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b10"), ConditionalTriggerTest::checkTransitions);
+  static EventType<UUID, UUID> orderReferenced = IndexEntityType.referenceEventType(
       "Order referenced",
       UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b03")
   );
-  static IndexEntityModel Index = IndexEntityModel.of(
+  static IndexEntityType Index = IndexEntityType.of(
       "Index",
       UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b04"),
       orderReferenced
   );
 
-  static EventType<UUID, UUID> OrderCreated = BasicEventType.of(
+  static EventType<UUID, UUID> OrderCreated = EventType.of(
       "Order created",
       UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b05"),
       DataType.uuid()
   );
-  static EventType<Void, Void> OrderShipped = BasicEventType.of(
+  static EventType<Void, Void> OrderShipped = EventType.of(
       "Order shipped",
       UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b06")
   );
-  static EventType<Void, Void> OrderCancelled = BasicEventType.of(
+  static EventType<Void, Void> OrderCancelled = EventType.of(
       "Order cancelled",
       UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b0b")
   );
-  static EventType<UUID, UUID> BatchCloseRequestedWhenShippedOrCancelled = BasicEventType.of(
+  static EventType<UUID, UUID> BatchCloseRequestedWhenShippedOrCancelled = EventType.of(
       "Batch close requested when shipped or cancelled",
       UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b0c"),
       DataType.uuid()
   );
-  static EventType<Void, Void> BatchOpened = BasicEventType.of(
+  static EventType<Void, Void> BatchOpened = EventType.of(
       "Batch opened",
       UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b07")
   );
-  static EventType<UUID, UUID> BatchCloseRequestedWhenShipped = BasicEventType.of(
+  static EventType<UUID, UUID> BatchCloseRequestedWhenShipped = EventType.of(
       "Batch close requested when shipped",
       UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b08"),
       DataType.uuid()
   );
-  static EventType<UUID, UUID> SessionBatchCloseRequestedWhenShipped = BasicEventType.of(
+  static EventType<UUID, UUID> SessionBatchCloseRequestedWhenShipped = EventType.of(
       "Session batch close requested when shipped",
       UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b0a"),
       DataType.uuid()
   );
-  static EventType<Void, Void> BatchClosed = BasicEventType.of(
+  static EventType<Void, Void> BatchClosed = EventType.of(
       "Batch closed",
       UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b09")
   );
 
-  static EventType<UUID, UUID> BatchCheckRequestedWhenShipped = BasicEventType.of(
+  static EventType<UUID, UUID> BatchCheckRequestedWhenShipped = EventType.of(
       "Batch check requested when shipped",
       UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b0d"),
       DataType.uuid()
   );
-  static EventType<Void, Void> BatchNoted = BasicEventType.of(
+  static EventType<Void, Void> BatchNoted = EventType.of(
       "Batch noted",
       UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b0f")
   );
   /// Not stored, so its conditional trigger is deleted by a change of its own when it fires, also as its transition
   /// stores another event on the batch
-  static EventType<Void, Void> BatchChecked = BasicEventType.notStored(
+  static EventType.NotStored<Void, Void> BatchChecked = EventType.notStored(
       "Batch checked",
       UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b0e")
   );
 
-  static EventType<UUID, UUID> CheckRequestedWhenShipped = BasicEventType.of(
+  static EventType<UUID, UUID> CheckRequestedWhenShipped = EventType.of(
       "Check requested when shipped",
       UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b11"),
       DataType.uuid()
   );
   /// Its data is the id of the batch checked
-  static EventType<UUID, UUID> CheckRun = BasicEventType.of(
+  static EventType<UUID, UUID> CheckRun = EventType.of(
       "Check run",
       UUID.fromString("c1a8a3e0-0f0b-4b0e-9b0e-2f6d1f1c2b12"),
       DataType.uuid()
@@ -123,11 +122,11 @@ public class ConditionalTriggerTest {
 
   private StateMachine stateMachine(String schema) {
     this.schema = schema;
-    eventsByEntityId = Init.storage(schema, entityModels()).eventsByEntityId();
-    return Init.stateMachine(schema, entityModels());
+    eventsByEntityId = Init.storage(schema, entityTypes()).eventsByEntityId();
+    return Init.stateMachine(schema, entityTypes());
   }
 
-  private static List<EntityModel> entityModels() {
+  private static List<EntityType> entityTypes() {
     return List.of(Order, Batch, Index, Check);
   }
 
@@ -270,9 +269,9 @@ public class ConditionalTriggerTest {
   @Test
   public void conditionalTriggerFiredByAnotherTransactionFirstIsTakenOnce() throws Exception {
     this.schema = UUID.randomUUID().toString();
-    eventsByEntityId = Init.storage(schema, entityModels()).eventsByEntityId();
+    eventsByEntityId = Init.storage(schema, entityTypes()).eventsByEntityId();
     // Deletes the trigger just before the transaction it fired is stored, as the other transaction would
-    var machine = Init.stateMachine(schema, entityModels(), java.time.Clock.systemUTC(), new com.github.thxmasj.backend.core.JsonLinesListener(_ -> {}, java.time.Clock.systemUTC()), keys ->
+    var machine = Init.stateMachine(schema, entityTypes(), java.time.Clock.systemUTC(), new com.github.thxmasj.backend.core.JsonLinesListener(_ -> {}, java.time.Clock.systemUTC()), keys ->
         keys.stream().anyMatch(key -> key.endsWith(BatchChecked.id().toString())) ?
             Init.client().sql("DELETE FROM \"" + schema + "\".\"ConditionalTrigger\"").name("Test.DeleteConditionalTriggers").update().then() :
             reactor.core.publisher.Mono.empty()

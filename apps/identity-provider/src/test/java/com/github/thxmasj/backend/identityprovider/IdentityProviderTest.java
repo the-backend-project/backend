@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatNoException;
 
 import com.github.thxmasj.backend.core.DataType;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.Severity;
 import com.github.thxmasj.backend.core.StateMachine;
 import com.github.thxmasj.backend.http.AccessTokenSupplier;
@@ -124,7 +124,7 @@ public class IdentityProviderTest {
         importedClients.stream().collect(java.util.stream.Collectors.toMap(ImportedClient::clientId, ImportedClient::secretHash)),
         new JdkHttpClient()
     );
-    stateMachine = Init.stateMachine(schema, inbox.entityModels());
+    stateMachine = Init.stateMachine(schema, inbox.entityTypes());
     IdentityProvider.bootstrap(stateMachine, inbox, new BootstrapClient(adminId, adminSecret));
     IdentityProvider.importClients(stateMachine, inbox, importedClients);
     server = IdentityProvider.serve(stateMachine, inbox, port);
@@ -431,7 +431,7 @@ public class IdentityProviderTest {
   /// Many refused token requests may be an attempt to guess a secret, so each one is a warning for monitoring
   @Test
   public void whenTokenIsRefusedThenItsEventIsAWarning() {
-    var refusals = Tokens.tokenRequest(tokenLifetime).transitions().get(EntityModel.Begin).stream()
+    var refusals = Tokens.tokenRequest(tokenLifetime).transitions().get(EntityType.Begin).stream()
         .flatMap(transition -> transition.filters().stream())
         .map(filter -> filter.alternative().model())
         .filter(chosen -> chosen.eventType().equals(Tokens.TokenRefused))

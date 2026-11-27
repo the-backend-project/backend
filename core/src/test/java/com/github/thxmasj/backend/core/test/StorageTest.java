@@ -1,23 +1,21 @@
 package com.github.thxmasj.backend.core.test;
 
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static com.github.thxmasj.backend.core.TransitionModelBuilder.WithEvent.onEvent;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import com.github.thxmasj.backend.core.BasicEventType;
+import com.github.thxmasj.backend.core.Change;
 import com.github.thxmasj.backend.core.DataType;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.Event;
 import com.github.thxmasj.backend.core.EventLog;
 import com.github.thxmasj.backend.core.EventType;
-import com.github.thxmasj.backend.core.IdEntityModel;
+import com.github.thxmasj.backend.core.IdEntityType;
 import com.github.thxmasj.backend.core.State;
 import com.github.thxmasj.backend.core.database.UnknownEntity;
-import com.github.thxmasj.backend.core.internal.DelayedEvent;
-import com.github.thxmasj.backend.core.internal.database.ChangeState.Change;
 import com.github.thxmasj.backend.core.internal.database.IdEventAlreadyExists;
 import com.github.thxmasj.backend.core.internal.database.Storage;
 import java.io.PrintWriter;
@@ -45,24 +43,24 @@ public class StorageTest {
 
   enum States implements State {Created}
 
-  static EventType<Void, Void> PersonCreated = BasicEventType.of("Person created", UUID.fromString("5a4bd3b2-5d0e-4a8e-9a61-2f3b1d6e0c01"));
-  static EventType<String, String> NameClaimed = BasicEventType.of("Name claimed", UUID.fromString("5a4bd3b2-5d0e-4a8e-9a61-2f3b1d6e0c02"), DataType.string());
+  static EventType<Void, Void> PersonCreated = EventType.of("Person created", UUID.fromString("5a4bd3b2-5d0e-4a8e-9a61-2f3b1d6e0c01"));
+  static EventType<String, String> NameClaimed = EventType.of("Name claimed", UUID.fromString("5a4bd3b2-5d0e-4a8e-9a61-2f3b1d6e0c02"), DataType.string());
 
-  static EntityModel Person = EntityModel.of(
+  static EntityType Person = EntityType.of(
       "Person",
       UUID.fromString("5a4bd3b2-5d0e-4a8e-9a61-2f3b1d6e0c03"),
       () -> Map.of(Begin, List.of(onEvent(PersonCreated).to(States.Created).output()))
   );
-  static IdEntityModel Names = IdEntityModel.of("Names", UUID.fromString("5a4bd3b2-5d0e-4a8e-9a61-2f3b1d6e0c04"), NameClaimed);
+  static IdEntityType Names = IdEntityType.of("Names", UUID.fromString("5a4bd3b2-5d0e-4a8e-9a61-2f3b1d6e0c04"), NameClaimed);
 
-  private static final List<EntityModel> entityModels = List.of(Person, Names);
+  private static final List<EntityType> entityTypes = List.of(Person, Names);
 
   private static final Clock clock = Clock.systemUTC();
 
   private static Storage storage() {
     String schema = UUID.randomUUID().toString();
     Storage.createSchema(Init.migrationDataSource(), schema, "Test").block();
-    return Init.storage(schema, entityModels);
+    return Init.storage(schema, entityTypes);
   }
 
   private static void store(Storage storage, Change... changes) {
@@ -72,18 +70,13 @@ public class StorageTest {
   /// A person with a name, i.e. its first event and its name's id event
   private static Change[] person(UUID entityId, String name) {
     return new Change[] {
-        change(Person, new Event<>(entityId, 1, PersonCreated, clock)),
-        change(Names, new Event<>(entityId, 1, NameClaimed, clock, name))
+        change(Person, new Event<>(entityId, 1, PersonCreated, ZonedDateTime.now(clock), null)),
+        change(Names, new Event<>(entityId, 1, NameClaimed, ZonedDateTime.now(clock), name))
     };
   }
 
-  private static Change change(EntityModel entityModel, Event<?> event) {
-    return new Change() {
-      @Override public EntityModel entityModel() {return entityModel;}
-      @Override public UUID entityId() {return event.entityId();}
-      @Override public Event<?> newEvent() {return event;}
-      @Override public DelayedEvent<?> delayedEvent() {return null;}
-    };
+  private static Change change(EntityType entityType, Event<?> event) {
+    return Change.Event.of(entityType, event, null);
   }
 
   @Test
@@ -95,7 +88,7 @@ public class StorageTest {
     EventLog log = storage.eventsByIdEvent().execute(NameClaimed, NameClaimed.outputDataType().marshal("Alice")).block();
 
     assertEquals(alice, log.entityId());
-    assertEquals(Person, log.entityModel());
+    assertEquals(Person, log.entityType());
     assertEquals(List.of("1:Person created"), log.events().stream().map(e -> e.eventNumber() + ":" + e.typeName()).toList());
     assertNull(storage.eventsByIdEvent().execute(NameClaimed, NameClaimed.outputDataType().marshal("Bob")).block());
   }
@@ -107,7 +100,7 @@ public class StorageTest {
 
     var e = assertThrows(IdEventAlreadyExists.class, () -> store(storage, person(UUID.randomUUID(), "Alice")));
 
-    assertEquals("Alice", e.idEvent().getUnmarshalledData());
+    assertEquals("Alice", NameClaimed.outputDataType().unmarshal(e.idEvent().data()));
   }
 
   @Test

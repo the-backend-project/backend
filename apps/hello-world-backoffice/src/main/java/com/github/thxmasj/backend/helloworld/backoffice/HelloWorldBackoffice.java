@@ -4,7 +4,7 @@ import com.github.thxmasj.backend.backoffice.BackofficeApp;
 import com.github.thxmasj.backend.helloworld.Greetings;
 
 /// The backoffice of the hello world, an application of its own which reads the entities of the
-/// hello world from its schema, with the hello world's entity models. See [BackofficeApp].
+/// hello world from its schema, with the hello world's entity types. See [BackofficeApp].
 ///
 /// Usage:
 ///
@@ -17,7 +17,7 @@ public final class HelloWorldBackoffice {
   private HelloWorldBackoffice() {}
 
   public static void main(String[] args) {
-    BackofficeApp.run("Hello world", "hello_world", Greetings.Inbox.entityModels(), args, System.getenv());
+    BackofficeApp.run("Hello world", "hello_world", Greetings.Inbox.entityTypes(), args, System.getenv());
   }
 
 }

@@ -1,20 +1,19 @@
 package com.github.thxmasj.backend.testapi;
 
 
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.Event;
 import com.github.thxmasj.backend.core.EventLog;
 import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.GroupedDataType;
-import com.github.thxmasj.backend.core.IdEntityModel;
-import com.github.thxmasj.backend.core.IndexEntityModel;
+import com.github.thxmasj.backend.core.IdEntityType;
+import com.github.thxmasj.backend.core.IndexEntityType;
+import com.github.thxmasj.backend.core.Change;
 import com.github.thxmasj.backend.core.database.Database;
 import com.github.thxmasj.backend.core.database.DatabaseClient;
 import com.github.thxmasj.backend.core.database.UnknownEntity;
-import com.github.thxmasj.backend.core.internal.DelayedEvent;
 import com.github.thxmasj.backend.core.internal.database.ChangeState;
 import com.github.thxmasj.backend.core.internal.ResolvedModels;
-import com.github.thxmasj.backend.core.internal.database.ChangeState.Change;
 import com.github.thxmasj.backend.core.internal.database.EntitiesByIndex;
 import com.github.thxmasj.backend.core.internal.database.EventsByEntityId;
 import com.github.thxmasj.backend.core.internal.database.EventsByIdEvent;
@@ -34,7 +33,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 /// The API tests use to look into and manipulate the database of a state machine, instead of querying its tables
-/// directly. It knows the entity models only as given to the state machine, so it works with any
+/// directly. It knows the entity types only as given to the state machine, so it works with any
 /// of them, and the tests using it do not depend on how the data is stored.
 ///
 /// Some of its operations bypass the transitions, e.g. by appending events that no transition has accepted, and are
@@ -56,32 +55,32 @@ public class TestApi {
 
   /// The database is the one behind the data source (see [Database#of(DataSource)])
   ///
-  /// @param entityModels the entity models given to the state machine, which with those their transitions trigger
-  ///                     events on give the entity models and event types
+  /// @param entityTypes the entity types given to the state machine, which with those their transitions trigger
+  ///                     events on give the entity types and event types
   public TestApi(
       DataSource dataSource,
       String schemaName,
-      List<? extends EntityModel> entityModels,
+      List<? extends EntityType> entityTypes,
       Clock clock
   ) {
     Database database = Database.of(dataSource);
-    this(database, database.client(dataSource), schemaName, entityModels, clock);
+    this(database, database.client(dataSource), schemaName, entityTypes, clock);
   }
 
   /// @param client a client of the database
-  /// @param entityModels the entity models given to the state machine, which with those their transitions trigger
-  ///                     events on give the entity models and event types
+  /// @param entityTypes the entity types given to the state machine, which with those their transitions trigger
+  ///                     events on give the entity types and event types
   public TestApi(
       Database database,
       DatabaseClient client,
       String schemaName,
-      List<? extends EntityModel> entityModels,
+      List<? extends EntityType> entityTypes,
       Clock clock
   ) {
     this.client = client;
     this.schema = schemaName;
     this.clock = clock;
-    ResolvedModels models = ResolvedModels.of(entityModels);
+    ResolvedModels models = ResolvedModels.of(entityTypes);
     this.models = models;
     this.eventTypeMapper = Mappers.eventTypeMapper(models.eventTypes());
     Storage storage = StorageProvider.storage(database, client, models, schemaName, clock);
@@ -95,24 +94,24 @@ public class TestApi {
     this.pending = "EventNumber=(SELECT COALESCE(MAX(EventNumber), 0) + 1 FROM \"{schema}\".\"Event\" WHERE EntityId=:entityId)";
   }
 
-  /// The event log of an entity, whose entity model is the one it was created with. Completes empty if there is no such
-  /// entity. Id and index entities are not found this way, as they have no entity model of their own stored; use
-  /// [#eventLog(EntityModel, UUID)] for those.
+  /// The event log of an entity, whose entity type is the one it was created with. Completes empty if there is no such
+  /// entity. Id and index entities are not found this way, as they have no entity type of their own stored; use
+  /// [#eventLog(EntityType, UUID)] for those.
   public Mono<EventLog> eventLog(UUID entityId) {
-    return client.sql("SELECT EntityModelId FROM \"{schema}\".\"Entity\" WHERE EntityId=:entityId".replace("{schema}", schema))
-        .name("TestApi.EntityModel")
+    return client.sql("SELECT EntityTypeId FROM \"{schema}\".\"Entity\" WHERE EntityId=:entityId".replace("{schema}", schema))
+        .name("TestApi.EntityType")
         .bind("entityId", entityId)
-        .map(row -> row.get("EntityModelId", UUID.class))
+        .map(row -> row.get("EntityTypeId", UUID.class))
         .one()
-        .flatMap(modelId -> eventLog(entityModel(modelId), entityId));
+        .flatMap(modelId -> eventLog(entityType(modelId), entityId));
   }
 
-  /// The event log of an entity of an entity model, including id and index entities. Completes empty if the entity has
+  /// The event log of an entity of an entity type, including id and index entities. Completes empty if the entity has
   /// no events.
-  public Mono<EventLog> eventLog(EntityModel entityModel, UUID entityId) {
-    if (!models.runs(entityModel))
-      return Mono.error(models.notRun(entityModel, "the test API"));
-    return eventsByEntityId.execute(entityModel, eventTypes(entityModel), entityId)
+  public Mono<EventLog> eventLog(EntityType entityType, UUID entityId) {
+    if (!models.runs(entityType))
+      return Mono.error(models.notRun(entityType, "the test API"));
+    return eventsByEntityId.execute(entityType, eventTypes(entityType), entityId)
         .onErrorResume(UnknownEntity.class, _ -> Mono.empty());
   }
 
@@ -146,16 +145,16 @@ public class TestApi {
   /// The event log of the last entity of a group, e.g. the current settlement of a merchant, i.e. the entity whose
   /// index event of the type has the greatest data of the group. Completes empty if the group has no entities.
   ///
-  /// @param entityModel the entity model of the indexed entities
+  /// @param entityType the entity type of the indexed entities
   /// @param indexType an event type whose output data type is a [GroupedDataType] with groups of type `G`
   @SuppressWarnings("unchecked")
-  public <G> Mono<EventLog> lastIndexed(EntityModel entityModel, EventType<?, ?> indexType, G group) {
-    if (!models.runs(entityModel))
-      return Mono.error(models.notRun(entityModel, "the test API"));
+  public <G> Mono<EventLog> lastIndexed(EntityType entityType, EventType<?, ?> indexType, G group) {
+    if (!models.runs(entityType))
+      return Mono.error(models.notRun(entityType, "the test API"));
     if (!(indexType.outputDataType() instanceof GroupedDataType<?, ?> dataType))
       return Mono.error(new IllegalArgumentException("Data type of index event type " + indexType.name() + " is not grouped"));
     byte[] marshalledGroup = ((GroupedDataType<?, G>) dataType).marshalGroup(group);
-    return eventsByLastIndexEvent.execute(entityModel, eventTypes(entityModel), indexType.id(), marshalledGroup, 1);
+    return eventsByLastIndexEvent.execute(entityType, eventTypes(entityType), indexType.id(), marshalledGroup, 1);
   }
 
   /// An event an entity is waiting for, triggered when the deadline has passed if the entity has no other event before
@@ -165,7 +164,7 @@ public class TestApi {
   /// @param attempt the number of times the event has been attempted, which is incremented as an attempt is started
   public record ScheduledEvent(
       UUID entityId,
-      EntityModel entityModel,
+      EntityType entityType,
       int eventNumber,
       EventType<?, ?> type,
       LocalDateTime deadline,
@@ -177,7 +176,7 @@ public class TestApi {
   public Mono<ScheduledEvent> delayedTrigger(UUID entityId) {
     return client.sql(
             """
-            SELECT EntityModelId, EventNumber, Type, Deadline, Attempt
+            SELECT EntityTypeId, EventNumber, Type, Deadline, Attempt
             FROM "{schema}"."DelayedTrigger"
             WHERE EntityId=:entityId AND {pending}
             """.replace("{pending}", pending).replace("{schema}", schema)
@@ -186,7 +185,7 @@ public class TestApi {
         .bind("entityId", entityId)
         .map(row -> new ScheduledEvent(
             entityId,
-            entityModel(row.get("EntityModelId", UUID.class)),
+            entityType(row.get("EntityTypeId", UUID.class)),
             row.get("EventNumber", Integer.class),
             eventType(row.get("Type", UUID.class)),
             row.get("Deadline", LocalDateTime.class),
@@ -203,7 +202,7 @@ public class TestApi {
   public record PendingConditionalTrigger(
       UUID id,
       UUID entityId,
-      EntityModel entityModel,
+      EntityType entityType,
       EventType<?, ?> type,
       List<EventType<?, ?>> lastTypes,
       EventType<?, ?> referenceType,
@@ -216,7 +215,7 @@ public class TestApi {
   public Flux<PendingConditionalTrigger> conditionalTriggers(UUID entityId) {
     return client.sql(
             """
-            SELECT Id, EntityModelId, Type, LastTypes, ReferenceType, IndexKey, TriggerEntityId, TriggerEventNumber
+            SELECT Id, EntityTypeId, Type, LastTypes, ReferenceType, IndexKey, TriggerEntityId, TriggerEventNumber
             FROM "{schema}"."ConditionalTrigger"
             WHERE EntityId=:entityId
             ORDER BY Timestamp, Id
@@ -227,7 +226,7 @@ public class TestApi {
         .map(row -> new PendingConditionalTrigger(
             row.get("Id", UUID.class),
             entityId,
-            entityModel(row.get("EntityModelId", UUID.class)),
+            entityType(row.get("EntityTypeId", UUID.class)),
             eventType(row.get("Type", UUID.class)),
             Arrays.stream(row.get("LastTypes", String.class).split(","))
                 .map(UUID::fromString)
@@ -245,12 +244,12 @@ public class TestApi {
   /// The event is stored as if a transition had accepted it, so the event the entity was waiting for is no longer
   /// triggered, but it triggers no other events and is not validated against the entity's state. For id and index entities the event
   /// is an id or index event, so an id must not be taken by another entity.
-  public <T> Mono<Event<T>> append(EntityModel entityModel, UUID entityId, EventType<?, T> type, T data) {
-    if (!models.runs(entityModel))
-      return Mono.error(models.notRun(entityModel, "the test API"));
-    String table = switch (entityModel) {
-      case IdEntityModel _ -> "IdEvent";
-      case IndexEntityModel _ -> "IndexEvent";
+  public <T> Mono<Event<T>> append(EntityType entityType, UUID entityId, EventType<?, T> type, T data) {
+    if (!models.runs(entityType))
+      return Mono.error(models.notRun(entityType, "the test API"));
+    String table = switch (entityType) {
+      case IdEntityType _ -> "IdEvent";
+      case IndexEntityType _ -> "IndexEvent";
       default -> "Event";
     };
     return client.sql(
@@ -262,8 +261,8 @@ public class TestApi {
         .bind("entityId", entityId)
         .map(row -> row.get("EventNumber", Integer.class))
         .one()
-        .map(eventNumber -> new Event<>(entityId, eventNumber, type, clock, data))
-        .flatMap(event -> changeState.execute(ZonedDateTime.now(clock), UUID.randomUUID().toString(), List.of(change(entityModel, entityId, event)))
+        .map(eventNumber -> new Event<>(entityId, eventNumber, type, ZonedDateTime.now(clock), data))
+        .flatMap(event -> changeState.execute(ZonedDateTime.now(clock), UUID.randomUUID().toString(), List.of(change(entityType, event)))
             .then(Mono.just(event)));
   }
 
@@ -290,32 +289,27 @@ public class TestApi {
         .update();
   }
 
-  /// The entity model with the id, e.g. of an event log read
-  private EntityModel entityModel(UUID id) {
-    EntityModel entityModel = models.entityModelsById().get(id);
-    if (entityModel == null)
-      throw new IllegalStateException("Unknown entity model " + id + ". Is it in the entity models given to the test API?");
-    return entityModel;
+  /// The entity type with the id, e.g. of an event log read
+  private EntityType entityType(UUID id) {
+    EntityType entityType = models.entityTypesById().get(id);
+    if (entityType == null)
+      throw new IllegalStateException("Unknown entity type " + id + ". Is it in the entity types given to the test API?");
+    return entityType;
   }
 
-  private List<EventType<?, ?>> eventTypes(EntityModel entityModel) {
-    return models.eventTypesByEntityModel().get(entityModel);
+  private List<EventType<?, ?>> eventTypes(EntityType entityType) {
+    return models.eventTypesByEntityType().get(entityType);
   }
 
   private EventType<?, ?> eventType(UUID id) {
     EventType<?, ?> eventType = eventTypeMapper.apply(id);
     if (eventType == null)
-      throw new IllegalStateException("Unknown event type " + id + ". Is it in the entity models given to the test API?");
+      throw new IllegalStateException("Unknown event type " + id + ". Is it in the entity types given to the test API?");
     return eventType;
   }
 
-  private static Change change(EntityModel entityModel, UUID entityId, Event<?> event) {
-    return new Change() {
-      @Override public EntityModel entityModel() {return entityModel;}
-      @Override public UUID entityId() {return entityId;}
-      @Override public Event<?> newEvent() {return event;}
-      @Override public DelayedEvent<?> delayedEvent() {return null;}
-    };
+  private static Change change(EntityType entityType, Event<?> event) {
+    return Change.Event.of(entityType, event, null);
   }
 
 }

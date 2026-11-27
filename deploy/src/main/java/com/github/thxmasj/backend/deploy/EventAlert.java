@@ -23,7 +23,7 @@ import java.util.Locale;
 /// The alert on the events of a severity, for each of the severities which call for attention. An application writes
 /// its events for monitoring as lines of JSON to stdout, with `JsonLinesListener` of the core module, which the
 /// Functions host logs as traces in Application Insights. The alert is a log search alert of Azure Monitor on the
-/// traces which are lines of the severity. It is split by the dimensions, so an alert is fired for each entity model
+/// traces which are lines of the severity. It is split by the dimensions, so an alert is fired for each entity type
 /// and event type which has events of the severity.
 public enum EventAlert {
 
@@ -32,7 +32,7 @@ public enum EventAlert {
   Critical(0);
 
   /// The columns of the query which the alert is split by
-  public static final List<String> DIMENSIONS = List.of("entityModel", "eventType");
+  public static final List<String> DIMENSIONS = List.of("entityType", "eventType");
 
   private final int azureSeverity;
 
@@ -53,7 +53,7 @@ public enum EventAlert {
   /// The query of the alert, on the tables of Application Insights: the lines of the severity, which the alert
   /// counts. The other lines the application writes are not JSON, or have no such severity. `has` finds the lines
   /// with the severity in the index of the table, so only those are parsed. A line which is not of an event, such as a
-  /// failure of a worker of the state machine, has no entity model or event type, and gets a placeholder as its
+  /// failure of a worker of the state machine, has no entity type or event type, and gets a placeholder as its
   /// dimensions.
   public String query() {
     return """
@@ -61,10 +61,10 @@ public enum EventAlert {
         | where message startswith "{" and message has "%1$s"
         | extend line = parse_json(message)
         | where line.severity == "%1$s"
-        | extend entityModel = tostring(line.entityModel), eventType = tostring(line.eventType)
+        | extend entityType = tostring(line.entityType), eventType = tostring(line.eventType)
         | project
             timestamp,
-            entityModel = iff(isempty(entityModel), "-", entityModel),
+            entityType = iff(isempty(entityType), "-", entityType),
             eventType = iff(isempty(eventType), "-", eventType),
             entityId = tostring(line.entityId),
             eventNumber = toint(line.eventNumber),
@@ -111,7 +111,7 @@ public enum EventAlert {
           .kind(Kind.LogAlert)
           .displayName(name + ": " + alert.name() + " events")
           .description("Events of severity " + alert.severity() + " which " + name + " has written for monitoring, by"
-              + " entity model and event type")
+              + " entity type and event type")
           .severity((double) alert.azureSeverity())
           .enabled(true)
           .scopes(applicationInsightsId.applyValue(List::of))

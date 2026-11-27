@@ -4,12 +4,12 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.stream.Collectors.joining;
 
 import com.github.thxmasj.backend.core.Action;
-import com.github.thxmasj.backend.core.EntityModel;
-import com.github.thxmasj.backend.core.EntityModelGroup;
+import com.github.thxmasj.backend.core.EntityType;
+import com.github.thxmasj.backend.core.EntityTypeGroup;
 import com.github.thxmasj.backend.core.EventLog;
 import com.github.thxmasj.backend.core.EventTrigger;
-import com.github.thxmasj.backend.core.IdEntityModel;
-import com.github.thxmasj.backend.core.IndexEntityModel;
+import com.github.thxmasj.backend.core.IdEntityType;
+import com.github.thxmasj.backend.core.IndexEntityType;
 import com.github.thxmasj.backend.core.Replay;
 import com.github.thxmasj.backend.core.Replay.Step;
 import com.github.thxmasj.backend.core.Replay.Triggered;
@@ -45,13 +45,13 @@ import net.sourceforge.plantuml.SourceStringReader;
 /// Each entity whose log is drawn has a lifeline, and so does each model of the deduced steps of entities which aren't
 /// stored. An event no step of the replay triggered arrives at its entity from outside the diagram. The events a
 /// transition triggers are synchronous messages, as they are stored in the same transaction: to the entity of the
-/// event, nested in the transition, if it is in the replay, and else to a lifeline of the entity model triggered on.
+/// event, nested in the transition, if it is in the replay, and else to a lifeline of the entity type triggered on.
 /// A conditional trigger, which is stored and fires later, is an asynchronous message. An action, which is run after the
 /// transaction is committed, is an asynchronous message to a lifeline of its own, from which its outcome, e.g. the
 /// response to an outbox request, comes back in a later transaction if it is in the replay. The triggers of the reverse
 /// transitions of a rollback are drawn in the colour of a reversal, and the events rolled back are struck through.
 ///
-/// Events triggered on [id][IdEntityModel] and [index][IndexEntityModel] entities are left out, as in the ER diagram,
+/// Events triggered on [id][IdEntityType] and [index][IndexEntityType] entities are left out, as in the ER diagram,
 /// as they take much space and tell little about how the entities relate.
 public class SequenceDiagramFormatter {
 
@@ -68,9 +68,9 @@ public class SequenceDiagramFormatter {
   }
 
   /// A sequence diagram of the log and the related logs, with the steps of entities which aren't stored deduced from
-  /// the transitions of the entity models, e.g. those given to the state machine (see [Replay])
-  public SequenceDiagramFormatter(EventLog log, List<EventLog> related, List<? extends EntityModel> entityModels) {
-    this.replay = Replay.of(log, related, entityModels);
+  /// the transitions of the entity types, e.g. those given to the state machine (see [Replay])
+  public SequenceDiagramFormatter(EventLog log, List<EventLog> related, List<? extends EntityType> entityTypes) {
+    this.replay = Replay.of(log, related, entityTypes);
   }
 
   /// Writes the diagram as SVG to the file
@@ -166,16 +166,16 @@ public class SequenceDiagramFormatter {
         continue;
       }
       EventTrigger<?, ?, ?> trigger = triggered.trigger();
-      if (trigger.entityModel() instanceof IdEntityModel || trigger.entityModel() instanceof IndexEntityModel)
+      if (trigger.entityType() instanceof IdEntityType || trigger.entityType() instanceof IndexEntityType)
         continue;
       String event = trigger.eventType().name();
       if (triggered.reversal())
         event = "<color:" + DiagramColours.REVERSAL.light() + ">" + event + "</color>";
       messages.append(String.format(
           "%s %s %s: %s\n",
-          participants.message(entity, participants.of(trigger.entityModel())),
+          participants.message(entity, participants.of(trigger.entityType())),
           trigger instanceof EventTrigger.Conditional<?, ?, ?> ? "->>" : "->",
-          participants.of(trigger.entityModel()),
+          participants.of(trigger.entityType()),
           event
       ));
     }
@@ -203,7 +203,7 @@ public class SequenceDiagramFormatter {
   }
 
   /// The lifelines of the diagram: those of the entities of the logs, of the models of the deduced steps, and of the
-  /// other entity models events are triggered on. They are declared in the order of the first message between two
+  /// other entity types events are triggered on. They are declared in the order of the first message between two
   /// lifelines they take part in, so that the diagram reads from left to right, e.g. from the routing of a request to
   /// its inbox request and on to the entity it was processed on. A message from outside the diagram doesn't count, so
   /// that an entity which only receives such messages early on, e.g. one created by an entity whose log isn't given,
@@ -226,15 +226,15 @@ public class SequenceDiagramFormatter {
     Participants(List<EventLog> logs, List<Step> steps) {
       for (EventLog log : logs) {
         if (log.entityId() == null) {
-          this.logs.put(log, model(log.entityModel().name()));
+          this.logs.put(log, model(log.entityType().name()));
           continue;
         }
         String alias = "P" + (names.size() + 1);
-        long sameModel = logs.stream().filter(l -> l.entityId() != null && l.entityModel().equals(log.entityModel())).count();
+        long sameModel = logs.stream().filter(l -> l.entityId() != null && l.entityType().equals(log.entityType())).count();
         // Entities of the same model are told apart by the start of their entity ids
         names.put(alias, sameModel > 1
-            ? log.entityModel().name() + " " + log.entityId().toString().substring(0, 8)
-            : log.entityModel().name());
+            ? log.entityType().name() + " " + log.entityId().toString().substring(0, 8)
+            : log.entityType().name());
         this.logs.put(log, alias);
       }
       for (Step step : steps)
@@ -266,13 +266,13 @@ public class SequenceDiagramFormatter {
       return logs.get(log);
     }
 
-    /// The lifeline of an entity model triggered on: of the entity of the logs if there is one entity of it, or a
-    /// group of it, and else one of the model, which is unknown for a trigger on an entity model selected when the
+    /// The lifeline of an entity type triggered on: of the entity of the logs if there is one entity of it, or a
+    /// group of it, and else one of the model, which is unknown for a trigger on an entity type selected when the
     /// trigger fires
-    String of(EntityModel model) {
+    String of(EntityType model) {
       if (model != null) {
         List<String> entities = logs.entrySet().stream()
-            .filter(e -> EntityModelGroup.targets(model, e.getKey().entityModel()))
+            .filter(e -> EntityTypeGroup.targets(model, e.getKey().entityType()))
             .map(Map.Entry::getValue)
             .distinct()
             .toList();

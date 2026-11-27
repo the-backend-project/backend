@@ -83,13 +83,13 @@ The [state diagrams](diagrams.md#state-diagrams-of-entity-types) show the severi
 The state machine reports to the `Listener` it is created with. `JsonLinesListener` writes the events to stdout:
 
 ```java
-new StateMachine(null, entityModels, dataSource, null, schema, null, Clock.systemUTC(), new JsonLinesListener());
+new StateMachine(null, entityTypes, dataSource, null, schema, null, Clock.systemUTC(), new JsonLinesListener());
 ```
 
 Every accepted event is a line of JSON, here an outbox request which is given up:
 
 ```json
-{"time":"2026-11-13T12:00:00.123Z","severity":"ERROR","message":"Attempts exhausted on MerchantNotification 9f0c5a2e-1b3d-4c5e-8f7a-6b5c4d3e2f1a","entityModel":"MerchantNotification","entityId":"9f0c5a2e-1b3d-4c5e-8f7a-6b5c4d3e2f1a","eventNumber":7,"eventType":"Attempts exhausted","correlationId":"SYS-4117038264571339210"}
+{"time":"2026-11-13T12:00:00.123Z","severity":"ERROR","message":"Attempts exhausted on MerchantNotification 9f0c5a2e-1b3d-4c5e-8f7a-6b5c4d3e2f1a","entityType":"MerchantNotification","entityId":"9f0c5a2e-1b3d-4c5e-8f7a-6b5c4d3e2f1a","eventNumber":7,"eventType":"Attempts exhausted","correlationId":"SYS-4117038264571339210"}
 ```
 
 | Field           | Description                                                                     |
@@ -97,14 +97,14 @@ Every accepted event is a line of JSON, here an outbox request which is given up
 | `time`          | The time of the event, in UTC                                                   |
 | `severity`      | `INFO`, `WARNING`, `ERROR` or `CRITICAL`                                        |
 | `message`       | The event in words                                                              |
-| `entityModel`   | The name of the entity model                                                    |
+| `entityType`   | The name of the entity type                                                    |
 | `entityId`      | The id of the entity                                                            |
 | `eventNumber`   | The number of the event in the event log of the entity, left out for an event not stored |
 | `stored`        | `false` for an event which is [not stored](entities.md#events-and-entities-not-stored), and left out otherwise |
 | `eventType`     | The name of the event type                                                      |
 | `correlationId` | The correlation id of what led to the event, e.g. of the request to the [HTTP inbox](http-inbox.md) |
 
-* **The data of the events is not written**, as it may be sensitive. The event log has it, and the entity model,
+* **The data of the events is not written**, as it may be sensitive. The event log has it, and the entity type,
   entity id and event number of a line find the event there.
 * **Events are written when they have happened.** Delayed events and conditional triggers are not written when they
   are stored, but as events when they fire. Events which are [not stored](entities.md#events-and-entities-not-stored),
@@ -115,7 +115,7 @@ Every accepted event is a line of JSON, here an outbox request which is given up
 * **A failed transition** is written as a line of severity `ERROR`. A transition fails when one of its functions
   throws an exception, e.g. an assembler, a guard, the data of a trigger, or a function an
   [inbox request](http-inbox.md) is given. Nothing of the change is stored, and the exception is passed on to the
-  one who triggered the event. The line has the entity model, entity id, event type and correlation id of the
+  one who triggered the event. The line has the entity type, entity id, event type and correlation id of the
   transition the exception was thrown in, also when that one was triggered by another, but no `eventNumber`, as no
   event was stored. The message ends with the exception, which may have data.
 * **A failure to process a delayed trigger** is written as a line of severity `ERROR` with only `time`, `severity`
@@ -163,13 +163,13 @@ Each of the severities `Warning`, `Error` and `Critical` has a
 [log search alert rule](https://learn.microsoft.com/azure/azure-monitor/alerts/alerts-types#log-alerts) in
 Azure Monitor, with the corresponding severity there. A rule counts the lines of its severity every 15 minutes:
 
-* **An alert is fired for each entity model and event type** with events in the period, so the alert tells what
+* **An alert is fired for each entity type and event type** with events in the period, so the alert tells what
   happened to what. Its query finds the events themselves, with their entity ids and correlation ids.
 * **An alert does not resolve by itself**, as its events have happened for good. It stays fired until someone closes
   it. More events in a later period fire a new alert.
 * **An alert is fired some minutes after its event:** the minutes Application Insights takes to collect the line,
   and then up to the period of the rule.
-* **A failure to process a delayed trigger fires the alert of `Error`** too, with `-` for its entity model and event
+* **A failure to process a delayed trigger fires the alert of `Error`** too, with `-` for its entity type and event
   type.
 
 The fired alerts are listed under **Monitor** > **Alerts** in the Azure portal, and on the Application Insights
@@ -205,7 +205,7 @@ The prices are those of Sweden Central in November 2026, from the
 | What                                                | Price                                                                  |
 |-----------------------------------------------------|------------------------------------------------------------------------|
 | An alert rule evaluated every 15, 10, 5 or 1 minutes | USD 0.50, 1.00, 1.50 or 3.00 a month. The three rules are USD 1.50 a month at the default frequency. |
-| Each entity model and event type a rule fires alerts for, after its first | USD 0.05, 0.10, 0.15 or 0.30 a month, by the frequency |
+| Each entity type and event type a rule fires alerts for, after its first | USD 0.05, 0.10, 0.15 or 0.30 a month, by the frequency |
 | Emails                                              | The first 1,000 a month are free                                       |
 | Collected lines                                     | USD 2.99 per GB. The first 5 GB a month of a billing account are free. |
 

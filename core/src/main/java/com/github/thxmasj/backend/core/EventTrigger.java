@@ -36,37 +36,37 @@ public abstract sealed class EventTrigger<T, I, O> permits Immediate, Conditiona
   private final EventType<I, O> eventType;
   private final Function<T, I> data;
   private final Function<T, ? extends EntitySelector> entitySelector;
-  private final EntityModel entityModel;
+  private final EntityType entityType;
   private final Function<T, String> correlationId;
 
   private EventTrigger(
       EventType<I, O> eventType,
       Function<T, I> data,
       Function<T, ? extends EntitySelector> entitySelector,
-      EntityModel entityModel,
+      EntityType entityType,
       Function<T, String> correlationId
   ) {
     this.eventType = eventType;
     this.data = data;
     this.entitySelector = entitySelector;
-    this.entityModel = entityModel;
+    this.entityType = entityType;
     this.correlationId = correlationId;
   }
 
-  public static <I, O> Immediate<I, I, O> trigger(EventType<I, O> eventType, EntityModel entityModel, UUID entityId, I data) {
-    return new Immediate<>(eventType, _ -> data, _ -> entityId(entityId), entityModel);
+  public static <I, O> Immediate<I, I, O> trigger(EventType<I, O> eventType, EntityType entityType, UUID entityId, I data) {
+    return new Immediate<>(eventType, _ -> data, _ -> entityId(entityId), entityType);
   }
 
-  public static <I, O> Immediate<I, I, O> trigger(EventType<I, O> eventType, EntityModel entityModel) {
-    return new Immediate<>(eventType, d -> d, newEntityId(), entityModel);
+  public static <I, O> Immediate<I, I, O> trigger(EventType<I, O> eventType, EntityType entityType) {
+    return new Immediate<>(eventType, d -> d, newEntityId(), entityType);
   }
 
-  public static <I, O> Immediate<I, I, O> trigger(EventType<I, O> eventType, EntityModel entityModel, UUID entityId) {
-    return new Immediate<>(eventType, d -> d, _ -> entityId(entityId), entityModel);
+  public static <I, O> Immediate<I, I, O> trigger(EventType<I, O> eventType, EntityType entityType, UUID entityId) {
+    return new Immediate<>(eventType, d -> d, _ -> entityId(entityId), entityType);
   }
 
-  public static <I, O, ID> Immediate<I, I, O> trigger(EventType<I, O> eventType, EntityModel entityModel, EventType<?, ID> idType, ID id) {
-    return new Immediate<>(eventType, d -> d, _ -> idEvent(idType, id), entityModel);
+  public static <I, O, ID> Immediate<I, I, O> trigger(EventType<I, O> eventType, EntityType entityType, EventType<?, ID> idType, ID id) {
+    return new Immediate<>(eventType, d -> d, _ -> idEvent(idType, id), entityType);
   }
 
   public EventType<I, O> eventType() {
@@ -83,8 +83,8 @@ public abstract sealed class EventTrigger<T, I, O> permits Immediate, Conditiona
     return entitySelector;
   }
 
-  public EntityModel entityModel() {
-    return entityModel;
+  public EntityType entityType() {
+    return entityType;
   }
 
   /// The correlation id of the transaction the trigger starts with the input, or a random UUID if the trigger has no
@@ -104,19 +104,19 @@ public abstract sealed class EventTrigger<T, I, O> permits Immediate, Conditiona
         EventType<I, O> eventType,
         Function<T, I> data,
         Function<T, ? extends EntitySelector> entitySelector,
-        EntityModel entityModel
+        EntityType entityType
     ) {
-      this(eventType, data, entitySelector, entityModel, null);
+      this(eventType, data, entitySelector, entityType, null);
     }
 
     private Immediate(
         EventType<I, O> eventType,
         Function<T, I> data,
         Function<T, ? extends EntitySelector> entitySelector,
-        EntityModel entityModel,
+        EntityType entityType,
         Function<T, String> correlationId
     ) {
-      super(eventType, data, entitySelector, entityModel, correlationId);
+      super(eventType, data, entitySelector, entityType, correlationId);
     }
 
     /// This trigger with the correlation id of the transaction it starts taken from its input, e.g. from a header of a
@@ -124,7 +124,7 @@ public abstract sealed class EventTrigger<T, I, O> permits Immediate, Conditiona
     /// a correlation id it generates, e.g. for a request without the header, is the same in the attempts of the call.
     /// Without the function, each call has a random UUID.
     public Immediate<T, I, O> withCorrelationId(Function<T, String> correlationId) {
-      return new Immediate<>(eventType(), data(), entitySelector(), entityModel(), correlationId);
+      return new Immediate<>(eventType(), data(), entitySelector(), entityType(), correlationId);
     }
 
     /// This trigger with the given correlation id of the transaction it starts
@@ -134,7 +134,7 @@ public abstract sealed class EventTrigger<T, I, O> permits Immediate, Conditiona
 
     @Override
     Immediate<T, I, O> withData(Function<T, I> data) {
-      return new Immediate<>(eventType(), data, entitySelector(), entityModel(), ((EventTrigger<T, I, O>) this).correlationId);
+      return new Immediate<>(eventType(), data, entitySelector(), entityType(), ((EventTrigger<T, I, O>) this).correlationId);
     }
 
   }
@@ -149,10 +149,10 @@ public abstract sealed class EventTrigger<T, I, O> permits Immediate, Conditiona
         EventType<I, O> eventType,
         Function<T, I> data,
         Function<T, ? extends EntitySelector> entitySelector,
-        EntityModel entityModel,
+        EntityType entityType,
         EventCondition<T> condition
     ) {
-      super(eventType, data, entitySelector, entityModel, null);
+      super(eventType, data, entitySelector, entityType, null);
       this.condition = condition;
     }
 
@@ -162,7 +162,7 @@ public abstract sealed class EventTrigger<T, I, O> permits Immediate, Conditiona
 
     @Override
     Conditional<T, I, O> withData(Function<T, I> data) {
-      return new Conditional<>(eventType(), data, entitySelector(), entityModel(), condition);
+      return new Conditional<>(eventType(), data, entitySelector(), entityType(), condition);
     }
 
   }
@@ -171,8 +171,8 @@ public abstract sealed class EventTrigger<T, I, O> permits Immediate, Conditiona
   /// event deletes the trigger.
   public static final class ByDelayed<I, O> extends EventTrigger<Void, I, O> {
 
-    ByDelayed(EventType<I, O> eventType, I data, UUID entityId, EntityModel entityModel, String correlationId) {
-      super(eventType, _ -> data, _ -> entityId(entityId), entityModel, _ -> correlationId);
+    ByDelayed(EventType<I, O> eventType, I data, UUID entityId, EntityType entityType, String correlationId) {
+      super(eventType, _ -> data, _ -> entityId(entityId), entityType, _ -> correlationId);
     }
 
     @Override
@@ -188,8 +188,8 @@ public abstract sealed class EventTrigger<T, I, O> permits Immediate, Conditiona
 
     private final UUID id;
 
-    ByConditional(UUID id, EventType<I, O> eventType, I data, UUID entityId, EntityModel entityModel, String correlationId) {
-      super(eventType, _ -> data, _ -> new ById(entityId, CreationMode.CreateIfNotExists), entityModel, _ -> correlationId);
+    ByConditional(UUID id, EventType<I, O> eventType, I data, UUID entityId, EntityType entityType, String correlationId) {
+      super(eventType, _ -> data, _ -> new ById(entityId, CreationMode.CreateIfNotExists), entityType, _ -> correlationId);
       this.id = id;
     }
 

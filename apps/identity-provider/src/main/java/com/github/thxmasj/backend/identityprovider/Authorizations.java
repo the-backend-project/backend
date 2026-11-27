@@ -1,6 +1,6 @@
 package com.github.thxmasj.backend.identityprovider;
 
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static com.github.thxmasj.backend.core.EntitySelector.entityIdFromSession;
 import static com.github.thxmasj.backend.core.EntitySelector.idEvent;
 import static com.github.thxmasj.backend.core.EntitySelector.newEntityId;
@@ -10,11 +10,10 @@ import static com.github.thxmasj.backend.http.inbox.HttpInbox.Request;
 import static com.github.thxmasj.backend.identityprovider.Clients.Client;
 import static com.github.thxmasj.backend.identityprovider.Clients.ClientIdClaimed;
 
-import com.github.thxmasj.backend.core.BasicEventType;
 import com.github.thxmasj.backend.core.DataType;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EventType;
-import com.github.thxmasj.backend.core.IdEntityModel;
+import com.github.thxmasj.backend.core.IdEntityType;
 import com.github.thxmasj.backend.core.Severity;
 import com.github.thxmasj.backend.core.State;
 import com.github.thxmasj.backend.core.StateMachine.ProcessResult;
@@ -50,7 +49,7 @@ public interface Authorizations {
   /// The scopes of OpenID Connect a client may request. Other scopes are ignored, OpenID Connect Core section 3.1.2.1.
   List<String> SupportedScopes = List.of("openid", "email", "profile");
 
-  EntityModel Authorization = EntityModel.of("Authorization", UUID.fromString("7ff5bfea-81ed-4e10-aa73-e80e69884814"), Authorizations::authorizationTransitions);
+  EntityType Authorization = EntityType.of("Authorization", UUID.fromString("7ff5bfea-81ed-4e10-aa73-e80e69884814"), Authorizations::authorizationTransitions);
 
   enum States implements State {
     Authenticating,
@@ -114,39 +113,39 @@ public interface Authorizations {
   /// What a redeemed code was issued for
   record Granted(Started request, Authenticated authentication) {}
 
-  EventType<Request, Void> AuthorizationRequested = BasicEventType.of(
+  EventType<Request, Void> AuthorizationRequested = EventType.of(
       "Authorization requested",
       UUID.fromString("517ed1d7-3700-4db5-a71d-328e18fe2702"),
       DataType.json(Request.class),
       DataType.none()
   );
-  EventType<Started, Started> AuthorizationStarted = BasicEventType.of(
+  EventType<Started, Started> AuthorizationStarted = EventType.of(
       "Authorization started",
       UUID.fromString("a9a648d7-8701-453f-8d1c-7093a269ac85"),
       DataType.json(Started.class)
   );
-  EventType<Refusal, Refusal> AuthorizationRefused = BasicEventType.of(
+  EventType<Refusal, Refusal> AuthorizationRefused = EventType.of(
       "Authorization refused",
       UUID.fromString("cade7e8d-d230-4e92-adc6-67cf9fa03fda"),
       DataType.json(Refusal.class)
   );
-  EventType<Refusal, Refusal> AuthorizationErrorReturned = BasicEventType.of(
+  EventType<Refusal, Refusal> AuthorizationErrorReturned = EventType.of(
       "Authorization error returned",
       UUID.fromString("f8c88b2c-e9c9-4067-98a0-7ff11b000568"),
       DataType.json(Refusal.class)
   );
-  EventType<SignIn, Authenticated> UserAuthenticated = BasicEventType.of(
+  EventType<SignIn, Authenticated> UserAuthenticated = EventType.of(
       "User authenticated",
       UUID.fromString("b323f8e3-faa4-46f7-aa1b-1d5501fdc28c"),
       DataType.json(SignIn.class),
       DataType.json(Authenticated.class)
   );
-  EventType<Failure, Failure> UserAuthenticationFailed = BasicEventType.of(
+  EventType<Failure, Failure> UserAuthenticationFailed = EventType.of(
       "User authentication failed",
       UUID.fromString("89b7566c-0f9b-4133-8560-7a34508e55ee"),
       DataType.json(Failure.class)
   );
-  EventType<Redemption, Granted> CodeRedeemed = BasicEventType.of(
+  EventType<Redemption, Granted> CodeRedeemed = EventType.of(
       "Code redeemed",
       UUID.fromString("f1566478-42a9-4a09-8f10-3e4319826bad"),
       DataType.json(Redemption.class),
@@ -154,12 +153,12 @@ public interface Authorizations {
   );
 
   /// The hash of the code issued for an authorization, which is its id
-  EventType<String, String> CodeClaimed = BasicEventType.of(
+  EventType<String, String> CodeClaimed = EventType.of(
       "Code claimed",
       UUID.fromString("914c9ed3-4262-4206-8f26-5afad478d267"),
       DataType.string()
   );
-  IdEntityModel Codes = IdEntityModel.of("Codes", UUID.fromString("a5b6d5e7-e5e9-4b16-9d7b-bd08c596bdd0"), CodeClaimed);
+  IdEntityType Codes = IdEntityType.of("Codes", UUID.fromString("a5b6d5e7-e5e9-4b16-9d7b-bd08c596bdd0"), CodeClaimed);
 
   private static Map<State, List<TransitionModel<?, ?>>> authorizationTransitions() {
     return Map.of(
@@ -240,7 +239,7 @@ public interface Authorizations {
   }
 
   private static Registration registration(ProcessResult<Registration> result) {
-    return result.accepted().event().getUnmarshalledData();
+    return result.accepted().event().data();
   }
 
   /// The request with the scope granted: the scopes of OpenID Connect requested, in the order requested
@@ -305,47 +304,47 @@ public interface Authorizations {
   enum SignInStates implements State {Redeeming, Redeemed}
 
   /// The user returned from the upstream provider. It is never stored, as one of its outcomes always is.
-  EventType<Callback, Void> CallbackReceived = BasicEventType.of(
+  EventType<Callback, Void> CallbackReceived = EventType.of(
       "Callback received",
       UUID.fromString("4e1b7c9a-2d5f-4a83-b6e0-9c3f1a7d5e28"),
       DataType.json(Callback.class),
       DataType.none()
   );
   /// The code of the upstream provider dispatched to be redeemed by an at-most-once outbox request
-  EventType<Redeeming, Redeeming> UpstreamCodeRedemptionRequested = BasicEventType.of(
+  EventType<Redeeming, Redeeming> UpstreamCodeRedemptionRequested = EventType.of(
       "Upstream code redemption requested",
       UUID.fromString("7c2e9a4f-1b6d-4f83-a5c0-8e3d2b7f1a64"),
       DataType.json(Redeeming.class)
   );
   /// The response of the upstream provider to the token request, as the outbox tells it, with the tokens of the user.
   /// It is never stored, as one of its outcomes always is.
-  EventType<String, Void> UpstreamTokenReceived = BasicEventType.of(
+  EventType<String, Void> UpstreamTokenReceived = EventType.of(
       "Upstream token received",
       UUID.fromString("e4a1c7d3-9f2b-4e65-b8d0-3a6f1c9e5b27"),
       DataType.string(),
       DataType.none()
   );
   /// The token request failed, e.g. as the upstream provider refused the code or couldn't be reached
-  EventType<Void, Void> UpstreamTokenRequestFailed = BasicEventType.of(
+  EventType<Void, Void> UpstreamTokenRequestFailed = EventType.of(
       "Upstream token request failed",
       UUID.fromString("2f8b5d1e-6c3a-4b97-9e04-7d1a5c8f3b62")
   );
-  EventType<Outcome, Void> UpstreamUserSignedIn = BasicEventType.of(
+  EventType<Outcome, Void> UpstreamUserSignedIn = EventType.of(
       "Upstream user signed in",
       UUID.fromString("b8d2f6a4-1e9c-4b57-8a3d-5f0c7e2b9a16"),
       DataType.json(Outcome.class),
       DataType.none()
   );
-  EventType<Outcome, Void> UpstreamSignInFailed = BasicEventType.of(
+  EventType<Outcome, Void> UpstreamSignInFailed = EventType.of(
       "Upstream sign-in failed",
       UUID.fromString("6c3a9e1f-7b4d-4c20-9f5e-2a8d6b1c4e73"),
       DataType.json(Outcome.class),
       DataType.none()
   );
-  EventType<Void, Void> SignInPassedOn = BasicEventType.of("Sign-in passed on", UUID.fromString("d5f1a8c3-9e2b-4d76-a4c0-7b3e1f9d2a58"));
+  EventType<Void, Void> SignInPassedOn = EventType.of("Sign-in passed on", UUID.fromString("d5f1a8c3-9e2b-4d76-a4c0-7b3e1f9d2a58"));
   /// The sign-in can't be passed on, as the response of the upstream provider is invalid, or the authorization is
   /// unknown or no longer waits for the user
-  EventType<Void, Void> SignInUnanswerable = BasicEventType.of("Sign-in unanswerable", UUID.fromString("2a7e4c1b-8f3d-4e95-b6a2-0d9c5f7e1b34"));
+  EventType<Void, Void> SignInUnanswerable = EventType.of("Sign-in unanswerable", UUID.fromString("2a7e4c1b-8f3d-4e95-b6a2-0d9c5f7e1b34"));
 
   /// The user of the claims of the upstream ID token. The upstream provider's code and tokens never enter the event
   /// log, only these claims.

@@ -5,10 +5,10 @@ import static java.util.stream.Collectors.toMap;
 
 import com.github.thxmasj.backend.core.BuiltinEventTypes;
 import com.github.thxmasj.backend.core.DataType;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EventType;
-import com.github.thxmasj.backend.core.IdEntityModel;
-import com.github.thxmasj.backend.core.IndexEntityModel;
+import com.github.thxmasj.backend.core.IdEntityType;
+import com.github.thxmasj.backend.core.IndexEntityType;
 import com.github.thxmasj.backend.core.database.DatabaseClient;
 import com.github.thxmasj.backend.core.internal.ResolvedModels;
 import java.time.LocalDateTime;
@@ -26,7 +26,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 /// Reads the entities of a state machine for the backoffice: their event logs, ids, index keys and pending triggers,
-/// and the entities related to them. Like the test API, it knows the entity models as given to the state machine,
+/// and the entities related to them. Like the test API, it knows the entity types as given to the state machine,
 /// and the event types through their transitions, and only reads.
 ///
 /// An entity refers to other entities by their entity ids in the data of its events, e.g. an inbox request to the
@@ -39,7 +39,7 @@ final class Graph {
 
   private final DatabaseClient client;
   private final String schema;
-  private final Map<UUID, EntityModel> entityModels;
+  private final Map<UUID, EntityType> entityTypes;
   private final Function<UUID, EventType<?, ?>> eventTypeMapper;
   /// The index event types whose keys are entity ids, by which entities refer to other entities
   private final List<EventType<?, ?>> referenceTypes;
@@ -48,30 +48,30 @@ final class Graph {
   /// The index event types whose keys are strings, which entities can be searched for by
   private final List<EventType<?, ?>> searchableIndexTypes;
 
-  Graph(DatabaseClient client, String schema, List<? extends EntityModel> entityModels) {
-    ResolvedModels models = ResolvedModels.of(entityModels);
+  Graph(DatabaseClient client, String schema, List<? extends EntityType> entityTypes) {
+    ResolvedModels models = ResolvedModels.of(entityTypes);
     this.client = client;
     this.schema = schema;
-    this.entityModels = models.entityModelsById();
+    this.entityTypes = models.entityTypesById();
     Map<UUID, EventType<?, ?>> eventTypesById = models.eventTypes().stream().collect(toMap(EventType::id, identity()));
     this.eventTypeMapper = eventTypesById::get;
-    var eventTypesByModel = models.eventTypesByEntityModel();
+    var eventTypesByType = models.eventTypesByEntityType();
     var referenceTypes = new LinkedHashSet<EventType<?, ?>>();
     var idTypes = new LinkedHashSet<EventType<?, ?>>();
     var indexTypes = new LinkedHashSet<EventType<?, ?>>();
-    eventTypesByModel.entrySet().stream()
+    eventTypesByType.entrySet().stream()
         .sorted(Comparator.comparing(e -> e.getKey().name()))
         .forEach(e -> {
           for (EventType<?, ?> type : e.getValue()) {
             if (BuiltinEventTypes.ALL.contains(type))
               continue;
             DataType<?> dataType = type.outputDataType();
-            if (e.getKey() instanceof IndexEntityModel) {
+            if (e.getKey() instanceof IndexEntityType) {
               if (dataType instanceof DataType.UUIDDataType)
                 referenceTypes.add(type);
               else if (dataType instanceof DataType.StringDataType)
                 indexTypes.add(type);
-            } else if (e.getKey() instanceof IdEntityModel
+            } else if (e.getKey() instanceof IdEntityType
                 && (dataType instanceof DataType.UUIDDataType || dataType instanceof DataType.StringDataType)) {
               idTypes.add(type);
             }
@@ -82,14 +82,14 @@ final class Graph {
     this.searchableIndexTypes = List.copyOf(indexTypes);
   }
 
-  /// An entity, of an entity model the backoffice may not know if the entity was created by another version of the
+  /// An entity, of an entity type the backoffice may not know if the entity was created by another version of the
   /// application
   ///
-  /// @param model the entity model, or null if it is unknown
-  record Entity(UUID id, UUID modelId, EntityModel model) {
+  /// @param entityType the entity type, or null if it is unknown
+  record Entity(UUID id, UUID entityTypeId, EntityType entityType) {
 
-    String modelName() {
-      return model != null ? model.name() : modelId.toString();
+    String entityTypeName() {
+      return entityType != null ? entityType.name() : entityTypeId.toString();
     }
 
   }
@@ -97,7 +97,7 @@ final class Graph {
   /// An event of an entity, or an id or index event
   ///
   /// @param type the event type, or null if it is unknown
-  record StoredEvent(int number, UUID typeId, EventType<?, ?> type, byte[] data, LocalDateTime timestamp) {
+  record EventRow(int number, UUID typeId, EventType<?, ?> type, byte[] data, LocalDateTime timestamp) {
 
     String typeName() {
       return type != null ? type.name() : typeId.toString();
@@ -106,13 +106,13 @@ final class Graph {
   }
 
   /// The event an entity is waiting for, triggered at the deadline if the entity has no other event before that
-  record Delayed(int eventNumber, StoredEvent event, LocalDateTime deadline, int attempt) {}
+  record Delayed(int eventNumber, EventRow event, LocalDateTime deadline, int attempt) {}
 
   /// An event an entity is waiting for, triggered when the entities indexed by the key with the reference type all have
   /// a last event of one of the last types
   ///
   /// @param trigger the entity whose event created the trigger
-  record Conditional(StoredEvent event, List<String> lastTypes, String referenceType, byte[] indexKey, UUID trigger, int triggerEventNumber) {}
+  record Conditional(EventRow event, List<String> lastTypes, String referenceType, byte[] indexKey, UUID trigger, int triggerEventNumber) {}
 
   /// An entity referring to another by an index event with its entity id as key
   record Referrer(Entity entity, String indexType) {}
@@ -120,9 +120,9 @@ final class Graph {
   /// An entity with everything recorded about it
   record View(
       Entity entity,
-      List<StoredEvent> events,
-      List<StoredEvent> ids,
-      List<StoredEvent> indexKeys,
+      List<EventRow> events,
+      List<EventRow> ids,
+      List<EventRow> indexKeys,
       Optional<Delayed> delayed,
       List<Conditional> conditionals,
       List<Referrer> referrers
@@ -136,20 +136,20 @@ final class Graph {
   /// An entity listed with when it was created
   record Listed(Entity entity, LocalDateTime created, String firstEvent) {}
 
-  /// The entity models of entities, which have their own event logs, in the order of their names
-  List<EntityModel> models() {
-    return entityModels.values().stream()
-        .filter(m -> !(m instanceof IdEntityModel) && !(m instanceof IndexEntityModel))
-        .sorted(Comparator.comparing(EntityModel::name))
+  /// The entity types of entities, which have their own event logs, in the order of their names
+  List<EntityType> entityTypes() {
+    return entityTypes.values().stream()
+        .filter(m -> !(m instanceof IdEntityType) && !(m instanceof IndexEntityType))
+        .sorted(Comparator.comparing(EntityType::name))
         .toList();
   }
 
-  Optional<EntityModel> model(UUID id) {
-    return Optional.ofNullable(entityModels.get(id));
+  Optional<EntityType> entityType(UUID id) {
+    return Optional.ofNullable(entityTypes.get(id));
   }
 
   /// The entity with the entity id. Completes empty if there is none, also for an id or index entity, which has no
-  /// entity model stored.
+  /// entity type stored.
   Mono<Entity> entity(UUID entityId) {
     return entities(List.of(entityId)).flatMap(entities -> Mono.justOrEmpty(entities.get(entityId)));
   }
@@ -164,14 +164,14 @@ final class Graph {
     for (int i = 0; i < ids.size(); i++)
       placeholders.add(":id" + i);
     var query = client.sql(
-            "SELECT EntityId, EntityModelId FROM \"{schema}\".\"Entity\" WHERE EntityId IN ({ids})"
+            "SELECT EntityId, EntityTypeId FROM \"{schema}\".\"Entity\" WHERE EntityId IN ({ids})"
                 .replace("{schema}", schema)
                 .replace("{ids}", String.join(",", placeholders))
         )
         .name("Backoffice.Entities");
     for (int i = 0; i < ids.size(); i++)
       query = query.bind("id" + i, ids.get(i));
-    return query.map(row -> entity(row.get("EntityId", UUID.class), row.get("EntityModelId", UUID.class)))
+    return query.map(row -> entity(row.get("EntityId", UUID.class), row.get("EntityTypeId", UUID.class)))
         .all()
         .collect(LinkedHashMap::new, (map, entity) -> map.put(entity.id(), entity));
   }
@@ -188,14 +188,14 @@ final class Graph {
     ).map(t -> new View(entity, t.getT1(), t.getT2(), t.getT3(), t.getT4(), t.getT5(), t.getT6())));
   }
 
-  /// The latest entities of an entity model, created before the entity `before` if it is given. Entity ids are time
+  /// The latest entities of an entity type, created before the entity `before` if it is given. Entity ids are time
   /// ordered, so the latest have the greatest entity ids.
-  Flux<Listed> latest(EntityModel model, UUID before, int limit) {
+  Flux<Listed> latest(EntityType entityType, UUID before, int limit) {
     var query = client.sql(
             """
             SELECT e.EntityId, ev.Timestamp, ev.Type FROM "{schema}"."Entity" e
             JOIN "{schema}"."Event" ev ON ev.EntityId=e.EntityId AND ev.EventNumber=1
-            WHERE e.EntityModelId=:model {before}
+            WHERE e.EntityTypeId=:entityType {before}
             ORDER BY e.EntityId DESC
             OFFSET 0 ROWS FETCH NEXT {limit} ROWS ONLY
             """
@@ -204,11 +204,11 @@ final class Graph {
                 .replace("{limit}", Integer.toString(limit))
         )
         .name("Backoffice.Latest")
-        .bind("model", model.id());
+        .bind("entityType", entityType.id());
     if (before != null)
       query = query.bind("before", before);
     return query.map(row -> new Listed(
-            new Entity(row.get("EntityId", UUID.class), model.id(), model),
+            new Entity(row.get("EntityId", UUID.class), entityType.id(), entityType),
             row.get("Timestamp", LocalDateTime.class),
             typeName(row.get("Type", UUID.class))
         ))
@@ -282,7 +282,7 @@ final class Graph {
                 .map(t -> new Referrer(entities.get(t.entityId()), t.matchedBy()))));
   }
 
-  private Flux<StoredEvent> events(String table, UUID entityId) {
+  private Flux<EventRow> events(String table, UUID entityId) {
     return client.sql(
             "SELECT EventNumber, Type, Data, Timestamp FROM \"{schema}\".\"{table}\" WHERE EntityId=:entityId ORDER BY EventNumber"
                 .replace("{schema}", schema)
@@ -290,7 +290,7 @@ final class Graph {
         )
         .name("Backoffice." + table)
         .bind("entityId", entityId)
-        .map(row -> storedEvent(
+        .map(row -> eventRow(
             row.get("EventNumber", Integer.class),
             row.get("Type", UUID.class),
             row.get("Data", byte[].class),
@@ -314,7 +314,7 @@ final class Graph {
           int eventNumber = row.get("EventNumber", Integer.class);
           return new Delayed(
               eventNumber,
-              storedEvent(eventNumber, row.get("Type", UUID.class), row.get("Data", byte[].class), null),
+              eventRow(eventNumber, row.get("Type", UUID.class), row.get("Data", byte[].class), null),
               row.get("Deadline", LocalDateTime.class),
               row.get("Attempt", Integer.class)
           );
@@ -334,7 +334,7 @@ final class Graph {
         .name("Backoffice.ConditionalTriggers")
         .bind("entityId", entityId)
         .map(row -> new Conditional(
-            storedEvent(0, row.get("Type", UUID.class), row.get("Data", byte[].class), row.get("Timestamp", LocalDateTime.class)),
+            eventRow(0, row.get("Type", UUID.class), row.get("Data", byte[].class), row.get("Timestamp", LocalDateTime.class)),
             List.of(row.get("LastTypes", String.class).split(",")).stream().map(id -> typeName(uuid(id))).toList(),
             typeName(row.get("ReferenceType", UUID.class)),
             row.get("IndexKey", byte[].class),
@@ -344,12 +344,12 @@ final class Graph {
         .all();
   }
 
-  private StoredEvent storedEvent(int number, UUID typeId, byte[] data, LocalDateTime timestamp) {
-    return new StoredEvent(number, typeId, eventTypeMapper.apply(typeId), data, timestamp);
+  private EventRow eventRow(int number, UUID typeId, byte[] data, LocalDateTime timestamp) {
+    return new EventRow(number, typeId, eventTypeMapper.apply(typeId), data, timestamp);
   }
 
-  private Entity entity(UUID entityId, UUID modelId) {
-    return new Entity(entityId, modelId, entityModels.get(modelId));
+  private Entity entity(UUID entityId, UUID entityTypeId) {
+    return new Entity(entityId, entityTypeId, entityTypes.get(entityTypeId));
   }
 
   private String typeName(UUID typeId) {

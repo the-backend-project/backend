@@ -5,7 +5,7 @@ import static com.github.thxmasj.backend.http.outbox.EventTypes.ServiceFoundUnav
 import static com.github.thxmasj.backend.http.outbox.EventTypes.TimeoutExpired;
 
 import com.github.thxmasj.backend.core.DataType;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.Tuples.Tuple2;
 import com.github.thxmasj.backend.core.Validated;
@@ -60,13 +60,13 @@ public final class AtMostOnceBuilder {
   /// Optional: the process model defaults to none, which is sufficient as long as no callback is given.
   public interface ProcessModelStep<RQ, RS> extends OnPeerUnavailableStep<RQ, RS> {
 
-    OnPeerUnavailableStep<RQ, RS> processModel(EntityModel processModel);
+    OnPeerUnavailableStep<RQ, RS> processModel(EntityType processModel);
   }
 
   /// Optional: the peer unavailable callback defaults to ServiceFoundUnavailable.
   public interface OnPeerUnavailableStep<RQ, RS> extends OnMissingResponseStep<RQ, RS> {
 
-    <S> OnMissingResponseStep<RQ, RS> onPeerUnavailable(EventType<S, ?> eventType, Function<EntityModel, S> dataAdapter);
+    <S> OnMissingResponseStep<RQ, RS> onPeerUnavailable(EventType<S, ?> eventType, Function<EntityType, S> dataAdapter);
 
     OnMissingResponseStep<RQ, RS> onPeerUnavailable(EventType<Void, ?> eventType);
 
@@ -77,7 +77,7 @@ public final class AtMostOnceBuilder {
 
     <S> OnInvalidResponseRejectionStep<RQ, RS> onMissingResponse(
         EventType<S, ?> eventType,
-        Function<EntityModel, S> dataAdapter
+        Function<EntityType, S> dataAdapter
     );
 
     OnInvalidResponseRejectionStep<RQ, RS> onMissingResponse(EventType<Void, ?> eventType);
@@ -222,9 +222,9 @@ public final class AtMostOnceBuilder {
     private final DataType<RS> responsePayloadType;
     private HttpClient forwarder;
     private Duration inflightTimeout = Duration.ofSeconds(10);
-    private EntityModel processModel;
-    private Callback<EntityModel, ?> onPeerUnavailable = new Callback<>(ServiceFoundUnavailable, _ -> null);
-    private Callback<EntityModel, ?> onMissingResponse = new Callback<>(TimeoutExpired, _ -> null);
+    private EntityType processModel;
+    private Callback<EntityType, ?> onPeerUnavailable = new Callback<>(ServiceFoundUnavailable, _ -> null);
+    private Callback<EntityType, ?> onMissingResponse = new Callback<>(TimeoutExpired, _ -> null);
     private Callback<Tuple2<HttpResponse<byte[]>, String>, ?> onInvalidResponseRejection = new Callback<>(InvalidResponseReceived, Tuple2::t2);
     private Callback<Tuple2<HttpResponse<byte[]>, String>, ?> onInvalidResponseUnknown = new Callback<>(InvalidResponseReceived, Tuple2::t2);
 
@@ -249,7 +249,7 @@ public final class AtMostOnceBuilder {
     }
 
     @Override
-    public OnPeerUnavailableStep<RQ, RS> processModel(EntityModel processModel) {
+    public OnPeerUnavailableStep<RQ, RS> processModel(EntityType processModel) {
       this.processModel = processModel;
       return this;
     }
@@ -257,7 +257,7 @@ public final class AtMostOnceBuilder {
     @Override
     public <S> OnMissingResponseStep<RQ, RS> onPeerUnavailable(
         EventType<S, ?> eventType,
-        Function<EntityModel, S> dataAdapter
+        Function<EntityType, S> dataAdapter
     ) {
       this.onPeerUnavailable = new Callback<>(eventType, dataAdapter);
       return this;
@@ -272,7 +272,7 @@ public final class AtMostOnceBuilder {
     @Override
     public <S> OnInvalidResponseRejectionStep<RQ, RS> onMissingResponse(
         EventType<S, ?> eventType,
-        Function<EntityModel, S> dataAdapter
+        Function<EntityType, S> dataAdapter
     ) {
       this.onMissingResponse = new Callback<>(eventType, dataAdapter);
       return this;
@@ -357,9 +357,9 @@ public final class AtMostOnceBuilder {
     private final DataType<RS> responsePayloadType;
     private final HttpClient forwarder;
     private final Duration inflightTimeout;
-    private final EntityModel processModel;
-    private final Callback<EntityModel, ?> onPeerUnavailable;
-    private final Callback<EntityModel, ?> onMissingResponse;
+    private final EntityType processModel;
+    private final Callback<EntityType, ?> onPeerUnavailable;
+    private final Callback<EntityType, ?> onMissingResponse;
     private final Callback<Tuple2<HttpResponse<byte[]>, String>, ?> onInvalidResponseRejection;
     private final Callback<Tuple2<HttpResponse<byte[]>, String>, ?> onInvalidResponseUnknown;
     private final Function<HttpResponse<byte[]>, Validated<RS>> contentParser;
@@ -377,9 +377,9 @@ public final class AtMostOnceBuilder {
         DataType<RS> responsePayloadType,
         HttpClient forwarder,
         Duration inflightTimeout,
-        EntityModel processModel,
-        Callback<EntityModel, ?> onPeerUnavailable,
-        Callback<EntityModel, ?> onMissingResponse,
+        EntityType processModel,
+        Callback<EntityType, ?> onPeerUnavailable,
+        Callback<EntityType, ?> onMissingResponse,
         Callback<Tuple2<HttpResponse<byte[]>, String>, ?> onInvalidResponseRejection,
         Callback<Tuple2<HttpResponse<byte[]>, String>, ?> onInvalidResponseUnknown,
         Function<HttpResponse<byte[]>, Validated<RS>> contentParser,

@@ -1,6 +1,6 @@
 // How a rollback finds a request of an inbox request, and the events the request caused on the application. Each
-// entity is a box, like a class in a class diagram, with the name of its entity model, and the kind of entity as a
-// stereotype unless it is a plain entity model, over its events, oldest on top. An event with a dashed border, in
+// entity is a box, like a class in a class diagram, with the name of its entity type, and the kind of entity as a
+// stereotype unless it is a plain entity type, over its events, oldest on top. An event with a dashed border, in
 // italics, is not stored: it leads to a choice, of which only the event of the chosen transition is stored, or is of an
 // entity of the session only, which is a box with a dashed border. Solid arrows are triggers, dashed arrows event
 // references. The colours are those of the other diagrams.

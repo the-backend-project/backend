@@ -33,7 +33,7 @@ import static com.github.thxmasj.backend.templates.cardpayment.SettlementTransit
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.Event;
 import com.github.thxmasj.backend.core.Identifiable;
 import com.github.thxmasj.backend.core.StateMachine;
@@ -158,7 +158,7 @@ public class CutOffReconciliationTest {
   }
 
   private static HttpResponse<byte[]> responseTo(Event<?> event) {
-    return HttpResponse.raw(event.getUnmarshalledData());
+    return HttpResponse.raw(event.data());
   }
 
   private static String authorisationPath() {
@@ -251,7 +251,7 @@ public class CutOffReconciliationTest {
     return new Application(
         new StateMachine(
             _ -> Mono.empty(),
-            inbox.entityModels(),
+            inbox.entityTypes(),
             Init.database(),
             Init.client(),
             migrationDataSource,
@@ -266,7 +266,7 @@ public class CutOffReconciliationTest {
   }
 
   /// The authentication of payments, made with the payment model
-  private static Dispatcher<AuthenticationData, HttpRequest<Request>> authenticationDispatcher(EntityModel payment) {
+  private static Dispatcher<AuthenticationData, HttpRequest<Request>> authenticationDispatcher(EntityType payment) {
     var authentication = HttpOutboxRequest.atMostOnce()
         .requestPayloadType(DataType.json(Request.class))
         .responsePayloadType(DataType.json(AuthenticationResult.class))
@@ -283,7 +283,7 @@ public class CutOffReconciliationTest {
 
   /// The authorisation of payments by the acquirer, made with the payment model
   private static BatchedAtMostOnceWithRollbackDispatcher<Tuple6<Authorisation, Merchant, AuthenticationResult, PaymentToken, AcquirerBatchNumber, UUID>, AcquirerAuthorisationRequest, Tuple4<ReversalData, Merchant, AcquirerBatchNumber, UUID>> acquirerAuthorisationDispatcher(
-      EntityModel payment
+      EntityType payment
   ) {
     AtMostOnce<AcquirerAuthorisationRequest, Request> acquirerAuthorisation =
         HttpOutboxRequest.atMostOnce()

@@ -1,14 +1,13 @@
 package com.github.thxmasj.backend.helloworld;
 
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static com.github.thxmasj.backend.core.EntitySelector.entityIdFromSession;
 import static com.github.thxmasj.backend.core.TransitionModelBuilder.WithEvent.onEvent;
 import static com.github.thxmasj.backend.http.inbox.HttpInbox.Request;
 import static com.github.thxmasj.backend.http.inbox.HttpInboxRequest.newEntity;
 
-import com.github.thxmasj.backend.core.BasicEventType;
 import com.github.thxmasj.backend.core.DataType;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.State;
 import com.github.thxmasj.backend.core.TransitionModel;
@@ -25,13 +24,13 @@ import java.util.UUID;
 /// A greeting is an entity which is created for every `GET /`. Its creation responds with a hello world page.
 public interface Greetings {
 
-  EntityModel Greeting = EntityModel.of("Greeting", UUID.fromString("8a4c1d36-4f0e-4b8e-9a47-2f5f0c0b6d11"), Greetings::transitions);
+  EntityType Greeting = EntityType.of("Greeting", UUID.fromString("8a4c1d36-4f0e-4b8e-9a47-2f5f0c0b6d11"), Greetings::transitions);
 
   enum States implements State {
     Greeted
   }
 
-  EventType<Void, Void> GreetingRequested = BasicEventType.of("Greeting requested", UUID.fromString("0b7f8f43-37a3-4f26-9a5c-6f3ad6f1c2a4"));
+  EventType<Void, Void> GreetingRequested = EventType.of("Greeting requested", UUID.fromString("0b7f8f43-37a3-4f26-9a5c-6f3ad6f1c2a4"));
 
   ResponseEventType<String> GreetingResponseCreated = new ResponseEventType<>(
       "Greeting response created",
@@ -55,7 +54,7 @@ public interface Greetings {
       )
       .build("GreetingRequest", UUID.fromString("5e3d4a8c-0f2b-4c6e-b1d7-9a8f7e6d5c4b"));
 
-  /// The inbox of the application, whose entity models are those to create the state machine with, which also runs the
+  /// The inbox of the application, whose entity types are those to create the state machine with, which also runs the
   /// greetings the requests trigger events on
   HttpInbox Inbox = HttpInbox.of(List.of(GreetingRequest));
 

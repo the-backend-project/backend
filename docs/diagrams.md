@@ -3,7 +3,7 @@
 The diagram module draws three kinds of diagrams:
 
 - [State diagrams](#state-diagrams-of-entity-types) of the state machines of the entity types, the
-  [entity models](entities.md) in the code: what can happen to an entity.
+  [entity types](entities.md) in the code: what can happen to an entity.
 - [Entity relationship diagrams](#entity-relationship-diagrams-of-bounded-contexts) of the
   [bounded contexts](principles.md#domain-driven-design), i.e. the complete models of the state machines: how their
   entity types relate.
@@ -66,7 +66,7 @@ domain, such as the payments, merchants and settlements of the card payment temp
 requests, which relate to most of them:
 
 ```java
-new EntityRelationshipDiagramFormatter("cardpayment", cardPayments.entityModels())
+new EntityRelationshipDiagramFormatter("cardpayment", cardPayments.entityTypes())
     .only(cardPayments.merchant(), cardPayments.payment(), cardPayments.settlement())
     .compact()
     .formatToImage("diagrams");
@@ -93,7 +93,7 @@ and the entity types of the state machine:
 ```java
 EventLog payment = api.eventLog(cardPayments.payment(), paymentId).block();
 List<EventLog> related = List.of(paymentRequest, authentication, authorisation, settlement);
-new SequenceDiagramFormatter(payment, related, inbox.entityModels()).formatToImage(new File("payment.svg"));
+new SequenceDiagramFormatter(payment, related, inbox.entityTypes()).formatToImage(new File("payment.svg"));
 ```
 
 ### How the logs are replayed

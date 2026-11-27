@@ -1,6 +1,6 @@
 package com.github.thxmasj.backend.identityprovider;
 
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static com.github.thxmasj.backend.core.EntitySelector.entityIdFromSession;
 import static com.github.thxmasj.backend.core.EntitySelector.idEvent;
 import static com.github.thxmasj.backend.core.TransitionModelBuilder.WithEvent.onEvent;
@@ -9,9 +9,8 @@ import static com.github.thxmasj.backend.http.inbox.HttpInbox.Request;
 import static com.github.thxmasj.backend.identityprovider.Clients.Client;
 import static com.github.thxmasj.backend.identityprovider.Clients.ClientIdClaimed;
 
-import com.github.thxmasj.backend.core.BasicEventType;
 import com.github.thxmasj.backend.core.DataType;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.Severity;
 import com.github.thxmasj.backend.core.State;
@@ -86,50 +85,50 @@ public interface Tokens {
   /// The tokens issued for a user signed in to a client
   record UserTokens(IssuedToken accessToken, IdToken idToken) {}
 
-  EventType<Request, Void> TokenRequested = BasicEventType.of(
+  EventType<Request, Void> TokenRequested = EventType.of(
       "Token requested",
       UUID.fromString("b6e1d4a9-2c75-4f08-9a3e-7d5b1c8f0e62"),
       DataType.json(Request.class),
       DataType.none()
   );
-  EventType<IssuedToken, IssuedToken> TokenIssued = BasicEventType.of(
+  EventType<IssuedToken, IssuedToken> TokenIssued = EventType.of(
       "Token issued",
       UUID.fromString("2d9a7e3c-5f18-4b64-a0d2-8e6c4b1f9a75"),
       DataType.json(IssuedToken.class)
   );
-  EventType<Refusal, Refusal> TokenRefused = BasicEventType.of(
+  EventType<Refusal, Refusal> TokenRefused = EventType.of(
       "Token refused",
       UUID.fromString("6a3f0c8e-1b47-4d92-b5e6-4c7d2a9e8f13"),
       DataType.json(Refusal.class)
   );
 
-  EventType<CodeRequest, Void> CodeRedemptionRequested = BasicEventType.of(
+  EventType<CodeRequest, Void> CodeRedemptionRequested = EventType.of(
       "Code redemption requested",
       UUID.fromString("d93d1c03-54d1-419a-8165-c84f1c0197b9"),
       DataType.json(CodeRequest.class),
       DataType.none()
   );
   /// The client redeeming a code is authenticated. Never stored, as it chooses the transition of the outcome.
-  EventType<Tuple3<CodeRequest, UUID, ZonedDateTime>, Void> CodeRedemptionAuthenticated = BasicEventType.of(
+  EventType<Tuple3<CodeRequest, UUID, ZonedDateTime>, Void> CodeRedemptionAuthenticated = EventType.of(
       "Code redemption authenticated",
       UUID.fromString("3cfde0fc-c751-4b60-9c75-8025e29175a1"),
       DataType.unknown(),
       DataType.none()
   );
-  EventType<UserTokens, UserTokens> UserTokensIssued = BasicEventType.of(
+  EventType<UserTokens, UserTokens> UserTokensIssued = EventType.of(
       "User tokens issued",
       UUID.fromString("8702fa9a-a8d9-4d71-8c1d-d8cc0c6b86ae"),
       DataType.json(UserTokens.class)
   );
   /// The UserInfo endpoint is called with the access token of the token request
-  EventType<Void, Void> UserInfoRequested = BasicEventType.of(
+  EventType<Void, Void> UserInfoRequested = EventType.of(
       "User info requested",
       UUID.fromString("bf5cc0e6-d1cc-4bef-9fe9-ca3d07da929c")
   );
 
   /// The token requests, whose tokens live as long as the lifetime
-  static EntityModel tokenRequest(Duration lifetime) {
-    return EntityModel.of("Token request", UUID.fromString("4f8c2a6e-9d13-4b70-8e5f-3a1d7c9b2e48"), () -> transitions(lifetime));
+  static EntityType tokenRequest(Duration lifetime) {
+    return EntityType.of("Token request", UUID.fromString("4f8c2a6e-9d13-4b70-8e5f-3a1d7c9b2e48"), () -> transitions(lifetime));
   }
 
   private static Map<State, List<TransitionModel<?, ?>>> transitions(Duration lifetime) {
@@ -232,7 +231,7 @@ public interface Tokens {
   }
 
   private static Granted granted(ProcessResult<Granted> result) {
-    return result.accepted().event().getUnmarshalledData();
+    return result.accepted().event().data();
   }
 
   /// The access token, for the UserInfo endpoint, and the ID token of the user signed in to the client
@@ -293,7 +292,7 @@ public interface Tokens {
   }
 
   private static Registration registration(ProcessResult<Registration> result) {
-    return result.accepted().event().getUnmarshalledData();
+    return result.accepted().event().data();
   }
 
   /// The token is issued with the requested scope, or with all the scopes of the client if none were requested

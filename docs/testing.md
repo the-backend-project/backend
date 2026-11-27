@@ -35,12 +35,13 @@ Depend on the module in test scope only:
 </dependency>
 ```
 
-Create a `TestApi` with a data source for the application's database, the schema name, and the same entity models as
+Create a `TestApi` with a data source for the application's database, the schema name, and the same entity types as
 the state machine is given. They and the models their transitions trigger events on tell the test API the entity
-models and event types, so it can return the events with their data unmarshalled, for any entity model.
+types and event types, so it can return the event logs of any entity type, whose accessors unmarshal the data of the
+events, e.g. `log.last(eventType)` or `log.data(entry)`.
 
 ```java
-var api = new TestApi(dataSource, "Payments", entityModels, Clock.systemUTC());
+var api = new TestApi(dataSource, "Payments", entityTypes, Clock.systemUTC());
 
 EventLog payment = api.eventLogById(PaymentId, paymentId).block();
 assertEquals(Authorised, payment.events().getLast().type());
@@ -57,12 +58,12 @@ All operations are reactive, like the rest of the state machine, and complete em
 
 | Operation | Gives |
 | --- | --- |
-| `eventLog(entityId)` | The event log of an entity, with the entity model it was created with |
-| `eventLog(entityModel, entityId)` | The event log of an entity of an entity model, including id and index entities |
+| `eventLog(entityId)` | The event log of an entity, with the entity type it was created with |
+| `eventLog(entityType, entityId)` | The event log of an entity of an entity type, including id and index entities |
 | `eventLogById(idType, id)` | The event log of the entity having an id, e.g. a merchant id or the message id of a request |
 | `id(entityId, idType)` | The id of a type of an entity, e.g. the token reference of a token |
 | `entitiesByIndex(indexType, key)` | The event logs of the entities indexed by a key, e.g. the outbox requests of a payment |
-| `lastIndexed(entityModel, indexType, group)` | The event log of the last entity of a group, e.g. the open settlement of a merchant |
+| `lastIndexed(entityType, indexType, group)` | The event log of the last entity of a group, e.g. the open settlement of a merchant |
 | `delayedTrigger(entityId)` | The event the entity is waiting for, with its deadline and the number of attempts so far |
 | `conditionalTriggers(entityId)` | The events the entity is waiting for on conditions on other entities |
 
@@ -72,7 +73,7 @@ All operations are reactive, like the rest of the state machine, and complete em
 | --- | --- |
 | `expireDelayedTrigger(entityId)` | Makes the event the entity is waiting for due now, so it is triggered without waiting for its deadline |
 | `deleteDelayedTriggers()` | Cancels the events all entities are waiting for, e.g. so that a scenario starts with no pending dispatches |
-| `append(entityModel, entityId, eventType, data)` | Appends an event without any transition, e.g. to start a scenario with an open settlement having a given batch number |
+| `append(entityType, entityId, eventType, data)` | Appends an event without any transition, e.g. to start a scenario with an open settlement having a given batch number |
 
 `append` stores the event as if a transition had accepted it, so the event the entity was waiting for is no longer
 triggered, but it doesn't validate the event against the entity's state and triggers no other events. Appending

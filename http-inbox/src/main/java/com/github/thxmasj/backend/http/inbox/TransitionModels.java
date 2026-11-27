@@ -1,7 +1,7 @@
 package com.github.thxmasj.backend.http.inbox;
 
 import static com.github.thxmasj.backend.core.BuiltinEventTypes.EventsRolledBack;
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static com.github.thxmasj.backend.core.EntitySelector.CreationMode.CreateIfNotExists;
 import static com.github.thxmasj.backend.core.EntitySelector.entityId;
 import static com.github.thxmasj.backend.core.EntitySelector.entityIdFromSession;
@@ -43,11 +43,10 @@ import static com.github.thxmasj.backend.http.inbox.HttpInbox.States.Routed;
 import static com.github.thxmasj.backend.http.inbox.RequestRoutingModel.RequestRouting;
 import static java.util.stream.Collectors.toSet;
 
-import com.github.thxmasj.backend.core.BasicEventType.Rollback.Data;
-import com.github.thxmasj.backend.core.BasicEventType;
+import com.github.thxmasj.backend.core.EventType.Rollback.Data;
 import com.github.thxmasj.backend.core.DataType;
-import com.github.thxmasj.backend.core.EntityModel;
-import com.github.thxmasj.backend.core.EntityModelGroup;
+import com.github.thxmasj.backend.core.EntityType;
+import com.github.thxmasj.backend.core.EntityTypeGroup;
 import com.github.thxmasj.backend.core.EntitySelector;
 import com.github.thxmasj.backend.core.EventLog;
 import com.github.thxmasj.backend.core.EventReference;
@@ -60,6 +59,7 @@ import com.github.thxmasj.backend.core.StateMachine.ProcessResult;
 import com.github.thxmasj.backend.core.TransitionModel;
 import com.github.thxmasj.backend.core.Tuples.Tuple2;
 import com.github.thxmasj.backend.core.Validated;
+import com.github.thxmasj.backend.core.internal.EntityTypes;
 import com.github.thxmasj.backend.http.Headers;
 import com.github.thxmasj.backend.http.HttpRequest;
 import com.github.thxmasj.backend.http.HttpResponse;
@@ -353,7 +353,7 @@ interface TransitionModels {
   /// the application, so that it gets the same response. An entity of another inbox request has another request, and
   /// one whose request is still being dispatched has no response yet, so the request is no repeat of them.
   private static <T> boolean isSameRequest(HttpRequest<byte[]> newRequest, EventLog existing, HttpInboxRequest<T> request) {
-    if (!existing.entityModel().equals(request) || !hasResponse(existing))
+    if (!existing.entityType().equals(request) || !hasResponse(existing))
       return false;
     return existing.oneIfExists(RequestAccepted).map(Tuple2::t1)
         .or(() -> existing.oneIfExists(RequestRejected))
@@ -387,7 +387,7 @@ interface TransitionModels {
     var content = request.processes().get(process).content();
     if (content == null)
       return requestDispatched();
-    return BasicEventType.of(
+    return EventType.of(
         "Request dispatched [" + content.description() + "]",
         UUID.nameUUIDFromBytes((request.id() + "/" + process).getBytes(StandardCharsets.UTF_8)),
         DataType.unknown(),
@@ -447,7 +447,7 @@ interface TransitionModels {
     Process<T, U> process = (Process<T, U>) request.processes().get(processIndex);
     return onEvent(dispatchedTo(request, processIndex)).to(Dispatched)
         .assembleInput()
-        .trigger(process.eventType()).with(process.input()).on(process.entityModel()).identifiedBy(RoutedRequest::processSelector)
+        .trigger(process.eventType()).with(process.input()).on(process.entityType()).identifiedBy(RoutedRequest::processSelector)
         .when(d -> d.t2().isRejected()).then(
             onEvent(RequestRejected).to(Rejected)
                 .assembleInput()
@@ -465,8 +465,8 @@ interface TransitionModels {
                 .output(d -> d.t1().input().t3()).masked(request.masking()::mask),
             d -> tuple(d.t2().unknownId().exception().getMessage(), null, d.t1().request())
         )
-        .when(_ -> process.eventType() instanceof BasicEventType.Rollback).then(
-            request.stored() ?
+        .when(_ -> process.eventType() instanceof EventType.Rollback).then(
+            EntityTypes.stored(request) ?
                 onEvent(RequestAccepted).to(Dispatched)
                     .assemble(c -> tuple(c.input().t1(), c.input().t2(), c.entityId()))
                     .trigger(ProcessReferenced).with(d -> d.t2().entityId()).on(Index).identifiedBy(d -> entityId(d.t3(), CreateIfNotExists))
@@ -486,7 +486,7 @@ interface TransitionModels {
             accepted(request),
             d -> tuple(d.t1(), new EventReference(d.t2().completed().entityId(), d.t2().completed().eventNumber()))
         )
-        .when(d -> d.t2() instanceof ProcessResult.Pending<?, ?, ?> p && RequestRouting.includes(p.exception().entityModel())).then(
+        .when(d -> d.t2() instanceof ProcessResult.Pending<?, ?, ?> p && RequestRouting.includes(p.exception().entityType())).then(
             // TODO: Can immediate reply in router be handled like this?
             onEvent(RequestAccepted).to(Dispatched)
                 .assemble((input, log) -> tuple(input.t1(), input.t2(), log.entityId()))
@@ -503,7 +503,7 @@ interface TransitionModels {
   /// The request is accepted by the application, and indexed by the entity of the application, by which the requests of
   /// an entity are found. A request which is not stored is not indexed, as it can't be found.
   private static <T> TransitionModel<Tuple2<RoutedRequest<?>, EventReference>, Tuple2<HttpRequest<byte[]>, EventReference>> accepted(HttpInboxRequest<T> request) {
-    if (!request.stored())
+    if (!EntityTypes.stored(request))
       return onEvent(RequestAccepted).to(Dispatched)
           .assembleInput()
           .output(d -> tuple(d.t1().request(), d.t2()));
@@ -536,7 +536,7 @@ interface TransitionModels {
   private static <T> TransitionModel<?, ?> rollbackTransition(HttpInboxRequest<T> request, State rejectedState) {
     return onEvent(RollbackRequestReceived).to(RollingBack)
         .assemble((input, log) -> tuple(validateRollback(request, input).routedRequest(), log.entityId(), log.one(RequestAccepted).t2(), log.one(ResponseEventType.outputDataType).t2()))
-        .trigger(EventsRolledBack).with(d -> new Data(d.t3().eventNumber() - 1, "HTTP request")).on(request.processes().getFirst().entityModel()).identifiedBy(d -> entityId(d.t3().entityId()))
+        .trigger(EventsRolledBack).with(d -> new Data(d.t3().eventNumber() - 1, "HTTP request")).on(request.processes().getFirst().entityType()).identifiedBy(d -> entityId(d.t3().entityId()))
         .when(d -> d.t2().isRejected()).then(
             onEvent(RequestRejected).to(rejectedState)
                 .assembleInput()
@@ -601,7 +601,7 @@ interface TransitionModels {
   }
 
   /// Checks that every inbox request takes the responses its own processes may give. From the event of a process on
-  /// its entity model, the transitions taken on that event in any state are followed, with all the transitions they may
+  /// its entity type, the transitions taken on that event in any state are followed, with all the transitions they may
   /// choose, as which one is taken is decided at runtime. The event types they trigger on the group of inbox requests
   /// are the responses given. The events they trigger at once on other entities, which are calculated in the same
   /// session, are followed in the same way. Delayed and conditional triggers, and actions such as sending an outbox
@@ -613,7 +613,7 @@ interface TransitionModels {
           .map(transition -> transition.eventType().id())
           .collect(toSet());
       for (Process<?, ?> process : request.processes()) {
-        for (var given : responsesGiven(new Event(process.entityModel(), process.eventType()), request)) {
+        for (var given : responsesGiven(new Event(process.entityType(), process.eventType()), request)) {
           if (!taken.contains(given.response().id()))
             throw new IllegalArgumentException(String.format(
                 "The inbox request %s doesn't take the response %s, which %s on %s triggers on %s, on the way from " +
@@ -621,18 +621,18 @@ interface TransitionModels {
                 request.name(),
                 given.response().name(),
                 given.by().eventType().name(),
-                given.by().entityModel().name(),
+                given.by().entityType().name(),
                 HttpInbox.Request.name(),
                 process.eventType().name(),
-                process.entityModel().name()
+                process.entityType().name()
             ));
         }
       }
     }
   }
 
-  /// An event type on an entity model
-  record Event(EntityModel entityModel, EventType<?, ?> eventType) {
+  /// An event type on an entity type
+  record Event(EntityType entityType, EventType<?, ?> eventType) {
 
     UUID id() {
       return eventType.id();
@@ -644,7 +644,7 @@ interface TransitionModels {
   record Given(Event by, EventType<?, ?> response) {}
 
   /// The responses triggered on the request by the transitions taken on the event, and on the events they trigger at
-  /// once, except on the inbox's own entity models
+  /// once, except on the inbox's own entity types
   private static List<Given> responsesGiven(
       Event start,
       HttpInboxRequest<?> request
@@ -654,19 +654,19 @@ interface TransitionModels {
     var toVisit = new ArrayDeque<Event>(List.of(start));
     while (!toVisit.isEmpty()) {
       Event event = toVisit.removeFirst();
-      if (!visited.add(List.of(event.entityModel().id(), event.id())) || event.entityModel() instanceof EntityModelGroup)
+      if (!visited.add(List.of(event.entityType().id(), event.id())) || event.entityType() instanceof EntityTypeGroup)
         continue;
-      var taken = event.entityModel().transitions().values().stream()
+      var taken = event.entityType().transitions().values().stream()
           .flatMap(List::stream)
           .filter(transition -> transition.eventType().id().equals(event.id()))
           .toList();
       for (var transition : taken) {
         for (var trigger : immediateTriggers(transition)) {
-          EntityModel target = trigger.entityModel() != null ? trigger.entityModel() : event.entityModel();
+          EntityType target = trigger.entityType() != null ? trigger.entityType() : event.entityType();
           EventType<?, ?> triggered = trigger.eventType();
-          if (target instanceof EntityModelGroup group && group.includes(request))
+          if (target instanceof EntityTypeGroup group && group.includes(request))
             given.add(new Given(event, triggered));
-          else if (!(target instanceof EntityModelGroup) && !isInboxModel(target))
+          else if (!(target instanceof EntityTypeGroup) && !isInboxModel(target))
             toVisit.addLast(new Event(target, triggered));
         }
       }
@@ -674,7 +674,7 @@ interface TransitionModels {
     return given;
   }
 
-  private static boolean isInboxModel(EntityModel model) {
+  private static boolean isInboxModel(EntityType model) {
     return model instanceof HttpInboxRequest<?> || RequestRouting.includes(model) || model.equals(MessageIds) || model.equals(Index);
   }
 

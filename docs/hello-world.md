@@ -21,7 +21,7 @@ The [state diagram](diagrams.md#state-diagrams-of-entity-types) is generated fro
 
 [Open the diagram in full size](images/com.github.thxmasj.backend.helloworld.Greeting.svg)
 
-The entity models, with those of the HTTP inbox, and how they relate through triggers:
+The entity types, with those of the HTTP inbox, and how they relate through triggers:
 
 <object data="../images/com.github.thxmasj.backend.helloworld.er.svg" type="image/svg+xml"></object>
 

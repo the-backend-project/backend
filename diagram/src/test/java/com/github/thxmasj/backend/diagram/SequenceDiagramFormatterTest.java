@@ -1,6 +1,6 @@
 package com.github.thxmasj.backend.diagram;
 
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static com.github.thxmasj.backend.core.EntitySelector.entityIdFromSession;
 import static com.github.thxmasj.backend.core.EntitySelector.newEntityId;
 import static com.github.thxmasj.backend.core.TransitionModelBuilder.WithEvent.onEvent;
@@ -9,17 +9,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.github.thxmasj.backend.core.Action;
-import com.github.thxmasj.backend.core.BasicEventType;
-import com.github.thxmasj.backend.core.BasicEventType.Rollback;
+import com.github.thxmasj.backend.core.EventType;
+import com.github.thxmasj.backend.core.EventType.Rollback;
 import com.github.thxmasj.backend.core.BuiltinEventTypes;
 import com.github.thxmasj.backend.core.DataType;
-import com.github.thxmasj.backend.core.EntityModel;
-import com.github.thxmasj.backend.core.EntityModelGroup;
+import com.github.thxmasj.backend.core.EntityType;
+import com.github.thxmasj.backend.core.EntityTypeGroup;
 import com.github.thxmasj.backend.core.EntitySelector;
 import com.github.thxmasj.backend.core.Event;
 import com.github.thxmasj.backend.core.EventLog;
 import com.github.thxmasj.backend.core.EventType;
-import com.github.thxmasj.backend.core.IndexEntityModel;
+import com.github.thxmasj.backend.core.IndexEntityType;
 import com.github.thxmasj.backend.core.InputEvent;
 import com.github.thxmasj.backend.core.Severity;
 import com.github.thxmasj.backend.core.State;
@@ -42,38 +42,38 @@ class SequenceDiagramFormatterTest {
 
   enum States implements State {Placed, Accepted, Refused, Waiting, Answered}
 
-  static final EventType<Void, Void> Placed = BasicEventType.of("Placed", UUID.randomUUID());
-  static final EventType<Void, Void> Accepted = BasicEventType.of("Accepted", UUID.randomUUID());
-  static final EventType<Void, Void> Refused = BasicEventType.of("Refused", UUID.randomUUID());
-  static final EventType<Void, Void> Reviewed = BasicEventType.of("Reviewed", UUID.randomUUID());
-  static final EventType<Void, Void> Reserved = BasicEventType.of("Reserved", UUID.randomUUID());
-  static final EventType<Void, Void> Released = BasicEventType.of("Released", UUID.randomUUID());
-  static final EventType<Void, Void> Audited = BasicEventType.of("Audited", UUID.randomUUID());
-  static final EventType<Void, Void> Shipped = BasicEventType.of("Shipped", UUID.randomUUID());
-  static final EventType<Void, Void> Received = BasicEventType.of("Received", UUID.randomUUID());
-  static final EventType<Void, Void> Answered = BasicEventType.of("Answered", UUID.randomUUID());
-  static final EventType<Void, Void> Arrived = BasicEventType.of("Arrived", UUID.randomUUID());
-  static final EventType<Void, Void> Responded = BasicEventType.of("Responded", UUID.randomUUID());
-  static final EventType<Void, Void> Notified = BasicEventType.of("Notified", UUID.randomUUID());
-  static final EventType<UUID, UUID> Indexed = BasicEventType.of("Indexed", UUID.randomUUID(), DataType.uuid());
+  static final EventType<Void, Void> Placed = EventType.of("Placed", UUID.randomUUID());
+  static final EventType<Void, Void> Accepted = EventType.of("Accepted", UUID.randomUUID());
+  static final EventType<Void, Void> Refused = EventType.of("Refused", UUID.randomUUID());
+  static final EventType<Void, Void> Reviewed = EventType.of("Reviewed", UUID.randomUUID());
+  static final EventType<Void, Void> Reserved = EventType.of("Reserved", UUID.randomUUID());
+  static final EventType<Void, Void> Released = EventType.of("Released", UUID.randomUUID());
+  static final EventType<Void, Void> Audited = EventType.of("Audited", UUID.randomUUID());
+  static final EventType<Void, Void> Shipped = EventType.of("Shipped", UUID.randomUUID());
+  static final EventType<Void, Void> Received = EventType.of("Received", UUID.randomUUID());
+  static final EventType<Void, Void> Answered = EventType.of("Answered", UUID.randomUUID());
+  static final EventType<Void, Void> Arrived = EventType.of("Arrived", UUID.randomUUID());
+  static final EventType<Void, Void> Responded = EventType.of("Responded", UUID.randomUUID());
+  static final EventType<Void, Void> Notified = EventType.of("Notified", UUID.randomUUID());
+  static final EventType<UUID, UUID> Indexed = EventType.of("Indexed", UUID.randomUUID(), DataType.uuid());
 
-  static final EntityModel Stock = EntityModel.of("Stock", UUID.randomUUID(), Map::of);
-  static final EntityModel Audit = EntityModel.of("Audit", UUID.randomUUID(), Map::of);
+  static final EntityType Stock = EntityType.of("Stock", UUID.randomUUID(), Map::of);
+  static final EntityType Audit = EntityType.of("Audit", UUID.randomUUID(), Map::of);
 
   static final Action<String> Notify = new Action<>() {
     @Override public String name() {return "Notify customer";}
     @Override public Mono<InputEvent<?>> execute(String data) {return Mono.empty();}
   };
 
-  static final EntityModel Order = EntityModel.of("Order", UUID.randomUUID(), SequenceDiagramFormatterTest::orderTransitions);
+  static final EntityType Order = EntityType.of("Order", UUID.randomUUID(), SequenceDiagramFormatterTest::orderTransitions);
 
   /// A request placing an order, which the order answers through the group of requests, like an inbox request
-  static final EntityModel Request = EntityModel.of("Request", UUID.randomUUID(), SequenceDiagramFormatterTest::requestTransitions);
+  static final EntityType Request = EntityType.of("Request", UUID.randomUUID(), SequenceDiagramFormatterTest::requestTransitions);
 
-  static final EntityModelGroup Requests = EntityModelGroup.of("Requests", UUID.randomUUID(), Request::equals);
+  static final EntityTypeGroup Requests = EntityTypeGroup.of("Requests", UUID.randomUUID(), Request::equals);
 
   /// Routes what arrives to a new request and gets its response, like the routing of an inbox, and isn't stored
-  static final EntityModel Router = EntityModel.notStored("Router", UUID.randomUUID(), () -> Map.of(
+  static final EntityType Router = EntityType.notStored("Router", UUID.randomUUID(), () -> Map.of(
       Begin, List.<TransitionModel<?, ?>>of(
           onEvent(Arrived).to(States.Waiting).trigger(Received).on(Request).identifiedBy(newEntityId()).output()
       ),
@@ -81,7 +81,7 @@ class SequenceDiagramFormatterTest {
       States.Answered, List.of()
   ));
 
-  static final IndexEntityModel Index = IndexEntityModel.of("Index", UUID.randomUUID(), Indexed);
+  static final IndexEntityType Index = IndexEntityType.of("Index", UUID.randomUUID(), Indexed);
 
   private static Map<State, List<TransitionModel<?, ?>>> orderTransitions() {
     return Map.of(
@@ -141,7 +141,7 @@ class SequenceDiagramFormatterTest {
   }
 
   private void event(EventType<?, Void> type) {
-    events.add(new Event<>(orderId, events.size() + 1, type, transaction));
+    events.add(new Event<>(orderId, events.size() + 1, type, transaction, null));
   }
 
   private EventLog log() {
@@ -225,8 +225,8 @@ class SequenceDiagramFormatterTest {
     UUID requestId = UUID.randomUUID();
     event(Placed);
     var request = new EventLog(Request, requestId, List.of(
-        new Event<>(requestId, 1, Received, transaction),
-        new Event<>(requestId, 2, Answered, transaction)
+        new Event<>(requestId, 1, Received, transaction, null),
+        new Event<>(requestId, 2, Answered, transaction, null)
     ));
     assertThat(new SequenceDiagramFormatter(log(), List.of(request)).format()).contains(
         // In the order they are first drawn, from the request to the order
@@ -254,12 +254,12 @@ class SequenceDiagramFormatterTest {
   /// Like the routing of an inbox, which isn't stored, so that an inbox request is accepted from and responds to the
   /// same lifeline
   @Test
-  void theStepOfAnEntityWhichIsNotStoredIsDeducedFromTheEntityModels() {
+  void theStepOfAnEntityWhichIsNotStoredIsDeducedFromTheEntityTypes() {
     UUID requestId = UUID.randomUUID();
     event(Placed);
     var request = new EventLog(Request, requestId, List.of(
-        new Event<>(requestId, 1, Received, transaction),
-        new Event<>(requestId, 2, Answered, transaction)
+        new Event<>(requestId, 1, Received, transaction, null),
+        new Event<>(requestId, 2, Answered, transaction, null)
     ));
     String diagram = new SequenceDiagramFormatter(log(), List.of(request), List.of(Router, Request, Order)).format();
     assertThat(diagram).contains(
@@ -284,8 +284,8 @@ class SequenceDiagramFormatterTest {
   void eventsTriggeredOnIdAndIndexEntitiesAreLeftOut() {
     UUID requestId = UUID.randomUUID();
     var request = new EventLog(Request, requestId, List.of(
-        new Event<>(requestId, 1, Received, transaction),
-        new Event<>(requestId, 2, Answered, transaction)
+        new Event<>(requestId, 1, Received, transaction, null),
+        new Event<>(requestId, 2, Answered, transaction, null)
     ));
     assertThat(new SequenceDiagramFormatter(request).format()).doesNotContain("Indexed", "\"Index\"");
   }
@@ -365,7 +365,7 @@ class SequenceDiagramFormatterTest {
     event(Accepted);
     nextTransaction();
     UUID otherId = UUID.randomUUID();
-    var other = new EventLog(Order, otherId, List.of(new Event<>(otherId, 1, Placed, transaction)));
+    var other = new EventLog(Order, otherId, List.of(new Event<>(otherId, 1, Placed, transaction, null)));
     nextTransaction();
     event(Notified);
     String diagram = new SequenceDiagramFormatter(log(), List.of(other)).format();

@@ -28,7 +28,7 @@ import static com.github.thxmasj.backend.templates.cardpayment.SettlementTransit
 import static com.github.thxmasj.backend.templates.cardpayment.SettlementTransitions.OutboxRequestModelIds.Reconciliation;
 
 import com.github.thxmasj.backend.core.DataType;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.Identifiable;
 import com.github.thxmasj.backend.http.outbox.AtLeastOnce;
 import com.github.thxmasj.backend.http.outbox.AtLeastOnceDispatcher;
@@ -85,12 +85,12 @@ public class DummyTransitions {
       Identifiable id,
       Identifiable rollbackOnAcceptedId,
       Identifiable rollbackOnUnknownId,
-      EntityModel processModel
+      EntityType processModel
   ) {
     return AtMostOnceWithRollbackDispatcher.of(atMostOnce(id, rollbackOnAcceptedId, rollbackOnUnknownId, processModel), _ -> null, (_, _) -> Mono.empty());
   }
 
-  public static AtMostOnce<Request, Void> atMostOnce(Identifiable id, EntityModel processModel) {
+  public static AtMostOnce<Request, Void> atMostOnce(Identifiable id, EntityType processModel) {
     return HttpOutboxRequest.atMostOnce()
         .requestPayloadType(DataType.json(Request.class))
         .responsePayloadType(DataType.json(Response.class))
@@ -107,7 +107,7 @@ public class DummyTransitions {
       Identifiable id,
       Identifiable rollbackOnAcceptedId,
       Identifiable rollbackOnUnknownId,
-      EntityModel processModel
+      EntityType processModel
   ) {
     return HttpOutboxRequest.atMostOnce()
         .requestPayloadType(DataType.json(Request.class))
@@ -123,7 +123,7 @@ public class DummyTransitions {
         .build(id.name(), id.id());
   }
 
-  public static AtLeastOnce<Request> atLeastOnce(Identifiable id, EntityModel processModel) {
+  public static AtLeastOnce<Request> atLeastOnce(Identifiable id, EntityType processModel) {
     return HttpOutboxRequest.atLeastOnce()
         .requestPayloadType(DataType.json(Request.class))
         .responsePayloadType(DataType.json(Response.class))

@@ -1,7 +1,7 @@
 package com.github.thxmasj.backend.core.test;
 
 import static com.github.thxmasj.backend.core.BuiltinEventTypes.EventsRolledBack;
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static com.github.thxmasj.backend.core.EntitySelector.entityId;
 import static com.github.thxmasj.backend.core.EntitySelector.newEntityId;
 import static com.github.thxmasj.backend.core.EventTrigger.trigger;
@@ -15,10 +15,9 @@ import static com.github.thxmasj.backend.core.test.RollbackTest.SpeedStates.Zero
 import static com.github.thxmasj.backend.core.TransitionModelBuilder.WithEvent.onEvent;
 import static com.github.thxmasj.backend.core.TransitionModelBuilder.assemble;
 
-import com.github.thxmasj.backend.core.BasicEventType.Rollback.Data;
-import com.github.thxmasj.backend.core.BasicEventType;
+import com.github.thxmasj.backend.core.EventType.Rollback.Data;
 import com.github.thxmasj.backend.core.DataType;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EntitySelector;
 import com.github.thxmasj.backend.core.EventLog;
 import com.github.thxmasj.backend.core.EventType;
@@ -39,19 +38,19 @@ public class RollbackTest {
   enum PacmanStates implements State {Stopped, Moving, Dead}
   enum SpeedStates implements State {Zero, Normal, Slow, Fast}
 
-  static final EntityModel Pacman = EntityModel.of("Pacman", UUID.fromString("15f23da6-19be-460d-8af4-ffdbd600fc51"), RollbackTest::pacmanTransitions);
-  static final EntityModel Speed = EntityModel.of("Speed", UUID.fromString("6adad2d0-dd57-4d6b-932c-add277eb0cae"), RollbackTest::speedTransitions);
+  static final EntityType Pacman = EntityType.of("Pacman", UUID.fromString("15f23da6-19be-460d-8af4-ffdbd600fc51"), RollbackTest::pacmanTransitions);
+  static final EntityType Speed = EntityType.of("Speed", UUID.fromString("6adad2d0-dd57-4d6b-932c-add277eb0cae"), RollbackTest::speedTransitions);
 
   /// Starting to move records the id of the created speed entity
-  static EventType<Void, UUID> PacmanMovedForward = BasicEventType.of("Pacman moved forward", UUID.fromString("0908e790-6955-4d89-b11b-c552ea8c54ac"), DataType.none(), DataType.uuid());
-  static EventType<Void, Void> PacmanMovedBackward = BasicEventType.of("Pacman moved backward", UUID.fromString("a6e631f6-9cf1-40cf-81eb-1480a05a5aae"));
-  static EventType<Void, Void> PacmanTurnedLeft = BasicEventType.of("Pacman turned left", UUID.fromString("2c79f9f9-8650-4856-ab0a-d5f3e2a2677e"));
-  static EventType<Void, Void> PacmanTurnedRight = BasicEventType.of("Pacman turned right", UUID.fromString("f17ab0f1-f370-4e55-a847-c22bc9996af2"));
-  static EventType<Void, Void> PacmanStopped = BasicEventType.of("Pacman stopped", UUID.fromString("e5bf9178-bcf6-49f0-b149-8bfe1611615f"));
-  static EventType<Void, Void> PacmanCrashed = BasicEventType.of("Pacman crashed", UUID.fromString("6c2a0d66-5c24-4637-bc7e-3d9d42ab9426"));
+  static EventType<Void, UUID> PacmanMovedForward = EventType.of("Pacman moved forward", UUID.fromString("0908e790-6955-4d89-b11b-c552ea8c54ac"), DataType.none(), DataType.uuid());
+  static EventType<Void, Void> PacmanMovedBackward = EventType.of("Pacman moved backward", UUID.fromString("a6e631f6-9cf1-40cf-81eb-1480a05a5aae"));
+  static EventType<Void, Void> PacmanTurnedLeft = EventType.of("Pacman turned left", UUID.fromString("2c79f9f9-8650-4856-ab0a-d5f3e2a2677e"));
+  static EventType<Void, Void> PacmanTurnedRight = EventType.of("Pacman turned right", UUID.fromString("f17ab0f1-f370-4e55-a847-c22bc9996af2"));
+  static EventType<Void, Void> PacmanStopped = EventType.of("Pacman stopped", UUID.fromString("e5bf9178-bcf6-49f0-b149-8bfe1611615f"));
+  static EventType<Void, Void> PacmanCrashed = EventType.of("Pacman crashed", UUID.fromString("6c2a0d66-5c24-4637-bc7e-3d9d42ab9426"));
 
-  static EventType<Void, Void> SpeedIncreased = BasicEventType.of("Speed increased", UUID.fromString("cd17fdf0-1f71-4ea8-9fd8-618a19f5e765"));
-  static EventType<Void, Void> SpeedDecreased = BasicEventType.of("Speed decreased", UUID.fromString("6cd66f2c-9297-4783-a820-b4ac10b7299d"));
+  static EventType<Void, Void> SpeedIncreased = EventType.of("Speed increased", UUID.fromString("cd17fdf0-1f71-4ea8-9fd8-618a19f5e765"));
+  static EventType<Void, Void> SpeedDecreased = EventType.of("Speed decreased", UUID.fromString("6cd66f2c-9297-4783-a820-b4ac10b7299d"));
 
   private static UUID speedId(EventLog log) {
     return log.one(PacmanMovedForward);
@@ -157,7 +156,7 @@ public class RollbackTest {
     StepVerifier.create(eventListener.onEvent(trigger(PacmanMovedForward, Pacman, unknownId)))
         .expectErrorMatches(t -> t instanceof RejectedEvent r
             && r.reason() == RejectedEvent.Reason.UnknownEntity
-            && r.entityModel() == Pacman
+            && r.entityType() == Pacman
             && r.entityId().equals(unknownId))
         .verify();
   }

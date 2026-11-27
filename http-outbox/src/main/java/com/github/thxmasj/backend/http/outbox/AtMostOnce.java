@@ -17,9 +17,8 @@ import static com.github.thxmasj.backend.http.outbox.EventTypes.ResponseReceived
 import static com.github.thxmasj.backend.http.outbox.EventTypes.TimeoutExpired;
 import static com.github.thxmasj.backend.http.outbox.HttpOutboxRequest.toHttpRequest;
 
-import com.github.thxmasj.backend.core.BasicEventType;
 import com.github.thxmasj.backend.core.DataType;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EventLog;
 import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.State;
@@ -68,8 +67,8 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
 
   /// The callbacks of the outcomes of a request, events triggered on the entity of the process which dispatched it
   record Callbacks<T1, T2, T3, T4, T5, T6, T7, RS>(
-      Callback<EntityModel, T1> onPeerUnavailable,
-      Callback<EntityModel, T2> onMissingResponse,
+      Callback<EntityType, T1> onPeerUnavailable,
+      Callback<EntityType, T2> onMissingResponse,
       Callback<HttpResponse<RS>, T3> onSuccess,
       Callback<HttpResponse<RS>, T4> onFailure,
       Callback<HttpResponse<RS>, T7> onValidResponseUnknown,
@@ -93,7 +92,7 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
       DataType<RS> responsePayloadType,
       ForwardAction forward,
       Duration inflightTimeout,
-      EntityModel processModel,
+      EntityType processModel,
       Callbacks<T1, T2, T3, T4, T5, T6, T7, RS> callbacks,
       ResponseRules<RQ, RS> rules,
       Masking masking
@@ -129,7 +128,7 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
     }
 
     EventType<HttpRequest<RQ>, Tuple2<HttpRequest<RQ>, UUID>> requestDispatched() {
-      return BasicEventType.of(
+      return EventType.of(
           "Request dispatched",
           UUID.fromString("3f22bfef-dcb4-4560-8b88-6b5040433319"),
           HttpDataType.forRequest(requestPayloadType),
@@ -138,7 +137,7 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
     }
 
     EventType<BatchedRequest<RQ>, Tuple2<HttpRequest<RQ>, UUID>> batchedRequestDispatched() {
-      return BasicEventType.of(
+      return EventType.of(
           "Batched request dispatched",
           UUID.fromString("6c2e8f4b-1a7d-4f3e-b5c9-8e0d2a4f6b13"),
           BatchedRequest.dataType(requestPayloadType),
@@ -152,7 +151,7 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
     }
     // Intermediate
     EventType<HttpResponse<RS>, HttpResponse<RS>> validResponse() {
-      return BasicEventType.of(
+      return EventType.of(
           "Valid response received",
           UUID.fromString("c9fcf4d6-95f8-418f-aa6b-c3d987d3a3c3"),
           HttpDataType.forResponse(responsePayloadType),
@@ -161,7 +160,7 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
     }
     // Intermediate
     EventType<Tuple2<HttpResponse<byte[]>, String>, Tuple2<HttpResponse<byte[]>, String>> invalidResponse() {
-      return BasicEventType.of(
+      return EventType.of(
           "Invalid response received",
           UUID.fromString("3bd020c3-caf8-4a9b-a10c-d818f98a6de7"),
           DataType.tuple(HttpDataType.forResponse(), DataType.string()),
@@ -170,7 +169,7 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
     }
     // Leaf
     EventType<HttpResponse<RS>, HttpResponse<RS>> requestAccepted() {
-      return BasicEventType.of(
+      return EventType.of(
           "Request accepted",
           RequestAcceptedId,
           HttpDataType.forResponse(responsePayloadType),
@@ -179,7 +178,7 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
     }
     // Leaf
     EventType<HttpResponse<RS>, HttpResponse<RS>> validResponseAndRejected() {
-      return BasicEventType.of(
+      return EventType.of(
           "Request rejected",
           UUID.fromString("5362567f-792e-4f8a-81d6-3b201d44d3f0"),
           HttpDataType.forResponse(responsePayloadType),
@@ -188,7 +187,7 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
     }
     // Leaf
     EventType<HttpResponse<RS>, HttpResponse<RS>> validResponseAndUnknown() {
-      return BasicEventType.of(
+      return EventType.of(
           "Valid response received with unknown status",
           UUID.fromString("0059d0cc-e7ec-4f84-beb0-1870d00937d2"),
           HttpDataType.forResponse(responsePayloadType),
@@ -197,7 +196,7 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
     }
     // Leaf
     EventType<Tuple2<HttpResponse<byte[]>, String>, HttpResponse<byte[]>> invalidResponseAndRejected() {
-      return BasicEventType.of(
+      return EventType.of(
           "Request rejected",
           UUID.fromString("402f9bf4-855c-4383-ac54-3375f9d156d1"),
           DataType.tuple(HttpDataType.forResponse(), DataType.string()),
@@ -206,7 +205,7 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
     }
     // Leaf
     EventType<Tuple2<HttpResponse<byte[]>, String>, HttpResponse<byte[]>> invalidResponseAndUnknown() {
-      return BasicEventType.of(
+      return EventType.of(
           "Invalid response received with unknown status",
           UUID.fromString("ecfb2c9d-178b-4c3e-b09e-c580e09b01b4"),
           DataType.tuple(HttpDataType.forResponse(), DataType.string()),
@@ -229,7 +228,7 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
   /// Rolls this request back with data of type `RI`. The rollback request is dispatched by the rollback on accepted
   /// model if this request was accepted, and by the rollback on unknown model if its outcome is unknown.
   public <RI> EventType<RI, Void> rollbackDispatched() {
-    return BasicEventType.of(
+    return EventType.of(
         "Rollback dispatched",
         RollbackDispatchedId,
         DataType.unknown(),
@@ -369,7 +368,7 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
                     .output() : null,
             shape.callbacks().onPeerUnavailable() != null ?
                 onEvent(ConnectionFailed).to(Failed)
-                    .assemble(c -> c.log().entityModel())
+                    .assemble(c -> c.log().entityType())
                     .trigger(shape.callbacks().onPeerUnavailable().eventType())
                     .with(shape.callbacks().onPeerUnavailable().dataAdapter())
                     .on(shape.processModel())
@@ -378,7 +377,7 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
                 onEvent(ConnectionFailed).to(Failed).output(),
             shape.callbacks().onMissingResponse() != null ?
                 onEvent(ConnectionDropped).to(Unknown)
-                    .assemble(c -> c.log().entityModel())
+                    .assemble(c -> c.log().entityType())
                     .trigger(shape.callbacks().onMissingResponse().eventType())
                     .with(shape.callbacks().onMissingResponse().dataAdapter())
                     .on(shape.processModel())
@@ -387,7 +386,7 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
                 onEvent(ConnectionDropped).to(Unknown).output(),
             shape.callbacks().onMissingResponse() != null ?
                 onEvent(TimeoutExpired).to(Unknown)
-                    .assemble(c -> tuple(c.log().entityModel(), shape.dispatched(c.log()).t2()))
+                    .assemble(c -> tuple(c.log().entityType(), shape.dispatched(c.log()).t2()))
                     .trigger(shape.callbacks().onMissingResponse().eventType())
                     .with(d -> shape.callbacks().onMissingResponse().dataAdapter().apply(d.t1()))
                     .on(shape.processModel())
@@ -545,7 +544,7 @@ public final class AtMostOnce<RQ, RRQ> implements HttpOutboxRequest<RQ> {
   /// with (of type `RI`) and the request being rolled back, and the context of the process rolling the request back.
   /// Requests are triggered on the copy instead of this, so it is the one the state machine runs. The copy is made once
   /// for each rollback message creator, so dispatchers with the same creator share it, while copies with different
-  /// creators are different entity models with the same id, of which a state machine runs one.
+  /// creators are different entity types with the same id, of which a state machine runs one.
   public <RI> AtMostOnce<RQ, RRQ> withRollback(
       BiFunction<DispatchContext, Tuple2<RI, HttpRequest<RQ>>, Mono<HttpRequest<RRQ>>> rollbackMessageCreator
   ) {

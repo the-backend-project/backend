@@ -3,22 +3,23 @@ package com.github.thxmasj.backend.core;
 import static java.util.Collections.unmodifiableList;
 import static java.util.Objects.requireNonNull;
 
-import com.github.thxmasj.backend.core.BasicEventType.Rollback.Data;
+import com.github.thxmasj.backend.core.EventType.Rollback.Data;
 import com.github.thxmasj.backend.core.EventTrigger.EventCondition;
 import com.github.thxmasj.backend.core.EventTrigger.Conditional;
 import com.github.thxmasj.backend.core.EventTrigger.Immediate;
 import com.github.thxmasj.backend.core.StateMachine.CircularChange;
 import com.github.thxmasj.backend.core.StateMachine.ProcessResult;
+import com.github.thxmasj.backend.core.StateMachine.ProcessResult.Accepted;
 import com.github.thxmasj.backend.core.StateMachine.RejectedEvent;
 import com.github.thxmasj.backend.core.TransitionModelBuilder.WithFilter.Alternative;
 import com.github.thxmasj.backend.core.Tuples.Tuple2;
 import com.github.thxmasj.backend.core.database.UnknownEntity;
 import com.github.thxmasj.backend.core.internal.ActionTrigger;
 import com.github.thxmasj.backend.core.internal.Debug;
-import com.github.thxmasj.backend.core.internal.DelayedEvent;
 import com.github.thxmasj.backend.core.internal.TransitionStep;
 import com.github.thxmasj.backend.core.internal.TransitionStep.ActionStep;
 import com.github.thxmasj.backend.core.internal.TransitionStep.AssembleStep;
+import com.github.thxmasj.backend.core.internal.EventTypes;
 import com.github.thxmasj.backend.core.internal.TransitionStep.ChoiceStep;
 import com.github.thxmasj.backend.core.internal.TransitionStep.ConditionalTriggerStep;
 import com.github.thxmasj.backend.core.internal.TransitionStep.DelayedTriggerStep;
@@ -28,7 +29,6 @@ import com.github.thxmasj.backend.core.internal.TransitionStep.PendingStep;
 import com.github.thxmasj.backend.core.internal.TransitionStep.RejectedStep;
 import com.github.thxmasj.backend.core.internal.TransitionStep.TriggerStep;
 import com.github.thxmasj.backend.core.internal.TransitionStep.UnknownIdStep;
-import com.github.thxmasj.backend.core.internal.database.ConditionalTrigger;
 import java.time.Duration;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
@@ -126,19 +126,17 @@ public class TransitionModelBuilder<I, T, O> {
   public static TransitionModel<Void, State> statusOn() {
     return new TransitionModel<>(
         ModelContext.of(false, null, BuiltinEventTypes.StatusLookedUp),
-        inputStep -> inputStep.flatMap(i -> step(i, () -> Mono.just(new OutputStep<>(
+        inputStep -> inputStep.flatMap(i -> step(i, () -> Mono.just(acceptedStep(
             i,
-            ProcessResult.accepted(
-                new Event<>(
-                    i.log().entityId(),
-                    i.log().lastEventNumber() + 1,
-                    BuiltinEventTypes.StatusLookedUp,
-                    i.timestamp(),
-                    i.from()
-                ),
-                i.log().entityModel(),
-                Severity.Info
-            )
+            new Event<>(
+                i.log().entityId(),
+                i.log().lastEventNumber() + 1,
+                BuiltinEventTypes.StatusLookedUp,
+                i.timestamp(),
+                i.from()
+            ),
+            Severity.Info,
+            null
         ))))
     );
   }
@@ -158,7 +156,7 @@ public class TransitionModelBuilder<I, T, O> {
                   // Rollback to before start
                   || actualRollbackTo < 0
                   // Rollback more than one request
-                  || i.log().events().subList(actualRollbackTo, i.log().events().size()).stream().filter(e -> e.type() instanceof RequestEventType<?,?>).count() > 1
+                  || i.log().events().subList(actualRollbackTo, i.log().events().size()).stream().filter(e -> e.type() instanceof EventType.Request<?,?>).count() > 1
                   // Rollback from an event which is not the last
                   //|| rollbackFrom != i.log().lastEventNumber()
           ) {
@@ -169,7 +167,7 @@ public class TransitionModelBuilder<I, T, O> {
                     eventType,
                     new RejectedEvent(
                         eventType,
-                        i.log().entityModel(),
+                        i.log().entityType(),
                         i.log().entityId(),
                         i.from(),
                         invalidRollbackTo
@@ -179,8 +177,8 @@ public class TransitionModelBuilder<I, T, O> {
           }
           EventLog log = i.log();
           var effectiveEvents = log.effectiveEvents();
-          List<Event<?>> eventsToRollback = effectiveEvents.subList(actualRollbackTo, effectiveEvents.size());
-          Traverser traverser = i.stateMachine().traverser(log.entityModel());
+          List<EventLog.Entry<?>> eventsToRollback = effectiveEvents.subList(actualRollbackTo, effectiveEvents.size());
+          Traverser traverser = i.stateMachine().traverser(log.entityType());
           Mono<TransitionStep<?>> currentContext = Mono.just(i);
           for (var event : eventsToRollback.reversed()) {
             var tm = traverser.transitionForEventNumber(log, event.eventNumber());
@@ -209,19 +207,17 @@ public class TransitionModelBuilder<I, T, O> {
               ));
             }
           }
-          return currentContext.flatMap(c -> step(c, () -> Mono.just(new OutputStep<>(
+          return currentContext.flatMap(c -> step(c, () -> Mono.just(acceptedStep(
               c,
-              ProcessResult.accepted(
-                  new Event<>(
-                      i.log().entityId(),
-                      i.log().lastEventNumber() + 1,
-                      eventType,
-                      i.timestamp(),
-                      i.stepOutput()
-                  ),
-                  i.log().entityModel(),
-                  Severity.Info
-              )
+              new Event<>(
+                  i.log().entityId(),
+                  i.log().lastEventNumber() + 1,
+                  eventType,
+                  i.timestamp(),
+                  i.stepOutput()
+              ),
+              Severity.Info,
+              null
           ))));
         })
     );
@@ -370,14 +366,14 @@ public class TransitionModelBuilder<I, T, O> {
         Function<T, Mono<I1>> reactiveDataAdapter
     ) {
 
-      public ConditionalWithEntity<I, T, O, I1, O1> on(EntityModel entityModel) {
-        requireTarget(entityModel);
-        return new ConditionalWithEntity<>(this, entityModel);
+      public ConditionalWithEntity<I, T, O, I1, O1> on(EntityType entityType) {
+        requireTarget(entityType);
+        return new ConditionalWithEntity<>(this, entityType);
       }
 
     }
 
-    public record ConditionalWithEntity<I, T, O, I1, O1>(ConditionalWithEventTypeAndData<I, T, O, I1, O1> eventTypeAndData, EntityModel entityModel) {
+    public record ConditionalWithEntity<I, T, O, I1, O1>(ConditionalWithEventTypeAndData<I, T, O, I1, O1> eventTypeAndData, EntityType entityType) {
 
       /// @param entitySelector the entity, which may be selected by a fallback if the selector finds none, e.g. with
       ///                       [EntitySelector#idEvent(EventType, Object, EntitySelector)]
@@ -388,7 +384,7 @@ public class TransitionModelBuilder<I, T, O> {
                 eventType.eventType(),
                 eventTypeAndData.dataAdapter(),
                 entitySelector,
-                entityModel,
+                entityType,
                 eventType.condition()
             ),
             eventTypeAndData.reactiveDataAdapter()
@@ -407,9 +403,9 @@ public class TransitionModelBuilder<I, T, O> {
         this(eventType, dataAdapter, null);
       }
 
-      public WithEntity<I, T, O, I1, O1> on(EntityModel entityModel) {
-        requireTarget(entityModel);
-        return new WithEntity<>(this, entityModel);
+      public WithEntity<I, T, O, I1, O1> on(EntityType entityType) {
+        requireTarget(entityType);
+        return new WithEntity<>(this, entityType);
       }
 
       /// Triggers the event on the entity after the delay, unless another event is stored on it first. The data of the
@@ -451,7 +447,7 @@ public class TransitionModelBuilder<I, T, O> {
                 this.entity.eventTypeAndData.eventType.eventType,
                 this.entity.eventTypeAndData.dataAdapter,
                 this.entitySelector,
-                this.entity.entityModel
+                this.entity.entityType
             ),
             this.entity.eventTypeAndData.reactiveDataAdapter
         );
@@ -459,7 +455,7 @@ public class TransitionModelBuilder<I, T, O> {
 
     }
 
-    public record WithEntity<I, T, O, I1, O1>(WithEventTypeAndData<I, T, O, I1, O1> eventTypeAndData, EntityModel entityModel) {
+    public record WithEntity<I, T, O, I1, O1>(WithEventTypeAndData<I, T, O, I1, O1> eventTypeAndData, EntityType entityType) {
 
       /// @param entitySelector the entity, which may be selected by a fallback if the selector finds none, e.g. with
       ///                       [EntitySelector#idEvent(EventType, Object, EntitySelector)]
@@ -490,9 +486,9 @@ public class TransitionModelBuilder<I, T, O> {
       return new WithCondition<>(this, referenceType, indexKey);
     }
 
-    public WithEntity<I, T, O, I1, O1> on(EntityModel entityModel) {
-      requireTarget(entityModel);
-      return new WithEntity<>(new WithEventTypeAndData<>(this, _ -> null), entityModel);
+    public WithEntity<I, T, O, I1, O1> on(EntityType entityType) {
+      requireTarget(entityType);
+      return new WithEntity<>(new WithEventTypeAndData<>(this, _ -> null), entityType);
     }
 
   }
@@ -780,13 +776,14 @@ public class TransitionModelBuilder<I, T, O> {
         transitionStep -> transitionStep
             .flatMap(c -> step(c, () -> Mono.just(new DelayedTriggerStep<>(
                 c,
-                new DelayedEvent<>(
-                    c.inputStep().log().entityModel(),
+                new Change.DelayedTrigger<>(
+                    c.inputStep().log().entityType(),
                     c.inputStep().log().entityId(),
                     eventType,
                     c.inputStep().eventNumber() + 1,
                     dataAdapter.apply(c.stepOutput()),
-                    c.inputStep().timestamp().plus(delay.apply(c.stepOutput()))
+                    c.inputStep().timestamp().plus(delay.apply(c.stepOutput())),
+                    null
                 )
             ))));
     return new TransitionModelBuilder<>(
@@ -807,13 +804,13 @@ public class TransitionModelBuilder<I, T, O> {
               var condition = conditionalTrigger.condition();
               return new ConditionalTriggerStep<>(
                   c,
-                  new ConditionalTrigger<>(
+                  new Change.ConditionalTrigger<>(
                       Identifiers.newId(),
                       new EventReference(
                           c.inputStep().log().entityId(),
                           c.inputStep().eventNumber()
                       ),
-                      eventTrigger.entityModel(),
+                      eventTrigger.entityType(),
                       conditionalEntityId(eventTrigger, c),
                       eventTrigger.eventType(),
                       eventTrigger.data().apply(c.stepOutput()),
@@ -864,7 +861,7 @@ public class TransitionModelBuilder<I, T, O> {
       return byId.id();
     }
     if (selector instanceof EntitySelector.ByIdFromSession
-        && c.inputStep().log().entityModel().equals(eventTrigger.entityModel())) {
+        && c.inputStep().log().entityType().equals(eventTrigger.entityType())) {
       return c.inputStep().log().entityId();
     }
     throw new UnsupportedOperationException("Conditional trigger requires the entity to be identified by id or by the session's entity");
@@ -886,19 +883,32 @@ public class TransitionModelBuilder<I, T, O> {
   /// The event is made, and masked, in the output step, which is recorded by the transaction, so that the same step is
   /// given when the changes are calculated again, and the steps after it are recognised.
   private Function<Mono<InputStep<I>>, Mono<OutputStep<O>>> outputChain(Function<T, O> f, UnaryOperator<O> mask) {
-    return builderFunction.andThen(a -> a.flatMap(b -> step(b, () -> Mono.just(new OutputStep<>(
+    return builderFunction.andThen(a -> a.flatMap(b -> step(b, () -> Mono.just(acceptedStep(
         b,
-        ProcessResult.accepted(
-            event(b, f.apply(b.stepOutput()), mask),
-            b.inputStep().log().entityModel(),
-            modelContext.severity()
-        )
+        event(b, f.apply(b.stepOutput())),
+        modelContext.severity(),
+        mask
     )))));
+  }
+
+  /// The output step of a transition after the step, accepting the event on the entity of the step's log, with the
+  /// event's stored form, masked by the mask if it isn't null, if the event is stored. Every transition accepts its
+  /// event by this, which decides whether the event is stored, so an event is stored if and only if it has its stored
+  /// form. The output step makes it, so that a failure of masking or marshalling the event is one of the transition,
+  /// the event is marshalled once, and the step the transaction records has the event as it is stored. An event which
+  /// isn't stored is never marshalled: one of a type not stored, of an entity of the session only, or of a transition
+  /// which chose another one, which isn't stored either.
+  private static <O> OutputStep<O> acceptedStep(TransitionStep<?> previous, Event<O> event, Severity severity, UnaryOperator<O> mask) {
+    EntityType entityType = previous.inputStep().log().entityType();
+    boolean stored = !(previous instanceof ChoiceStep<?>)
+        && EventTypes.stored(event.type())
+        && !previous.inputStep().log().isSessionOnlyWith(event);
+    return new OutputStep<>(previous, new Accepted<>(event, entityType, severity, stored ? Change.Event.of(entityType, event, mask) : null));
   }
 
   /// The event of the transition with the output, masked when stored if the mask isn't null. A transition which
   /// chooses another one has no event of its own, as it ends in the chosen one's, with that one's mask.
-  private Event<O> event(TransitionStep<T> step, O output, UnaryOperator<O> mask) {
+  private Event<O> event(TransitionStep<T> step, O output) {
     if (output == null)
       throw new IllegalStateException(String.format(
           "The output of the transition on %s is null, which an event can't have. An event without data, of an event " +
@@ -908,10 +918,8 @@ public class TransitionModelBuilder<I, T, O> {
     InputStep<?> inputStep = step.inputStep();
     UUID entityId = inputStep.log().entityId();
     int number = inputStep.log().lastEventNumber() + 1;
-    // Marshalled when the transition is calculated, after its mask, see TransitionModel#calculate
-    return mask == null ?
-        Event.marshalledWhenAskedFor(entityId, number, modelContext.eventType(), inputStep.timestamp(), output) :
-        new Event<>(entityId, number, modelContext.eventType(), inputStep.timestamp(), output, mask);
+    // Its stored form is made in the output step, after the mask, if it is stored, see #acceptedStep
+    return new Event<>(entityId, number, modelContext.eventType(), inputStep.timestamp(), output);
   }
 
 
@@ -929,7 +937,7 @@ public class TransitionModelBuilder<I, T, O> {
                       b.previous() instanceof OutputStep<?> o ? o.stepOutput() : (b.previous() instanceof PendingStep<?, ?, ?> p ? p.stepOutput() : null),
                       b.inputStep().log().entityId(),
                       b.inputStep().eventNumber(),
-                      b.inputStep().log().entityModel()
+                      b.inputStep().log().entityType()
                   )
               ));
             }
@@ -944,18 +952,17 @@ public class TransitionModelBuilder<I, T, O> {
   public TransitionModel<I, O> output() {
     return new TransitionModel<>(
         modelContext.asWithoutData(),
-        builderFunction.andThen(a -> a.flatMap(b -> step(b, () -> Mono.just(new OutputStep<>(
+        builderFunction.andThen(a -> a.flatMap(b -> step(b, () -> Mono.just(acceptedStep(
             b,
-            ProcessResult.accepted(
-                new Event<>(
-                    b.inputStep().log().entityId(),
-                    b.inputStep().log().lastEventNumber() + 1,
-                    modelContext.eventType(),
-                    b.inputStep().timestamp()
-                ),
-                b.inputStep().log().entityModel(),
-                modelContext.severity()
-            )
+            new Event<>(
+                b.inputStep().log().entityId(),
+                b.inputStep().log().lastEventNumber() + 1,
+                modelContext.eventType(),
+                b.inputStep().timestamp(),
+                null
+            ),
+            modelContext.severity(),
+            null
         )))))
     );
   }
@@ -971,12 +978,12 @@ public class TransitionModelBuilder<I, T, O> {
     Debug.log(ZonedDateTime.now() + ": " + modelContext.description() + ": " + text);
   }
 
-  /// A trigger on an entity model which is null, e.g. a constant read while its class is being initialised as the
+  /// A trigger on an entity type which is null, e.g. a constant read while its class is being initialised as the
   /// transitions are created, would be taken as a trigger on the entity itself
-  private static void requireTarget(EntityModel entityModel) {
-    if (entityModel == null)
+  private static void requireTarget(EntityType entityType) {
+    if (entityType == null)
       throw new NullPointerException(
-          "The entity model to trigger the event on is null. If it is a constant, the transitions are created before " +
+          "The entity type to trigger the event on is null. If it is a constant, the transitions are created before " +
               "it is, e.g. by an inbox declared before it"
       );
   }

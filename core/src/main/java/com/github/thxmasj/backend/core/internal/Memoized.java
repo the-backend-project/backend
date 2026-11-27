@@ -4,7 +4,7 @@ import static java.util.Objects.requireNonNull;
 
 import java.util.function.Supplier;
 
-/// A value created by the supplier when it is first asked for, and kept, e.g. the transitions of an entity model. The
+/// A value created by the supplier when it is first asked for, and kept, e.g. the transitions of an entity type. The
 /// supplier is let go of once the value is created, with what it refers to.
 public final class Memoized<T> implements Supplier<T> {
 

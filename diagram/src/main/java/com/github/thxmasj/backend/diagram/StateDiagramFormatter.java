@@ -1,6 +1,6 @@
 package com.github.thxmasj.backend.diagram;
 
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Comparator.comparingInt;
 import static java.util.Optional.ofNullable;
@@ -8,7 +8,7 @@ import static java.util.function.Predicate.not;
 import static java.util.stream.Collectors.joining;
 
 import com.github.thxmasj.backend.core.DataType;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.Severity;
 import com.github.thxmasj.backend.core.State;
@@ -35,28 +35,28 @@ import net.sourceforge.plantuml.FileFormat;
 import net.sourceforge.plantuml.FileFormatOption;
 import net.sourceforge.plantuml.SourceStringReader;
 
-/// A state diagram of the state machine of an entity model, drawn with PlantUML from its transitions: the lifecycle of
+/// A state diagram of the state machine of an entity type, drawn with PlantUML from its transitions: the lifecycle of
 /// its entities. The details of an event, its data and the events and actions it triggers, are shown when the mouse
 /// hovers over its name.
 public class StateDiagramFormatter {
 
-  private final EntityModel model;
+  private final EntityType model;
   Map<State, List<TransitionModel<?, ?>>> transitions;
   /// The states shown, besides `Begin`, or null for all
   private final Set<State> only;
 
-  /// A state diagram of the transitions of the entity model
-  public StateDiagramFormatter(EntityModel model) {
+  /// A state diagram of the transitions of the entity type
+  public StateDiagramFormatter(EntityType model) {
     this(model, null);
   }
 
-  private StateDiagramFormatter(EntityModel model, Set<State> only) {
+  private StateDiagramFormatter(EntityType model, Set<State> only) {
     this.model = model;
     this.transitions = Map.copyOf(model.transitions());
     this.only = only;
   }
 
-  /// This formatter with only the states and the transitions between them, e.g. the main path of an entity model too
+  /// This formatter with only the states and the transitions between them, e.g. the main path of an entity type too
   /// large to show in full. A transition with choices is shown with the alternatives leading to the states.
   public StateDiagramFormatter only(State... states) {
     return new StateDiagramFormatter(model, Set.of(states));
@@ -80,12 +80,12 @@ public class StateDiagramFormatter {
     return file;
   }
 
-  /// Writes the diagram as SVG into the directory, named after the package of the entity model's class and its name.
+  /// Writes the diagram as SVG into the directory, named after the package of the entity type's class and its name.
   public File formatToImage(String directory) throws IOException {
     return formatToImage(file(directory, "svg"));
   }
 
-  /// Writes the diagram as SVG to the file, e.g. for an entity model created with `EntityModel.of`, whose class is in
+  /// Writes the diagram as SVG to the file, e.g. for an entity type created with `EntityType.of`, whose class is in
   /// the core library's package rather than the application's.
   public File formatToImage(File file) throws IOException {
     //noinspection ResultOfMethodCallIgnored
@@ -402,9 +402,9 @@ public class StateDiagramFormatter {
         Stream.of(
             eventName(eventType, transition.severity()),
             eventType.inputDataType().equals(DataType.none()) && eventType.outputDataType().equals(DataType.none()) ? "" : "f: " + eventType.inputDataType().name() + " → " + eventType.outputDataType().name(),
-            transition.triggers().stream().map(t -> "<&share>" + t.eventType().name() + "@" + ofNullable(t.entityModel()).map(m -> m.name()).orElse("???")).collect(joining("\\n")),
+            transition.triggers().stream().map(t -> "<&share>" + t.eventType().name() + "@" + ofNullable(t.entityType()).map(m -> m.name()).orElse("???")).collect(joining("\\n")),
             transition.actions().stream().map(a -> "<&bolt>" + a.name()).collect(joining("\\n")),
-            transition.reverseModel() != null ? transition.reverseModel().triggers().stream().map(t -> "<&share><color:red>" + t.eventType().name() + "@" + ofNullable(t.entityModel()).map(m -> m.name()).orElse("???")).collect(joining("\\n")) : ""
+            transition.reverseModel() != null ? transition.reverseModel().triggers().stream().map(t -> "<&share><color:red>" + t.eventType().name() + "@" + ofNullable(t.entityType()).map(m -> m.name()).orElse("???")).collect(joining("\\n")) : ""
         ).filter(not(String::isEmpty)).collect(joining("\\n"))
     );
   }
@@ -413,7 +413,7 @@ public class StateDiagramFormatter {
   // of their severity. The symbols have a text presentation by default, so they are drawn in that colour rather than as
   // emoji. Events of types which are not stored are named in italics.
   static String eventName(EventType<?, ?> eventType, Severity severity) {
-    String name = eventType.stored() ? eventType.name() : "<i>" + eventType.name() + "</i>";
+    String name = eventType instanceof EventType.NotStored ? "<i>" + eventType.name() + "</i>" : eventType.name();
     String symbol = switch (severity) {
       case Info -> null;
       case Warning -> "\u26a0";

@@ -1,7 +1,7 @@
 package com.github.thxmasj.backend.core.internal;
 
-import com.github.thxmasj.backend.core.Event;
-import com.github.thxmasj.backend.core.IdEntityModel;
+import com.github.thxmasj.backend.core.Change;
+import com.github.thxmasj.backend.core.IdEntityType;
 import com.github.thxmasj.backend.core.StateMachine.ProcessResult.Accepted;
 import com.github.thxmasj.backend.core.StateMachine.ProcessResult.IdExists;
 import com.github.thxmasj.backend.core.internal.TransitionStep.OutputStep;
@@ -92,7 +92,7 @@ public final class Transaction {
 
   /// The index of the first step triggering the id event, i.e. the step resulting in the input step of the
   /// transition calculating it, or -1 if there is none
-  private int firstTrigger(Event<?> idEvent) {
+  private int firstTrigger(Change.Event<?> idEvent) {
     for (Step step : steps) {
       if (step.result() instanceof OutputStep<?> output && isTransactionOf(idEvent, output)) {
         var initial = output.inputStep();
@@ -105,15 +105,16 @@ public final class Transaction {
     return -1;
   }
 
-  private static boolean isTransactionOf(Event<?> idEvent, OutputStep<?> output) {
+  private static boolean isTransactionOf(Change.Event<?> idEvent, OutputStep<?> output) {
     return output.stepOutput() instanceof Accepted<?> accepted
-        && accepted.entityModel() instanceof IdEntityModel
-        && isSameId(accepted.event(), idEvent);
+        && accepted.entityType() instanceof IdEntityType
+        && accepted.stored() != null
+        && isSameId(accepted.stored(), idEvent);
   }
 
-  private static boolean isSameId(Event<?> idEvent, Event<?> other) {
+  private static boolean isSameId(Change.Event<?> idEvent, Change.Event<?> other) {
     return idEvent.type().id().equals(other.type().id())
-        && Arrays.equals(idEvent.getMarshalledData(), other.getMarshalledData());
+        && Arrays.equals(idEvent.data(), other.data());
   }
 
 

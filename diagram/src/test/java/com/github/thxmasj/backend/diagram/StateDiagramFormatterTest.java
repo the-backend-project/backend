@@ -1,11 +1,11 @@
 package com.github.thxmasj.backend.diagram;
 
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static com.github.thxmasj.backend.core.TransitionModelBuilder.WithEvent.onEvent;
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.github.thxmasj.backend.core.BasicEventType;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EventType;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.Severity;
 import com.github.thxmasj.backend.core.State;
@@ -24,14 +24,14 @@ class StateDiagramFormatterTest {
 
   enum States implements State {Accepted, Refused, Waiting, Retrying, Failed}
 
-  static final EventType<Void, Void> Requested = BasicEventType.of("Requested", UUID.randomUUID());
-  static final EventType<Void, Void> Accepted = BasicEventType.of("Accepted", UUID.randomUUID());
-  static final EventType<Void, Void> Refused = BasicEventType.of("Refused", UUID.randomUUID());
-  static final EventType<Void, Void> Withdrawn = BasicEventType.of("Withdrawn", UUID.randomUUID());
+  static final EventType<Void, Void> Requested = EventType.of("Requested", UUID.randomUUID());
+  static final EventType<Void, Void> Accepted = EventType.of("Accepted", UUID.randomUUID());
+  static final EventType<Void, Void> Refused = EventType.of("Refused", UUID.randomUUID());
+  static final EventType<Void, Void> Withdrawn = EventType.of("Withdrawn", UUID.randomUUID());
 
   /// A formatter of a request model with the transitions
   private static StateDiagramFormatter formatter(Map<State, List<TransitionModel<?, ?>>> transitions) {
-    return new StateDiagramFormatter(EntityModel.of("Request", UUID.randomUUID(), () -> transitions));
+    return new StateDiagramFormatter(EntityType.of("Request", UUID.randomUUID(), () -> transitions));
   }
 
   @Test
@@ -53,7 +53,7 @@ class StateDiagramFormatterTest {
     assertThat(diagram).contains("Choice1 --> " + refusedId + ": Refused\\nWithdrawn\n");
   }
 
-  /// Like the main path of an entity model too large to show in full
+  /// Like the main path of an entity type too large to show in full
   @Test
   void onlyTheStatesGivenAndTheTransitionsAndAlternativesToThemAreShown() {
     Map<State, List<TransitionModel<?, ?>>> transitions = Map.of(
@@ -78,10 +78,10 @@ class StateDiagramFormatterTest {
   /// with the same branches are one choice, with the transitions into it on one arrow and its branches drawn once
   @Test
   void choicesWithTheSameBranchesAreOneChoice() {
-    EventType<Void, Void> timedOut = BasicEventType.of("Timed out", UUID.randomUUID());
-    EventType<Void, Void> dropped = BasicEventType.of("Dropped", UUID.randomUUID());
-    EventType<Void, Void> retried = BasicEventType.of("Retried", UUID.randomUUID());
-    EventType<Void, Void> givenUp = BasicEventType.of("Given up", UUID.randomUUID());
+    EventType<Void, Void> timedOut = EventType.of("Timed out", UUID.randomUUID());
+    EventType<Void, Void> dropped = EventType.of("Dropped", UUID.randomUUID());
+    EventType<Void, Void> retried = EventType.of("Retried", UUID.randomUUID());
+    EventType<Void, Void> givenUp = EventType.of("Given up", UUID.randomUUID());
     Map<State, List<TransitionModel<?, ?>>> transitions = Map.of(
         Begin, List.of(onEvent(Requested).to(States.Waiting).output()),
         States.Waiting, List.of(
@@ -106,9 +106,9 @@ class StateDiagramFormatterTest {
   /// Choices whose branches differ, here in the state a branch leads to, are separate choices
   @Test
   void choicesWithOtherBranchesAreSeparateChoices() {
-    EventType<Void, Void> timedOut = BasicEventType.of("Timed out", UUID.randomUUID());
-    EventType<Void, Void> dropped = BasicEventType.of("Dropped", UUID.randomUUID());
-    EventType<Void, Void> retried = BasicEventType.of("Retried", UUID.randomUUID());
+    EventType<Void, Void> timedOut = EventType.of("Timed out", UUID.randomUUID());
+    EventType<Void, Void> dropped = EventType.of("Dropped", UUID.randomUUID());
+    EventType<Void, Void> retried = EventType.of("Retried", UUID.randomUUID());
     Map<State, List<TransitionModel<?, ?>>> transitions = Map.of(
         Begin, List.of(onEvent(Requested).to(States.Waiting).output()),
         States.Waiting, List.of(
@@ -145,7 +145,7 @@ class StateDiagramFormatterTest {
 
   @Test
   void eventNotStoredIsNamedInItalics(@TempDir Path directory) throws IOException {
-    EventType<Void, Void> viewed = BasicEventType.notStored("Viewed", UUID.fromString("0e6c4a2f-8b1d-4e37-9f5a-2c7d9b1e3a64"));
+    EventType.NotStored<Void, Void> viewed = EventType.notStored("Viewed", UUID.fromString("0e6c4a2f-8b1d-4e37-9f5a-2c7d9b1e3a64"));
     Map<State, List<TransitionModel<?, ?>>> transitions = Map.of(
         Begin, List.of(onEvent(Requested).to(States.Accepted).output()),
         States.Accepted, List.of(onEvent(viewed).toSelf().output())

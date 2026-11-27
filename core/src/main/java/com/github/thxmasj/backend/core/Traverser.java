@@ -1,6 +1,6 @@
 package com.github.thxmasj.backend.core;
 
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static com.github.thxmasj.backend.core.TransitionModelBuilder.rollbackOn;
 import static com.github.thxmasj.backend.core.TransitionModelBuilder.statusOn;
 import static com.github.thxmasj.backend.core.Tuples.tuple;
@@ -8,11 +8,13 @@ import static java.util.stream.Collectors.joining;
 
 import com.github.thxmasj.backend.core.Tuples.Tuple2;
 import com.github.thxmasj.backend.core.internal.Debug;
+import com.github.thxmasj.backend.core.internal.EntityTypes;
+import com.github.thxmasj.backend.core.internal.EventTypes;
 import java.util.List;
 import java.util.Map;
 
-/// The transitions of an entity model, taken by an entity: its current state, found from its event log, and the
-/// transition an event takes from it. The transitions are checked before, by [EntityModelChecks].
+/// The transitions of an entity type, taken by an entity: its current state, found from its event log, and the
+/// transition an event takes from it. The transitions are checked before, by [EntityTypeChecks].
 class Traverser {
 
   private final Map<State, List<TransitionModel<?, ?>>> transitions;
@@ -20,11 +22,11 @@ class Traverser {
   /// stored creates otherwise
   private final boolean hasEntitiesOfTheSessionOnly;
 
-  Traverser(EntityModel model) {
+  Traverser(EntityType model) {
     this.transitions = model.transitions();
-    this.hasEntitiesOfTheSessionOnly = !model.stored() || transitions.getOrDefault(Begin, List.of()).stream()
+    this.hasEntitiesOfTheSessionOnly = !EntityTypes.stored(model) || transitions.getOrDefault(Begin, List.of()).stream()
         .flatMap(transition -> transition.leaves().stream())
-        .anyMatch(leaf -> !leaf.eventType().stored());
+        .anyMatch(leaf -> !EventTypes.stored(leaf.eventType()));
   }
 
   /// Whether entities of the session only are of the model, which the later transactions of a session find among the
@@ -40,7 +42,7 @@ class Traverser {
       return currentState;
     }
     TransitionModel<?, ?> lastTransition;
-    for (var loggedEvent : effectiveEvents.stream().map(Event::type).toList()) {
+    for (var loggedEvent : effectiveEvents.stream().map(EventLog.Entry::type).toList()) {
       lastTransition = findTransitionForLoggedEvent(loggedEvent, currentState);
       currentState = targetState(currentState, lastTransition);
     }
@@ -50,7 +52,7 @@ class Traverser {
 //        Effective events: %s
 //        Actual events:    %s
 //        """,
-//        eventLog.entityModel().name(),
+//        eventLog.entityType().name(),
 //        currentState.name(),
 //        effectiveEvents.stream().map(e -> e.type().name() + "/" + e.type().id()).collect(joining(", ")),
 //        eventLog.events().stream().map(Event::typeName).collect(joining(", "))
@@ -71,12 +73,12 @@ class Traverser {
   public Tuple2<State, TransitionModel<?, ?>> accept(EventLog eventLog, EventType<?, ?> eventType) {
     var currentState = currentState(eventLog);
     var availableTransitions = transitions.get(currentState);
-    if (availableTransitions == null) throw new IllegalStateException("No available transitions for current state " + currentState.name() + " on " + eventLog.entityModel().name());
+    if (availableTransitions == null) throw new IllegalStateException("No available transitions for current state " + currentState.name() + " on " + eventLog.entityType().name());
     var t = findTransitionForTriggeredEvent(eventType, availableTransitions);
     if (t != null && eventType == BuiltinEventTypes.EventsRolledBack)
-      Debug.log("Using custom rollback transition for entity " + eventLog.entityModel().name() + ": " + t + "\nAll transitions:\n" + transitions.values().stream().flatMap(List::stream).map(Object::toString).collect(joining("\n")));
-    if (t == null && eventType == BuiltinEventTypes.EventsRolledBack && eventType instanceof BasicEventType.Rollback rollback)
-      t = rollbackOn(rollback);
+      Debug.log("Using custom rollback transition for entity " + eventLog.entityType().name() + ": " + t + "\nAll transitions:\n" + transitions.values().stream().flatMap(List::stream).map(Object::toString).collect(joining("\n")));
+    if (t == null && eventType == BuiltinEventTypes.EventsRolledBack)
+      t = rollbackOn(BuiltinEventTypes.EventsRolledBack);
     else if (t == null && eventType == BuiltinEventTypes.StatusLookedUp)
       t = statusOn();
     return tuple(currentState, t);
@@ -95,7 +97,7 @@ class Traverser {
 //    var availableTransitions = transitions.get(currentState);
 //    if (availableTransitions == null) throw new IllegalStateException("No available transitions for current state " + currentState);
 //    var t = findTransition(eventType, availableTransitions);
-//    if (t == null && eventType == BuiltinEventTypes.Rollback && eventType instanceof BasicEventType.Rollback rollback)
+//    if (t == null && eventType == BuiltinEventTypes.Rollback && eventType instanceof EventType.Rollback rollback)
 //      t = onEvent(rollback).toSelf().assembleInput().output(d -> d);
 //    return t;
 //  }
@@ -142,8 +144,8 @@ class Traverser {
       }
     }
     // TODO: Avoid dynamic creation
-    if (eventType == BuiltinEventTypes.EventsRolledBack && eventType instanceof BasicEventType.Rollback rollback)
-      return rollbackOn(rollback);
+    if (eventType == BuiltinEventTypes.EventsRolledBack)
+      return rollbackOn(BuiltinEventTypes.EventsRolledBack);
     throw new IllegalStateException(
         "No transition found for logged event " + eventType.name() + " from " + fromState.name() + " (available: " + transitions.get(fromState).stream()
             .flatMap(t -> t.leaves().stream())

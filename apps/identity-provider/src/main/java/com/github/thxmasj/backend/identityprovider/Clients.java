@@ -1,18 +1,17 @@
 package com.github.thxmasj.backend.identityprovider;
 
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static com.github.thxmasj.backend.core.EntitySelector.entityIdFromSession;
 import static com.github.thxmasj.backend.core.EntitySelector.newEntityId;
 import static com.github.thxmasj.backend.core.TransitionModelBuilder.WithEvent.onEvent;
 import static com.github.thxmasj.backend.core.Tuples.tuple;
 import static com.github.thxmasj.backend.http.inbox.HttpInbox.Request;
 
-import com.github.thxmasj.backend.core.BasicEventType;
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EntityId;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EventType;
-import com.github.thxmasj.backend.core.IdEntityModel;
+import com.github.thxmasj.backend.core.IdEntityType;
 import com.github.thxmasj.backend.core.State;
 import com.github.thxmasj.backend.core.TransitionModel;
 import com.github.thxmasj.backend.core.Tuples.Tuple2;
@@ -39,8 +38,8 @@ public interface Clients {
   /// The scope allowing a client to register clients
   String RegistrationScope = "client-registration";
 
-  EntityModel Client = EntityModel.of("Client", UUID.fromString("0f6d1c52-2b8e-4f3a-9d71-5a4c8e2b1f06"), Clients::clientTransitions);
-  EntityModel ClientRegistration = EntityModel.of("Client registration", UUID.fromString("7b3e9a14-6c0d-4e85-a2f9-1d8c5b7e3a40"), Clients::registrationTransitions);
+  EntityType Client = EntityType.of("Client", UUID.fromString("0f6d1c52-2b8e-4f3a-9d71-5a4c8e2b1f06"), Clients::clientTransitions);
+  EntityType ClientRegistration = EntityType.of("Client registration", UUID.fromString("7b3e9a14-6c0d-4e85-a2f9-1d8c5b7e3a40"), Clients::registrationTransitions);
 
   enum States implements State {
     Registered,
@@ -80,19 +79,19 @@ public interface Clients {
 
   }
 
-  EventType<String, String> ClientIdClaimed = BasicEventType.of(
+  EventType<String, String> ClientIdClaimed = EventType.of(
       "Client id claimed",
       UUID.fromString("c4a1e8f2-93b7-4d06-8e5a-2f7b1c9d4e63"),
       DataType.string()
   );
-  IdEntityModel ClientIds = IdEntityModel.of("ClientIds", UUID.fromString("5e8b2d7a-1f4c-4a93-b6e0-8c3d9f2a7b15"), ClientIdClaimed);
+  IdEntityType ClientIds = IdEntityType.of("ClientIds", UUID.fromString("5e8b2d7a-1f4c-4a93-b6e0-8c3d9f2a7b15"), ClientIdClaimed);
 
-  EventType<Registration, Registration> ClientRegistered = BasicEventType.of(
+  EventType<Registration, Registration> ClientRegistered = EventType.of(
       "Client registered",
       UUID.fromString("a9d4f1c7-3e62-4b8a-9f05-6c2e8d1b4a37"),
       DataType.json(Registration.class)
   );
-  EventType<Void, Registration> ClientLookedUp = BasicEventType.notStored(
+  EventType.NotStored<Void, Registration> ClientLookedUp = EventType.notStored(
       "Client looked up",
       UUID.fromString("e2b7c9a4-58d1-4f6e-a3b0-9d4c1e7f2a86"),
       DataType.none(),
@@ -113,19 +112,19 @@ public interface Clients {
 
   }
 
-  EventType<RegistrationRequest, Void> RegistrationRequested = BasicEventType.of(
+  EventType<RegistrationRequest, Void> RegistrationRequested = EventType.of(
       "Registration requested",
       UUID.fromString("3c9f6e1b-7a24-4d58-b1e3-0f5a8c2d6e94"),
       DataType.json(RegistrationRequest.class),
       DataType.none()
   );
-  EventType<Tuple2<RegistrationRequest, EntityId>, Registration> RegistrationAccepted = BasicEventType.of(
+  EventType<Tuple2<RegistrationRequest, EntityId>, Registration> RegistrationAccepted = EventType.of(
       "Registration accepted",
       UUID.fromString("8d2a5f7c-4b91-4e36-a0c8-1e7f3b9d5a24"),
       DataType.unknown(),
       DataType.json(Registration.class)
   );
-  EventType<Registration, Registration> RegistrationRejected = BasicEventType.of(
+  EventType<Registration, Registration> RegistrationRejected = EventType.of(
       "Registration rejected",
       UUID.fromString("1a7e4c9d-2f63-4b05-8e9a-6d3c0b8f1e72"),
       DataType.json(Registration.class)

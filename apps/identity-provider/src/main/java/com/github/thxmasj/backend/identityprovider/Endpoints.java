@@ -57,7 +57,7 @@ final class Endpoints {
   /// The BCrypt hashes of the secrets of the imported clients, by client id
   private final Map<String, String> importedSecretHashes;
 
-  /// @param keys     the signing keys, or null for an inbox only giving its entity models
+  /// @param keys     the signing keys, or null for an inbox only giving its entity types
   /// @param upstream the client of the provider users sign in with, or null if users can't sign in. It is discovered
   ///                 here, if it isn't already, as the response to an authorization request is created at once with
   ///                 the URL of the provider, so it blocks until the provider has answered, or fails if it can't be used.

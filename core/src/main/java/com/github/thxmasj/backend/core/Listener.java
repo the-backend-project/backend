@@ -13,11 +13,11 @@ public interface Listener {
         Event event
     ) {
       public record Entity(
-          String model,
+          String entityType,
           UUID id
       ) {
         @Override public String toString() {
-          return model + "[id=" + id + "]";
+          return entityType + "[id=" + id + "]";
         }
       }
 
@@ -50,7 +50,7 @@ public interface Listener {
         public int number() {return number;}
 
         /// Whether the event is stored. An event of a type which is not stored, or of an entity of the session only,
-        /// is not (see [EventType#stored()] and [EntityModel#stored()]), so the event log does not have it.
+        /// is not (see [EventType.NotStored] and [EntityType.NotStored]), so the event log does not have it.
         public boolean stored() {return stored;}
 
         public String type() {return type;}
@@ -63,10 +63,10 @@ public interface Listener {
 
       }
 
-      public static class DelayedEvent extends Event {
+      public static class DelayedTrigger extends Event {
         private final ZonedDateTime after;
 
-        public DelayedEvent(int number, String type, ZonedDateTime after) {
+        public DelayedTrigger(int number, String type, ZonedDateTime after) {
           super(number, type);
           this.after = after;
         }
@@ -76,7 +76,7 @@ public interface Listener {
     }
 
     /// The changes of an event are stored. A change is an accepted event, a delayed event, which is a
-    /// [Change.DelayedEvent], or a conditional trigger, which has no event. The changes are given in the order they
+    /// [Change.DelayedTrigger], or a conditional trigger, which has no event. The changes are given in the order they
     /// were calculated, with the accepted events which are not stored too (see [Change.Event#stored()]).
     default void changeAccepted(
         String correlationId,
@@ -92,7 +92,7 @@ public interface Listener {
   /// one was triggered by another. The exception is passed on to the one who triggered the event.
   default void transitionFailed(
       String correlationId,
-      EntityModel entityModel,
+      EntityType entityType,
       UUID entityId,
       EventType<?, ?> eventType,
       Throwable failure

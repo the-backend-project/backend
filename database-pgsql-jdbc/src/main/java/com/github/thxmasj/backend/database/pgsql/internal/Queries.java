@@ -22,9 +22,9 @@ final class Queries {
   static String eventsByIdEvent(String schema) {
     return
         """
-        SELECT Found.EntityId, Found.EntityModelId, ev.EventNumber, ev.Type, ev.Timestamp, ev.Data
+        SELECT Found.EntityId, Found.EntityTypeId, ev.EventNumber, ev.Type, ev.Timestamp, ev.Data
         FROM (
-          SELECT e.EntityId, e.EntityModelId
+          SELECT e.EntityId, e.EntityTypeId
           FROM {IdEvent} ie
             INNER JOIN {Entity} e ON e.EntityId = ie.EntityId
           WHERE ie.Type=:type AND ie.Data=:data
@@ -64,7 +64,7 @@ final class Queries {
         """
         SELECT
           e.EntityId,
-          ent.EntityModelId,
+          ent.EntityTypeId,
           e.EventNumber,
           e.Type,
           e.Timestamp,
@@ -108,7 +108,7 @@ final class Queries {
           t.EntityId=n.EntityId AND
           t.EventNumber=n.EventNumber AND
           t.Deadline=n.Deadline
-        RETURNING t.EntityId, t.EntityModelId, t.EventNumber, t.Type, t.Data, t.Deadline AS NextAttemptAt, t.CorrelationId
+        RETURNING t.EntityId, t.EntityTypeId, t.EventNumber, t.Type, t.Data, t.Deadline AS NextAttemptAt, t.CorrelationId
         """.replace("{DelayedTrigger}", table(schema, "DelayedTrigger"));
   }
 
@@ -122,7 +122,7 @@ final class Queries {
   static String conditionalTriggers(String schema) {
     return
         """
-        SELECT ce.Id, ce.EntityId, ce.EntityModelId, ce.TriggerEntityId, ce.TriggerEventNumber, ce.Type, ce.Data, ce.Timestamp, ce.LastTypes, ce.ReferenceType, ce.IndexKey, ce.CorrelationId
+        SELECT ce.Id, ce.EntityId, ce.EntityTypeId, ce.TriggerEntityId, ce.TriggerEventNumber, ce.Type, ce.Data, ce.Timestamp, ce.LastTypes, ce.ReferenceType, ce.IndexKey, ce.CorrelationId
         FROM {ConditionalTrigger} ce
         WHERE EXISTS (
             SELECT 1 FROM {IndexEvent} ie

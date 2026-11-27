@@ -1,6 +1,6 @@
 package com.github.thxmasj.backend.core.test;
 
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static com.github.thxmasj.backend.core.EntitySelector.CreationMode.CreateIfNotExists;
 import static com.github.thxmasj.backend.core.EntitySelector.entityId;
 import static com.github.thxmasj.backend.core.EntitySelector.newEntityId;
@@ -11,12 +11,11 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import com.github.thxmasj.backend.core.BasicEventType;
 import com.github.thxmasj.backend.core.DataType;
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.Event;
 import com.github.thxmasj.backend.core.EventType;
-import com.github.thxmasj.backend.core.IdEntityModel;
+import com.github.thxmasj.backend.core.IdEntityType;
 import com.github.thxmasj.backend.core.State;
 import com.github.thxmasj.backend.core.StateMachine;
 import com.github.thxmasj.backend.core.StateMachine.RejectedEvent;
@@ -45,26 +44,26 @@ public class RecomputationTest {
     @Override public String unmarshal(byte[] value) {return new String(value, UTF_8);}
   }
 
-  static EventType<String, String> OrderNumberClaimed = BasicEventType.of("Order number claimed", UUID.fromString("4b1d7e52-9c3a-4f68-8e0b-2a5d6c7f8e91"), DataType.string());
-  static EventType<String, String> CodeClaimed = BasicEventType.of("Code claimed", UUID.fromString("0f2b4d6e-8a9c-4e1f-b3d5-7f9b1d3f5ad5"), DataType.string(), new CaseInsensitive());
-  static IdEntityModel Ids = IdEntityModel.of("Ids", UUID.fromString("c2e8f4a6-0b1d-4c3e-9f5a-7b9d1e3f5a72"), OrderNumberClaimed, CodeClaimed);
+  static EventType<String, String> OrderNumberClaimed = EventType.of("Order number claimed", UUID.fromString("4b1d7e52-9c3a-4f68-8e0b-2a5d6c7f8e91"), DataType.string());
+  static EventType<String, String> CodeClaimed = EventType.of("Code claimed", UUID.fromString("0f2b4d6e-8a9c-4e1f-b3d5-7f9b1d3f5ad5"), DataType.string(), new CaseInsensitive());
+  static IdEntityType Ids = IdEntityType.of("Ids", UUID.fromString("c2e8f4a6-0b1d-4c3e-9f5a-7b9d1e3f5a72"), OrderNumberClaimed, CodeClaimed);
 
-  static EntityModel Cart = EntityModel.of("Cart", UUID.fromString("8f3a5c7e-1b2d-4e6f-a8c0-3d5f7a9b1c24"), RecomputationTest::cartTransitions);
-  static EntityModel Order = EntityModel.of("Order", UUID.fromString("1e3f5a7c-9b0d-4c2e-8a4f-6b8d0e2f4a65"), RecomputationTest::orderTransitions);
-  static EntityModel Stock = EntityModel.of("Stock", UUID.fromString("6d8f0b2c-4e5a-4a7c-9e1b-3c5d7f9a1b38"), RecomputationTest::stockTransitions);
+  static EntityType Cart = EntityType.of("Cart", UUID.fromString("8f3a5c7e-1b2d-4e6f-a8c0-3d5f7a9b1c24"), RecomputationTest::cartTransitions);
+  static EntityType Order = EntityType.of("Order", UUID.fromString("1e3f5a7c-9b0d-4c2e-8a4f-6b8d0e2f4a65"), RecomputationTest::orderTransitions);
+  static EntityType Stock = EntityType.of("Stock", UUID.fromString("6d8f0b2c-4e5a-4a7c-9e1b-3c5d7f9a1b38"), RecomputationTest::stockTransitions);
 
-  static EventType<String, String> CartCheckedOut = BasicEventType.of("Cart checked out", UUID.fromString("a7c9e1b3-5d6f-4b8a-9c2e-4f6a8c0e2b47"), DataType.string());
-  static EventType<String, String> CartForwarded = BasicEventType.of("Cart forwarded", UUID.fromString("3c5e7a9b-1d2f-4a4c-8e6b-0d2f4a6c8e59"), DataType.string());
-  static EventType<String, String> OrderPlaced = BasicEventType.of("Order placed", UUID.fromString("e9b1d3f5-7a8c-4d0e-a2f4-6c8e0a2c4e61"), DataType.string());
-  static EventType<String, String> OrderBought = BasicEventType.of("Order bought", UUID.fromString("5a7c9e1b-3d4f-4c6a-8e0b-2d4f6a8c0e73"), DataType.string());
-  static EventType<String, String> OrderTagged = BasicEventType.of("Order tagged", UUID.fromString("6b8d0f2a-4c5e-4d7b-9f1c-3e5a7c9e1be7"), DataType.string());
-  static EventType<String, String> OrderAccepted = BasicEventType.of("Order accepted", UUID.fromString("b3d5f7a9-1c2e-4e4a-9c6d-8f0b2d4f6a85"), DataType.string());
-  static EventType<String, String> OrderRejectedAsDuplicate = BasicEventType.of("Order rejected as duplicate", UUID.fromString("7e9a1c3d-5f6b-4a8c-a0e2-4b6d8f0a2c97"), DataType.string());
-  static EventType<String, String> OrderRejectedAsUnreserved = BasicEventType.of("Order rejected as unreserved", UUID.fromString("2f4b6d8e-0a1c-4c3e-8f5a-7c9e1b3d5fa9"), DataType.string());
-  static EventType<String, String> StockReserved = BasicEventType.of("Stock reserved", UUID.fromString("d1f3a5c7-9e0b-4b2d-a4f6-8b0d2f4a6cb1"), DataType.string());
-  static EventType<String, String> ReservationRefused = BasicEventType.of("Reservation refused", UUID.fromString("9c1e3a5b-7d8f-4f0a-8c2e-4a6c8e0b2dc3"), DataType.string());
+  static EventType<String, String> CartCheckedOut = EventType.of("Cart checked out", UUID.fromString("a7c9e1b3-5d6f-4b8a-9c2e-4f6a8c0e2b47"), DataType.string());
+  static EventType<String, String> CartForwarded = EventType.of("Cart forwarded", UUID.fromString("3c5e7a9b-1d2f-4a4c-8e6b-0d2f4a6c8e59"), DataType.string());
+  static EventType<String, String> OrderPlaced = EventType.of("Order placed", UUID.fromString("e9b1d3f5-7a8c-4d0e-a2f4-6c8e0a2c4e61"), DataType.string());
+  static EventType<String, String> OrderBought = EventType.of("Order bought", UUID.fromString("5a7c9e1b-3d4f-4c6a-8e0b-2d4f6a8c0e73"), DataType.string());
+  static EventType<String, String> OrderTagged = EventType.of("Order tagged", UUID.fromString("6b8d0f2a-4c5e-4d7b-9f1c-3e5a7c9e1be7"), DataType.string());
+  static EventType<String, String> OrderAccepted = EventType.of("Order accepted", UUID.fromString("b3d5f7a9-1c2e-4e4a-9c6d-8f0b2d4f6a85"), DataType.string());
+  static EventType<String, String> OrderRejectedAsDuplicate = EventType.of("Order rejected as duplicate", UUID.fromString("7e9a1c3d-5f6b-4a8c-a0e2-4b6d8f0a2c97"), DataType.string());
+  static EventType<String, String> OrderRejectedAsUnreserved = EventType.of("Order rejected as unreserved", UUID.fromString("2f4b6d8e-0a1c-4c3e-8f5a-7c9e1b3d5fa9"), DataType.string());
+  static EventType<String, String> StockReserved = EventType.of("Stock reserved", UUID.fromString("d1f3a5c7-9e0b-4b2d-a4f6-8b0d2f4a6cb1"), DataType.string());
+  static EventType<String, String> ReservationRefused = EventType.of("Reservation refused", UUID.fromString("9c1e3a5b-7d8f-4f0a-8c2e-4a6c8e0b2dc3"), DataType.string());
 
-  private static final StateMachine machine = Init.stateMachine(UUID.randomUUID().toString(), entityModels());
+  private static final StateMachine machine = Init.stateMachine(UUID.randomUUID().toString(), entityTypes());
   // The steps executed, in order
   private static final List<String> executed = new CopyOnWriteArrayList<>();
 
@@ -73,7 +72,7 @@ public class RecomputationTest {
     return result;
   }
 
-  private static List<EntityModel> entityModels() {
+  private static List<EntityType> entityTypes() {
     return List.of(Cart, Order, Stock, Ids);
   }
 
@@ -87,7 +86,7 @@ public class RecomputationTest {
                     onEvent(CartForwarded).to(States.CheckedOut)
                         .assemble(c -> executed("Assemble forward", c.input()))
                         .trigger(OrderPlaced).with(d -> d).on(Order).identifiedBy(newEntityId())
-                        .output(d -> executed("Output forward", d.t2().accepted().event().getUnmarshalledData())),
+                        .output(d -> executed("Output forward", d.t2().accepted().event().data())),
                     d -> executed("Forward data", d)
                 )
         )
@@ -154,7 +153,7 @@ public class RecomputationTest {
 
     Event<?> second = machine.onEvent(trigger(OrderPlaced, Order), "1").blockFirst();
 
-    assertEquals("Duplicate of " + first.entityId(), second.getUnmarshalledData());
+    assertEquals("Duplicate of " + first.entityId(), second.data());
     // Only the output is a step after the trigger, so it alone is executed again, with the id existing
     assertEquals(
         List.of("Assemble order", "Reserve data", "Assemble reservation", "Order number data", "Output order", "Output order"),
@@ -170,7 +169,7 @@ public class RecomputationTest {
     Event<?> second = machine.onEvent(trigger(CartCheckedOut, Cart), "2").blockFirst();
 
     assertEquals("Cart forwarded", second.typeName());
-    assertEquals(0, second.getUnmarshalledData().toString().indexOf("Duplicate of "));
+    assertEquals(0, second.data().toString().indexOf("Duplicate of "));
     // The outputs of the transitions the trigger is a part of are steps after it too
     assertEquals(
         List.of(

@@ -129,7 +129,7 @@ public final class IdentityProvider {
     Database database = Database.named(config.database());
     return new StateMachine(
         null,
-        inbox.entityModels(),
+        inbox.entityTypes(),
         new DataSourceBuilder(database, config.databaseConfig()).buildPooled(),
         null, // The schema is created by the migrate admin process
         config.schema(),
@@ -204,7 +204,7 @@ public final class IdentityProvider {
         // First event is the triggered event, second is the response event
         .skip(1)
         .next()
-        .map(event -> HttpResponse.raw(event.getUnmarshalledData()))
+        .map(event -> HttpResponse.raw(event.data()))
         .timeout(Duration.ofSeconds(30))
         .block();
   }

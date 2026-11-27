@@ -1,6 +1,6 @@
 package com.github.thxmasj.backend.backoffice;
 
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.JsonLinesListener;
 import com.github.thxmasj.backend.core.StateMachine;
 import com.github.thxmasj.backend.core.database.DataSourceBuilder;
@@ -17,12 +17,12 @@ import reactor.netty.DisposableServer;
 /// Runs the backoffice of an application as an application of its own, following the conventions of the apps: it is
 /// configured by environment variables, serves HTTP on `$PORT` until terminated, and has a migrate admin process.
 ///
-/// An application's backoffice is a module of its own, depending on the application for its entity models, whose main
+/// An application's backoffice is a module of its own, depending on the application for its entity types, whose main
 /// method is one line:
 ///
 /// ```java
 /// public static void main(String[] args) {
-///   BackofficeApp.run("Orders", "orders", Orders.Inbox.entityModels(), args, System.getenv());
+///   BackofficeApp.run("Orders", "orders", Orders.Inbox.entityTypes(), args, System.getenv());
 /// }
 /// ```
 ///
@@ -74,11 +74,11 @@ public final class BackofficeApp {
   ///
   /// @param service                  the name of the application, e.g. `Identity provider`
   /// @param defaultApplicationSchema the application's default schema, e.g. `identity_provider`
-  /// @param applicationModels        the entity models of the application's state machine
+  /// @param applicationModels        the entity types of the application's state machine
   public static void run(
       String service,
       String defaultApplicationSchema,
-      List<? extends EntityModel> applicationModels,
+      List<? extends EntityType> applicationModels,
       String[] args,
       Map<String, String> env
   ) {
@@ -144,7 +144,7 @@ public final class BackofficeApp {
       String service,
       Config config,
       DataSource dataSource,
-      List<? extends EntityModel> applicationModels
+      List<? extends EntityType> applicationModels
   ) {
     return new Backoffice(service, config.backoffice(), Database.of(dataSource).client(dataSource), config.applicationSchema(), applicationModels);
   }
@@ -153,7 +153,7 @@ public final class BackofficeApp {
   public static StateMachine stateMachine(Config config, DataSource dataSource, Backoffice backoffice) {
     return new StateMachine(
         null,
-        backoffice.inbox().entityModels(),
+        backoffice.inbox().entityTypes(),
         dataSource,
         null, // The schema is created by the migrate admin process
         config.schema(),

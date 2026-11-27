@@ -4,7 +4,7 @@ import static com.github.thxmasj.backend.core.Validated.invalid;
 import static com.github.thxmasj.backend.core.Validated.valid;
 import static com.github.thxmasj.backend.core.internal.EventTypes.eventTypesFor;
 
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EntitySelector;
 import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.State;
@@ -26,7 +26,7 @@ import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/// An inbox request: an entity model whose entities are the requests of one type the application receives, with a
+/// An inbox request: an entity type whose entities are the requests of one type the application receives, with a
 /// body of type `T`, which trigger an event on an entity of the application. `RequestRouting` routes a received request
 /// to the first inbox request matching it, which validates it, dispatches it to the application and waits for the
 /// application to respond by triggering a [ResponseEventType] on it (see [HttpInbox#Request]).
@@ -55,7 +55,7 @@ import java.util.regex.Pattern;
 /// ```
 ///
 /// @param <T> the type of the body of the request
-public final class HttpInboxRequest<T> implements EntityModel {
+public sealed class HttpInboxRequest<T> implements EntityType permits HttpInboxRequest.NotStoredRequest {
 
   private final String name;
   private final UUID id;
@@ -68,7 +68,6 @@ public final class HttpInboxRequest<T> implements EntityModel {
   private final List<Response<?>> responses;
   private final Rollback<?> rollback;
   private final Masking masking;
-  private final boolean stored;
   private final Map<State, List<TransitionModel<?, ?>>> transitions;
 
   private HttpInboxRequest(Builder<T> builder, String name, UUID id) {
@@ -92,15 +91,14 @@ public final class HttpInboxRequest<T> implements EntityModel {
       throw new IllegalArgumentException(authorizer != null ?
           "The rollback of the request " + name + " needs an authorizer, as the message id of a request is the authorized subject's" :
           "The rollback of the request " + name + " can't have an authorizer, as the request has none to give its message id a subject");
-    if (rollback != null && processes.stream().map(Process::entityModel).distinct().count() > 1)
-      throw new IllegalArgumentException("The processes of the request " + name + ", which can be rolled back, must have the same entity model");
+    if (rollback != null && processes.stream().map(Process::entityType).distinct().count() > 1)
+      throw new IllegalArgumentException("The processes of the request " + name + ", which can be rolled back, must have the same entity type");
     this.masking = Masking.CREDENTIALS.and(builder.masking);
-    this.stored = builder.stored;
     if (deduplicateOn != null && masking.wholeResponseBody())
       throw new IllegalArgumentException("The request " + name + " masks the body of its response, so it can't be deduplicated, as a retry gets the response of the first request as stored");
     if (deduplicateOn != null && masking.masksMoreOfRequestsThan(Masking.CREDENTIALS))
       throw new IllegalArgumentException("The request " + name + " masks more of its requests than their credentials, so it can't be deduplicated, as a request differing from the first one in what is masked couldn't be told from a retry");
-    if (!stored && deduplicateOn != null)
+    if (!builder.stored && deduplicateOn != null)
       throw new IllegalArgumentException("The request " + name + " is not stored, so it can't be deduplicated, as a retry is recognised by the request stored");
     this.transitions = TransitionModels.requestTransitions(this);
   }
@@ -125,12 +123,14 @@ public final class HttpInboxRequest<T> implements EntityModel {
     return name;
   }
 
-  /// Whether the requests are stored. A request which is not stored is an entity of the session only, as every
-  /// `RequestRouting` entity is (see [EntityModel#stored()]), while the events its process triggers on the application
-  /// are stored if they are of stored types.
-  @Override
-  public boolean stored() {
-    return stored;
+  /// An inbox request whose requests are not stored, built with [Builder#notStored()]. A request which is not stored
+  /// is an entity of the session only, as every `RequestRouting` entity is (see [EntityType.NotStored]), while the
+  /// events its process triggers on the application are stored if they are of stored types.
+  public static final class NotStoredRequest<T> extends HttpInboxRequest<T> implements EntityType.NotStored {
+
+    private NotStoredRequest(Builder<T> builder, String name, UUID id) {
+      super(builder, name, id);
+    }
   }
 
   /// What of the requests and responses is masked in the event log, [Masking#CREDENTIALS] and what
@@ -198,13 +198,13 @@ public final class HttpInboxRequest<T> implements EntityModel {
   ///
   /// @param content chooses the process by the body of the request, or null for any body
   /// @param eventType the event type triggered
-  /// @param entityModel the entity model of the entity the event is triggered on
+  /// @param entityType the entity type of the entity the event is triggered on
   /// @param input creates the data of the event from the request
   /// @param selector selects the entity the event is triggered on
   record Process<T, U>(
       Content<T> content,
       EventType<U, ?> eventType,
-      EntityModel entityModel,
+      EntityType entityType,
       Function<RoutedRequest<T>, U> input,
       BiFunction<HttpRequest<byte[]>, T, ? extends Validated<? extends EntitySelector>> selector
   ) {}
@@ -372,8 +372,9 @@ public final class HttpInboxRequest<T> implements EntityModel {
   }
 
   /// Builds an inbox request. A process is required, the rest is optional. An inbox request which can be rolled back
-  /// needs `deduplicateOn` first, which gives a [DeduplicatedBuilder].
-  public static sealed class Builder<T> permits DeduplicatedBuilder {
+  /// needs `deduplicateOn` first, which gives a [DeduplicatedBuilder], and one which is not stored `notStored()`, which
+  /// gives a [NotStoredBuilder].
+  public static sealed class Builder<T> permits DeduplicatedBuilder, NotStoredBuilder {
 
     private final Predicate<HttpRequest<byte[]>> matcher;
     private final Function<HttpRequest<byte[]>, Validated<T>> contentParser;
@@ -425,16 +426,16 @@ public final class HttpInboxRequest<T> implements EntityModel {
     /// before it, it is taken when none of them matches.
     ///
     /// @param eventType the event type triggered
-    /// @param entityModel the entity model of the entity the event is triggered on
+    /// @param entityType the entity type of the entity the event is triggered on
     /// @param input creates the data of the event from the request
     /// @param selector selects the entity the event is triggered on, e.g. [#newEntity()] or [#parseEntityId(String, int)]
     public <U> Builder<T> process(
         EventType<U, ?> eventType,
-        EntityModel entityModel,
+        EntityType entityType,
         Function<RoutedRequest<T>, U> input,
         BiFunction<HttpRequest<byte[]>, T, ? extends Validated<? extends EntitySelector>> selector
     ) {
-      return addProcess(null, eventType, entityModel, input, selector);
+      return addProcess(null, eventType, entityType, input, selector);
     }
 
     /// The event a request with the content triggers on the application. The processes are tried in the order they
@@ -443,60 +444,60 @@ public final class HttpInboxRequest<T> implements EntityModel {
     ///
     /// @param content the predicate on the parsed body choosing the process, see [HttpInboxRequest#when(String, Predicate)]
     /// @param eventType the event type triggered
-    /// @param entityModel the entity model of the entity the event is triggered on
+    /// @param entityType the entity type of the entity the event is triggered on
     /// @param input creates the data of the event from the request
     /// @param selector selects the entity the event is triggered on, e.g. [#newEntity()] or [#parseEntityId(String, int)]
     public <U> Builder<T> process(
         Content<T> content,
         EventType<U, ?> eventType,
-        EntityModel entityModel,
+        EntityType entityType,
         Function<RoutedRequest<T>, U> input,
         BiFunction<HttpRequest<byte[]>, T, ? extends Validated<? extends EntitySelector>> selector
     ) {
-      return addProcess(Objects.requireNonNull(content), eventType, entityModel, input, selector);
+      return addProcess(Objects.requireNonNull(content), eventType, entityType, input, selector);
     }
 
     /// The event, without data, a request triggers on the application, whatever its content. See
-    /// [#process(EventType, EntityModel, Function, BiFunction)].
+    /// [#process(EventType, EntityType, Function, BiFunction)].
     ///
     /// @param eventType the event type triggered
-    /// @param entityModel the entity model of the entity the event is triggered on
+    /// @param entityType the entity type of the entity the event is triggered on
     /// @param selector selects the entity the event is triggered on, e.g. [#newEntity()] or [#parseEntityId(String, int)]
     public Builder<T> process(
         EventType<Void, ?> eventType,
-        EntityModel entityModel,
+        EntityType entityType,
         BiFunction<HttpRequest<byte[]>, T, ? extends Validated<? extends EntitySelector>> selector
     ) {
-      return addProcess(null, eventType, entityModel, _ -> null, selector);
+      return addProcess(null, eventType, entityType, _ -> null, selector);
     }
 
     /// The event, without data, a request with the content triggers on the application. See
-    /// [#process(Content, EventType, EntityModel, Function, BiFunction)].
+    /// [#process(Content, EventType, EntityType, Function, BiFunction)].
     ///
     /// @param content the predicate on the parsed body choosing the process, see [HttpInboxRequest#when(String, Predicate)]
     /// @param eventType the event type triggered
-    /// @param entityModel the entity model of the entity the event is triggered on
+    /// @param entityType the entity type of the entity the event is triggered on
     /// @param selector selects the entity the event is triggered on, e.g. [#newEntity()] or [#parseEntityId(String, int)]
     public Builder<T> process(
         Content<T> content,
         EventType<Void, ?> eventType,
-        EntityModel entityModel,
+        EntityType entityType,
         BiFunction<HttpRequest<byte[]>, T, ? extends Validated<? extends EntitySelector>> selector
     ) {
-      return addProcess(Objects.requireNonNull(content), eventType, entityModel, _ -> null, selector);
+      return addProcess(Objects.requireNonNull(content), eventType, entityType, _ -> null, selector);
     }
 
     private <U> Builder<T> addProcess(
         Content<T> content,
         EventType<U, ?> eventType,
-        EntityModel entityModel,
+        EntityType entityType,
         Function<RoutedRequest<T>, U> input,
         BiFunction<HttpRequest<byte[]>, T, ? extends Validated<? extends EntitySelector>> selector
     ) {
       processes.add(new Process<>(
           content,
           Objects.requireNonNull(eventType),
-          Objects.requireNonNull(entityModel),
+          Objects.requireNonNull(entityType),
           Objects.requireNonNull(input),
           Objects.requireNonNull(selector)
       ));
@@ -541,13 +542,103 @@ public final class HttpInboxRequest<T> implements EntityModel {
     /// deduplicated, so it has no `deduplicateOn`, and the application must respond in the session of the request,
     /// e.g. by the callback of an outbox request, but not by a delayed or conditional trigger, which fires in a session
     /// of its own, as only the session finds the request.
-    public Builder<T> notStored() {
-      this.stored = false;
-      return this;
+    public NotStoredBuilder<T> notStored() {
+      return new NotStoredBuilder<>(this);
     }
 
     public HttpInboxRequest<T> build(String name, UUID id) {
       return new HttpInboxRequest<>(this, name, id);
+    }
+
+  }
+
+  /// Builds an inbox request whose requests are not stored, see [Builder#notStored()]
+  public static final class NotStoredBuilder<T> extends Builder<T> {
+
+    private NotStoredBuilder(Builder<T> builder) {
+      super(builder);
+      ((Builder<T>) this).stored = false;
+    }
+
+    @Override
+    public NotStoredBuilder<T> authorizer(BiFunction<HttpRequest<byte[]>, T, Authorization> authorizer) {
+      super.authorizer(authorizer);
+      return this;
+    }
+
+    @Override
+    public <U> NotStoredBuilder<T> process(
+        EventType<U, ?> eventType,
+        EntityType entityType,
+        Function<RoutedRequest<T>, U> input,
+        BiFunction<HttpRequest<byte[]>, T, ? extends Validated<? extends EntitySelector>> selector
+    ) {
+      super.process(eventType, entityType, input, selector);
+      return this;
+    }
+
+    @Override
+    public <U> NotStoredBuilder<T> process(
+        Content<T> content,
+        EventType<U, ?> eventType,
+        EntityType entityType,
+        Function<RoutedRequest<T>, U> input,
+        BiFunction<HttpRequest<byte[]>, T, ? extends Validated<? extends EntitySelector>> selector
+    ) {
+      super.process(content, eventType, entityType, input, selector);
+      return this;
+    }
+
+    @Override
+    public NotStoredBuilder<T> process(
+        EventType<Void, ?> eventType,
+        EntityType entityType,
+        BiFunction<HttpRequest<byte[]>, T, ? extends Validated<? extends EntitySelector>> selector
+    ) {
+      super.process(eventType, entityType, selector);
+      return this;
+    }
+
+    @Override
+    public NotStoredBuilder<T> process(
+        Content<T> content,
+        EventType<Void, ?> eventType,
+        EntityType entityType,
+        BiFunction<HttpRequest<byte[]>, T, ? extends Validated<? extends EntitySelector>> selector
+    ) {
+      super.process(content, eventType, entityType, selector);
+      return this;
+    }
+
+    @Override
+    public <I> NotStoredBuilder<T> response(
+        ResponseEventType<I> eventType,
+        Function<TransitionContext<I>, HttpResponse<byte[]>> messageCreator
+    ) {
+      super.response(eventType, messageCreator);
+      return this;
+    }
+
+    @Override
+    public NotStoredBuilder<T> normalizer(Function<HttpRequest<byte[]>, HttpRequest<byte[]>> normalizer) {
+      super.normalizer(normalizer);
+      return this;
+    }
+
+    @Override
+    public NotStoredBuilder<T> masking(Masking masking) {
+      super.masking(masking);
+      return this;
+    }
+
+    @Override
+    public NotStoredBuilder<T> notStored() {
+      return this;
+    }
+
+    @Override
+    public NotStoredRequest<T> build(String name, UUID id) {
+      return new NotStoredRequest<>(this, name, id);
     }
 
   }
@@ -575,11 +666,11 @@ public final class HttpInboxRequest<T> implements EntityModel {
     @Override
     public <U> DeduplicatedBuilder<T> process(
         EventType<U, ?> eventType,
-        EntityModel entityModel,
+        EntityType entityType,
         Function<RoutedRequest<T>, U> input,
         BiFunction<HttpRequest<byte[]>, T, ? extends Validated<? extends EntitySelector>> selector
     ) {
-      super.process(eventType, entityModel, input, selector);
+      super.process(eventType, entityType, input, selector);
       return this;
     }
 
@@ -587,21 +678,21 @@ public final class HttpInboxRequest<T> implements EntityModel {
     public <U> DeduplicatedBuilder<T> process(
         Content<T> content,
         EventType<U, ?> eventType,
-        EntityModel entityModel,
+        EntityType entityType,
         Function<RoutedRequest<T>, U> input,
         BiFunction<HttpRequest<byte[]>, T, ? extends Validated<? extends EntitySelector>> selector
     ) {
-      super.process(content, eventType, entityModel, input, selector);
+      super.process(content, eventType, entityType, input, selector);
       return this;
     }
 
     @Override
     public DeduplicatedBuilder<T> process(
         EventType<Void, ?> eventType,
-        EntityModel entityModel,
+        EntityType entityType,
         BiFunction<HttpRequest<byte[]>, T, ? extends Validated<? extends EntitySelector>> selector
     ) {
-      super.process(eventType, entityModel, selector);
+      super.process(eventType, entityType, selector);
       return this;
     }
 
@@ -609,10 +700,10 @@ public final class HttpInboxRequest<T> implements EntityModel {
     public DeduplicatedBuilder<T> process(
         Content<T> content,
         EventType<Void, ?> eventType,
-        EntityModel entityModel,
+        EntityType entityType,
         BiFunction<HttpRequest<byte[]>, T, ? extends Validated<? extends EntitySelector>> selector
     ) {
-      super.process(content, eventType, entityModel, selector);
+      super.process(content, eventType, entityType, selector);
       return this;
     }
 
@@ -640,7 +731,7 @@ public final class HttpInboxRequest<T> implements EntityModel {
     /// Requests the rollback matches roll back the request with the message id its `deduplicateOn` gives, by rolling
     /// back the events the request caused on the application. A rollback of a request not received yet makes a later
     /// request with the message id rejected. The processes of a request which can be rolled back must have the same
-    /// entity model. See [Rollback].
+    /// entity type. See [Rollback].
     public DeduplicatedBuilder<T> rollback(Rollback.Builder<?> rollback) {
       ((Builder<T>) this).rollback = new Rollback<>(Objects.requireNonNull(rollback));
       return this;

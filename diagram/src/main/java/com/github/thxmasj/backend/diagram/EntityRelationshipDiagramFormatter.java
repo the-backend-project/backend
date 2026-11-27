@@ -5,12 +5,12 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.stream.Collectors.joining;
 
 import com.github.thxmasj.backend.core.DataType;
-import com.github.thxmasj.backend.core.EntityModel;
-import com.github.thxmasj.backend.core.EntityModelGroup;
+import com.github.thxmasj.backend.core.EntityType;
+import com.github.thxmasj.backend.core.EntityTypeGroup;
 import com.github.thxmasj.backend.core.EventTrigger;
 import com.github.thxmasj.backend.core.EventType;
-import com.github.thxmasj.backend.core.IdEntityModel;
-import com.github.thxmasj.backend.core.IndexEntityModel;
+import com.github.thxmasj.backend.core.IdEntityType;
+import com.github.thxmasj.backend.core.IndexEntityType;
 import com.github.thxmasj.backend.core.TransitionModel;
 import java.io.File;
 import java.io.ByteArrayOutputStream;
@@ -27,35 +27,35 @@ import net.sourceforge.plantuml.FileFormatOption;
 import net.sourceforge.plantuml.SourceStringReader;
 
 /// An entity relationship diagram of a bounded context, i.e. a state machine's complete model: the transitions of all
-/// its entity models, as given to the state machine. Each entity model is an entity listing the event types it accepts,
-/// and the entity models are related through the triggers of their transitions: an arrow from one entity to another
-/// tells that an event on the first triggers an event on the other. A trigger on an [EntityModelGroup] relates to each
-/// entity model of the group in the model. Triggers of reversals are red. Id and index entities are left out, with the
+/// its entity types, as given to the state machine. Each entity type is an entity listing the event types it accepts,
+/// and the entity types are related through the triggers of their transitions: an arrow from one entity to another
+/// tells that an event on the first triggers an event on the other. A trigger on an [EntityTypeGroup] relates to each
+/// entity type of the group in the model. Triggers of reversals are red. Id and index entities are left out, with the
 /// triggers of events on them, as they take much space and tell little about how the entities relate.
 public class EntityRelationshipDiagramFormatter {
 
   private final String name;
-  private final List<EntityModel> entityModels;
+  private final List<EntityType> entityTypes;
   private final boolean compact;
-  /// The entity models shown, or null for all but id and index entities
-  private final Set<EntityModel> only;
+  /// The entity types shown, or null for all but id and index entities
+  private final Set<EntityType> only;
 
   /// @param name the name of the model, used for the names of the files the diagram is written to
-  /// @param entityModels the entity models given to the state machine, which with those their transitions trigger events
+  /// @param entityTypes the entity types given to the state machine, which with those their transitions trigger events
   ///                     on are the entities of the diagram
-  public EntityRelationshipDiagramFormatter(String name, List<? extends EntityModel> entityModels) {
-    this(name, EntityModel.reachable(entityModels), false, null);
+  public EntityRelationshipDiagramFormatter(String name, List<? extends EntityType> entityTypes) {
+    this(name, EntityType.reachable(entityTypes), false, null);
   }
 
 
   private EntityRelationshipDiagramFormatter(
       String name,
-      List<EntityModel> entityModels,
+      List<EntityType> entityTypes,
       boolean compact,
-      Set<EntityModel> only
+      Set<EntityType> only
   ) {
     this.name = name;
-    this.entityModels = entityModels;
+    this.entityTypes = entityTypes;
     this.compact = compact;
     this.only = only;
   }
@@ -63,13 +63,13 @@ public class EntityRelationshipDiagramFormatter {
   /// This formatter without the event types of the entities, for models with many entities or event types. The event
   /// types involved in the triggers are still shown on the relations.
   public EntityRelationshipDiagramFormatter compact() {
-    return new EntityRelationshipDiagramFormatter(name, entityModels, true, only);
+    return new EntityRelationshipDiagramFormatter(name, entityTypes, true, only);
   }
 
-  /// This formatter with only the entity models, and the relations between them, e.g. those of the domain, without the
+  /// This formatter with only the entity types, and the relations between them, e.g. those of the domain, without the
   /// inbox and outbox requests, which relate to most of them
-  public EntityRelationshipDiagramFormatter only(EntityModel... entityModels) {
-    return new EntityRelationshipDiagramFormatter(name, this.entityModels, compact, Set.of(entityModels));
+  public EntityRelationshipDiagramFormatter only(EntityType... entityTypes) {
+    return new EntityRelationshipDiagramFormatter(name, this.entityTypes, compact, Set.of(entityTypes));
   }
 
   public File formatToFile(String directory) throws IOException {
@@ -93,15 +93,15 @@ public class EntityRelationshipDiagramFormatter {
     return file;
   }
 
-  private record Relation(EntityModel from, EntityModel to, String label) {}
+  private record Relation(EntityType from, EntityType to, String label) {}
 
   public String format() {
     // Entities triggered by the model without being part of it are included too, with the event types triggered on them
-    Map<EntityModel, Set<EventType<?, ?>>> eventTypes = new LinkedHashMap<>();
+    Map<EntityType, Set<EventType<?, ?>>> eventTypes = new LinkedHashMap<>();
     Set<Relation> relations = new LinkedHashSet<>();
-    entityModels.stream()
+    entityTypes.stream()
         .filter(this::shown)
-        .sorted(comparing(EntityModel::name))
+        .sorted(comparing(EntityType::name))
         .forEach(model -> {
           eventTypes.computeIfAbsent(model, _ -> new LinkedHashSet<>());
           model.transitions().entrySet().stream()
@@ -109,9 +109,9 @@ public class EntityRelationshipDiagramFormatter {
               .flatMap(e -> e.getValue().stream())
               .forEach(transition -> collect(model, transition, eventTypes, relations));
         });
-    List<EntityModel> entities = new ArrayList<>(eventTypes.keySet());
-    entities.sort(comparing(EntityModel::name));
-    Map<EntityModel, String> aliases = new LinkedHashMap<>();
+    List<EntityType> entities = new ArrayList<>(eventTypes.keySet());
+    entities.sort(comparing(EntityType::name));
+    Map<EntityType, String> aliases = new LinkedHashMap<>();
     entities.forEach(entity -> aliases.put(entity, "E" + (aliases.size() + 1)));
     return String.format(
         """
@@ -139,9 +139,9 @@ public class EntityRelationshipDiagramFormatter {
   }
 
   private void collect(
-      EntityModel entity,
+      EntityType entity,
       TransitionModel<?, ?> transition,
-      Map<EntityModel, Set<EventType<?, ?>>> eventTypes,
+      Map<EntityType, Set<EventType<?, ?>>> eventTypes,
       Set<Relation> relations
   ) {
     eventTypes.computeIfAbsent(entity, _ -> new LinkedHashSet<>()).add(transition.eventType());
@@ -153,17 +153,17 @@ public class EntityRelationshipDiagramFormatter {
   }
 
   private void collectTriggers(
-      EntityModel entity,
+      EntityType entity,
       EventType<?, ?> eventType,
       List<EventTrigger<?, ?, ?>> triggers,
       boolean reversal,
-      Map<EntityModel, Set<EventType<?, ?>>> eventTypes,
+      Map<EntityType, Set<EventType<?, ?>>> eventTypes,
       Set<Relation> relations
   ) {
     for (EventTrigger<?, ?, ?> trigger : triggers) {
       EventType<?, ?> triggered = trigger.eventType();
       String label = eventType.name() + " ↪ " + triggered.name();
-      for (EntityModel target : targets(trigger.entityModel() != null ? trigger.entityModel() : entity)) {
+      for (EntityType target : targets(trigger.entityType() != null ? trigger.entityType() : entity)) {
         if (!shown(target)) continue;
         eventTypes.computeIfAbsent(target, _ -> new LinkedHashSet<>()).add(triggered);
         relations.add(new Relation(entity, target, reversal ? "<color:" + DiagramColours.REVERSAL.light() + ">" + label + "</color>" : label));
@@ -171,14 +171,14 @@ public class EntityRelationshipDiagramFormatter {
     }
   }
 
-  /// The entities a trigger on the target relates to: the entity models of the model in the group, if the target is a
+  /// The entities a trigger on the target relates to: the entity types of the model in the group, if the target is a
   /// group with any of them, otherwise the target itself
-  private List<EntityModel> targets(EntityModel target) {
-    if (!(target instanceof EntityModelGroup group))
+  private List<EntityType> targets(EntityType target) {
+    if (!(target instanceof EntityTypeGroup group))
       return List.of(target);
-    List<EntityModel> members = entityModels.stream()
+    List<EntityType> members = entityTypes.stream()
         .filter(group::includes)
-        .sorted(comparing(EntityModel::name))
+        .sorted(comparing(EntityType::name))
         .toList();
     return members.isEmpty() ? List.of(target) : members;
   }
@@ -186,7 +186,7 @@ public class EntityRelationshipDiagramFormatter {
   // Combines the relations between the same pair of entities into one arrow with the labels stacked, as parallel
   // arrows make the diagram hard to read.
   private static List<Relation> mergeParallelRelations(Set<Relation> relations) {
-    Map<List<EntityModel>, List<String>> labels = new LinkedHashMap<>();
+    Map<List<EntityType>, List<String>> labels = new LinkedHashMap<>();
     for (Relation relation : relations)
       labels.computeIfAbsent(List.of(relation.from(), relation.to()), _ -> new ArrayList<>()).add(relation.label());
     return labels.entrySet().stream()
@@ -194,13 +194,13 @@ public class EntityRelationshipDiagramFormatter {
         .toList();
   }
 
-  private boolean shown(EntityModel entity) {
+  private boolean shown(EntityType entity) {
     if (only != null)
       return only.contains(entity);
-    return !(entity instanceof IdEntityModel) && !(entity instanceof IndexEntityModel);
+    return !(entity instanceof IdEntityType) && !(entity instanceof IndexEntityType);
   }
 
-  private String entity(EntityModel entity, String alias, Set<EventType<?, ?>> eventTypes) {
+  private String entity(EntityType entity, String alias, Set<EventType<?, ?>> eventTypes) {
     String declaration = String.format("entity \"%s\" as %s", entity.name(), alias);
     // An entity without a body would make PlantUML take it as a participant of a sequence diagram
     if (compact) return declaration + " {\n}\n";

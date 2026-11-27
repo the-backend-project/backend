@@ -1,6 +1,6 @@
 package com.github.thxmasj.backend.core;
 
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static com.github.thxmasj.backend.core.EntitySelector.entityIdFromSession;
 import static com.github.thxmasj.backend.core.TransitionModelBuilder.WithEvent.onEvent;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -30,18 +30,18 @@ import reactor.core.publisher.Mono;
 
 public class TransactionTest {
 
-  static EventType<String, String> NumberClaimed = BasicEventType.of("Number claimed", UUID.fromString("0d2f4a6c-8e9b-4b1d-a3f5-7c9e1b3d5f17"), DataType.string());
-  static IdEntityModel Ids = IdEntityModel.of("Ids", UUID.fromString("f5a7c9e1-3b4d-4d6f-8a0c-2e4f6a8c0e29"), NumberClaimed);
-  static EntityModel Order = EntityModel.of("Order", UUID.fromString("a1c3e5f7-9b0d-4f2a-8c4e-6a8c0e2b4d3b"), Map::of);
+  static EventType<String, String> NumberClaimed = EventType.of("Number claimed", UUID.fromString("0d2f4a6c-8e9b-4b1d-a3f5-7c9e1b3d5f17"), DataType.string());
+  static IdEntityType Ids = IdEntityType.of("Ids", UUID.fromString("f5a7c9e1-3b4d-4d6f-8a0c-2e4f6a8c0e29"), NumberClaimed);
+  static EntityType Order = EntityType.of("Order", UUID.fromString("a1c3e5f7-9b0d-4f2a-8c4e-6a8c0e2b4d3b"), Map::of);
 
   enum States implements State { Placed, Rejected }
 
-  static EventType<String, String> OrderPlaced = BasicEventType.of("Order placed", UUID.fromString("5c7e9a1b-3d4f-4b6c-8e0a-2c4e6a8c0e4d"), DataType.string());
-  static EventType<String, String> OrderAccepted = BasicEventType.of("Order accepted", UUID.fromString("b9d1f3a5-7c8e-4d0f-a2b4-6d8f0a2c4e5f"), DataType.string());
-  static EventType<String, String> OrderRejected = BasicEventType.of("Order rejected", UUID.fromString("3e5a7c9d-1f2b-4a4c-8e6f-0b2d4f6a8c61"), DataType.string());
-  static EventType<String, String> ReminderSent = BasicEventType.of("Reminder sent", UUID.fromString("d7f9b1c3-5e6a-4c8d-9a0b-2e4a6c8e0a73"), DataType.string());
-  static EventType<String, String> OrderShipped = BasicEventType.of("Order shipped", UUID.fromString("7a9c1e3f-5b6d-4e8a-b0c2-4a6c8e0b2d85"), DataType.string());
-  static EventType<UUID, UUID> OrderReferenced = IndexEntityModel.referenceEventType("Order referenced", UUID.fromString("1c3e5a7b-9d0f-4a2c-8e4b-6c8e0a2d4f97"));
+  static EventType<String, String> OrderPlaced = EventType.of("Order placed", UUID.fromString("5c7e9a1b-3d4f-4b6c-8e0a-2c4e6a8c0e4d"), DataType.string());
+  static EventType<String, String> OrderAccepted = EventType.of("Order accepted", UUID.fromString("b9d1f3a5-7c8e-4d0f-a2b4-6d8f0a2c4e5f"), DataType.string());
+  static EventType<String, String> OrderRejected = EventType.of("Order rejected", UUID.fromString("3e5a7c9d-1f2b-4a4c-8e6f-0b2d4f6a8c61"), DataType.string());
+  static EventType<String, String> ReminderSent = EventType.of("Reminder sent", UUID.fromString("d7f9b1c3-5e6a-4c8d-9a0b-2e4a6c8e0a73"), DataType.string());
+  static EventType<String, String> OrderShipped = EventType.of("Order shipped", UUID.fromString("7a9c1e3f-5b6d-4e8a-b0c2-4a6c8e0b2d85"), DataType.string());
+  static EventType<UUID, UUID> OrderReferenced = IndexEntityType.referenceEventType("Order referenced", UUID.fromString("1c3e5a7b-9d0f-4a2c-8e4b-6c8e0a2d4f97"));
 
   private final Transaction transaction = new Transaction();
   private final InputStep<String> order = initial(null, Order);
@@ -224,7 +224,7 @@ public class TransactionTest {
     }).block();
   }
 
-  private InputStep<String> initial(TransitionStep<?> previous, EntityModel entityModel) {
+  private InputStep<String> initial(TransitionStep<?> previous, EntityType entityType) {
     return new InputStep<>(
         null,
         previous,
@@ -232,7 +232,7 @@ public class TransactionTest {
         null,
         Begin,
         1,
-        EventLog.empty(UUID.randomUUID(), entityModel),
+        EventLog.empty(UUID.randomUUID(), entityType),
         ZonedDateTime.now(),
         "correlation",
         "input",
@@ -245,16 +245,19 @@ public class TransactionTest {
   private static OutputStep<String> output(InputStep<String> initial, String id) {
     return new OutputStep<>(
         new AssembleStep<>(initial, id),
-        ProcessResult.accepted(idEvent(id), Ids)
+        new ProcessResult.Accepted<>(idEvent(id), Ids, Severity.Info, Change.Event.of(Ids, idEvent(id), null))
     );
   }
 
   private static IdExists<String> existing(String id) {
-    return ProcessResult.idExists(NumberClaimed, idEvent(id), EventLog.empty(UUID.randomUUID(), Order));
+    return ProcessResult.idExists(NumberClaimed, Change.Event.of(Ids, idEvent(id), null), EventLog.empty(UUID.randomUUID(), Order));
   }
 
+  private static final UUID EntityId = UUID.randomUUID();
+  private static final ZonedDateTime Timestamp = ZonedDateTime.now();
+
   private static Event<String> idEvent(String id) {
-    return new Event<>(UUID.randomUUID(), 1, NumberClaimed, ZonedDateTime.now(), id);
+    return new Event<>(EntityId, 1, NumberClaimed, Timestamp, id);
   }
 
 }

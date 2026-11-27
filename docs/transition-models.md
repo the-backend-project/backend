@@ -14,8 +14,8 @@ An event type has two type parameters, `EventType<I, O>`, and so does the transi
   transition on an event type with data which ends in `output()`, when it is created. The output is also what a
   transition triggering the event gets back.
 
-`BasicEventType.of(name, id, dataType)` gives an event type whose input and output are the same, and
-`BasicEventType.of(name, id)` one with neither (`Void`). The [identity provider](identity-provider.md) has event types
+`EventType.of(name, id, dataType)` gives an event type whose input and output are the same, and
+`EventType.of(name, id)` one with neither (`Void`). The [identity provider](identity-provider.md) has event types
 of all kinds:
 
 | Event type              | `I`                        | `O`            |
@@ -24,6 +24,38 @@ of all kinds:
 | `RegistrationRequested` | `Registration`             | `Void`         |
 | `RegistrationAccepted`  | `(Registration, EntityId)` | `Registration` |
 | `ClientIdClaimed`       | `String`                   | `String`       |
+
+The factory methods of `EventType` also give the event types the state machine treats in a way of their own, each a
+sub-type of `EventType`, which the state machine tells apart by their type:
+
+| Factory method                     | Sub-type              | Its events                                                                     |
+|------------------------------------|-----------------------|--------------------------------------------------------------------------------|
+| `EventType.notStored(name, id, …)` | `EventType.NotStored` | Are not stored, see [Events and entities not stored](entities.md#events-and-entities-not-stored) |
+| `EventType.request(name, id, …)`   | `EventType.Request`   | Are requests: a rollback goes back over one of them at most                    |
+| `EventType.rollback(name, id)`     | `EventType.Rollback`  | Roll the events of the entity back to an event number                          |
+
+### Event data is shared, so nothing may change it
+
+The data of an event is shared by everyone who reads it: the transitions reading it from the entity's event log
+(`c.log().one(..)`, `last(..)`, `all(..)` and the others alike), the transition triggering it, which gets it back, and
+the one who triggered the first event of the transaction, which `onEvent(..)` gives the events of the transaction.
+Nothing may change it, as the change would be seen by the readers after it, but not stored: the transition of an event
+which is stored makes its stored form, a `Change.Event` with the data marshalled, and masked if the transition masks it,
+when it makes the `Event`. Make event data immutable, e.g. records whose collections are immutable, with `List.copyOf`
+in the compact constructor:
+
+```java
+record Order(String id, List<OrderLine> lines) {
+  Order {
+    lines = List.copyOf(lines);
+  }
+}
+```
+
+An entity's event log has its events of the transaction as `Event`s, read as the transition made them, and those read
+from the database as `Change.Event`s, both `EventLog.Entry`s. `log.events()` gives them without their data, and
+`log.data(entry)` the data of one. A stored event is unmarshalled when a transition first reads it, once per
+transition: the log a transition is given keeps the data of the events it has read.
 
 ## Steps
 
@@ -82,8 +114,8 @@ record OrderLine(UUID item, int quantity) {}
 record Reservation(int quantity) {}
 record Remaining(int quantity) {}
 
-EventType<OrderLine, OrderLine> OrderPlaced = BasicEventType.of("Order placed", placeId, DataType.json(OrderLine.class));
-EventType<Reservation, Remaining> StockReserved = BasicEventType.of(
+EventType<OrderLine, OrderLine> OrderPlaced = EventType.of("Order placed", placeId, DataType.json(OrderLine.class));
+EventType<Reservation, Remaining> StockReserved = EventType.of(
     "Stock reserved",
     reserveId,
     DataType.json(Reservation.class),

@@ -5,12 +5,12 @@
 | core                                                                  | The state machine, the builder of transition models, and the interface of the databases        |
 | [http](http-outbox.md#dispatching-a-request)                          | HTTP messages, HTTP clients and their data types, shared by http-inbox and http-outbox         |
 | [database-mssql, database-pgsql-*](databases.md)                      | The SQL of a database and the driver it is reached through, one module per database and driver |
-| [http-inbox](http-inbox.md)                                           | Inboxes: entity models receiving HTTP requests and routing them to the entities of an application |
-| [http-outbox](http-outbox.md)                                         | Outboxes: entity models sending HTTP requests at least once or at most once                    |
+| [http-inbox](http-inbox.md)                                           | Inboxes: entity types receiving HTTP requests and routing them to the entities of an application |
+| [http-outbox](http-outbox.md)                                         | Outboxes: entity types sending HTTP requests at least once or at most once                    |
 | [backoffice](backoffice.md)                                           | A web application for users signed in with OpenID Connect to look into the entities of an application |
 | [test-api](testing.md)                                                | An API for tests to look into and manipulate the database of a state machine                   |
 | [diagram](diagrams.md)                                                | State diagrams of entity types, ER diagrams of bounded contexts, sequence diagrams of logs     |
-| [templates](cardpayments.md)                                          | Ready-made entity models of a domain, such as card payments                                    |
+| [templates](cardpayments.md)                                          | Ready-made entity types of a domain, such as card payments                                    |
 
 An application depends on core, the database module of its database, and http-inbox and http-outbox if it receives or
 sends HTTP requests. Core knows nothing of HTTP: the HTTP messages and clients are in http, which http-inbox and
@@ -19,7 +19,7 @@ application of its own, which depends on the application and on backoffice. See 
 applications.
 
 Core exports only what applications use: the packages `com.github.thxmasj.backend.core` (the state machine and the
-building of entity models) and `core.database` (the databases, their clients and `DataSourceBuilder`). The http module
+building of entity types) and `core.database` (the databases, their clients and `DataSourceBuilder`). The http module
 exports `com.github.thxmasj.backend.http`: the HTTP messages (`HttpRequest`, `HttpResponse`, `Headers`), the HTTP clients
 (`HttpClient`, `NettyHttpClient`, `AccessTokenSupplier`) and the data types of HTTP messages (`HttpDataType`). The
 packages under `core.internal`, such as the queries and updates of the databases and the steps of a transition, are

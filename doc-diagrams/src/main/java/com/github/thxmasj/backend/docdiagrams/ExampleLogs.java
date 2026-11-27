@@ -1,9 +1,9 @@
 package com.github.thxmasj.backend.docdiagrams;
 
-import static com.github.thxmasj.backend.core.EntityModel.Begin;
+import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static java.util.stream.Collectors.joining;
 
-import com.github.thxmasj.backend.core.EntityModel;
+import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.Event;
 import com.github.thxmasj.backend.core.EventLog;
 import com.github.thxmasj.backend.core.EventType;
@@ -33,7 +33,7 @@ final class ExampleLogs {
     return new Entry(transaction, name);
   }
 
-  static EventLog log(EntityModel model, Entry... entries) {
+  static EventLog log(EntityType model, Entry... entries) {
     UUID entityId = UUID.nameUUIDFromBytes(model.name().getBytes());
     List<Event<?>> events = new ArrayList<>();
     State state = Begin;
@@ -55,7 +55,7 @@ final class ExampleLogs {
                   .distinct()
                   .collect(joining(", "))
           )));
-      if (!transition.eventType().stored())
+      if (transition.eventType() instanceof EventType.NotStored)
         throw new IllegalArgumentException(model.name() + " never stores " + name + ", whose type isn't stored");
       events.add(event(entityId, events.size() + 1, transition.eventType(), entry.transaction()));
       if (transition.toState() != null)
@@ -65,7 +65,7 @@ final class ExampleLogs {
   }
 
   private static <T> Event<T> event(UUID entityId, int number, EventType<?, T> type, int transaction) {
-    return new Event<>(entityId, number, type, time.plusSeconds(transaction));
+    return new Event<>(entityId, number, type, time.plusSeconds(transaction), null);
   }
 
   private static Stream<TransitionModel<?, ?>> leaves(TransitionModel<?, ?> transition) {

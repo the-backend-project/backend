@@ -55,7 +55,7 @@
 
   <dependencies>
     <dependency>
-      <!-- The entity models of the application, which the backoffice reads the entities of -->
+      <!-- The entity types of the application, which the backoffice reads the entities of -->
       <groupId>com.github.thxmasj.backend</groupId>
       <artifactId>hello-world</artifactId>
       <version>${project.version}</version>

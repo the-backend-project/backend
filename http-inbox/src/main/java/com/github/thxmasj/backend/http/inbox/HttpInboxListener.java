@@ -39,7 +39,7 @@ public class HttpInboxListener {
   private final Duration responseTimeout;
   private final List<Filter> filters;
 
-  /// @param stateMachine the state machine created with the entity models of the inbox, see [HttpInbox#entityModels()]
+  /// @param stateMachine the state machine created with the entity types of the inbox, see [HttpInbox#entityTypes()]
   /// @throws IllegalArgumentException if the state machine doesn't run the request routing of the inbox
   public HttpInboxListener(StateMachine stateMachine, HttpInbox inbox) {
     this(stateMachine, inbox, Duration.ofSeconds(30));
@@ -57,7 +57,7 @@ public class HttpInboxListener {
   ) {
     if (!stateMachine.runs(inbox.requestRouting()))
       throw new IllegalArgumentException(
-          "The state machine doesn't run the request routing of the inbox. Create it with the entity models of the same " +
+          "The state machine doesn't run the request routing of the inbox. Create it with the entity types of the same " +
           "inbox the listener is given."
       );
     this.stateMachine = stateMachine;
@@ -128,7 +128,7 @@ public class HttpInboxListener {
         .skip(1)
         .next()
         // The response as given, which the event log may have masked
-        .map(event -> HttpResponse.raw(event.getUnmarshalledData()))
+        .map(event -> HttpResponse.raw(event.data()))
         .switchIfEmpty(Mono.error(() -> new IllegalStateException("No response event for " + requestMessage.requestLine())));
   }
 
