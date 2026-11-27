@@ -18,7 +18,7 @@ public class EventLogTest {
   @Test
   public void whenOneEventInLogEffectiveEventsAreSameAsEvents() {
     List<Event<?>> events = List.of(
-      Event.of(randomUUID(), 1, EventType.of("Test", randomUUID()), ZonedDateTime.now(), null)
+      new Event<>(randomUUID(), 1, EventType.of("Test", randomUUID()), ZonedDateTime.now(), null)
     );
     EventLog log = new EventLog(null, null, events);
     assertEquals(events, log.effectiveEvents());
@@ -27,8 +27,8 @@ public class EventLogTest {
   @Test
   public void whenTwoEventsInLogEffectiveEventsAreSameAsEvents() {
     List<Event<?>> events = List.of(
-        Event.of(randomUUID(), 1, EventType.of("Test1", randomUUID()), ZonedDateTime.now(), null),
-        Event.of(randomUUID(), 2, EventType.of("Test2", randomUUID()), ZonedDateTime.now(), null)
+        new Event<>(randomUUID(), 1, EventType.of("Test1", randomUUID()), ZonedDateTime.now(), null),
+        new Event<>(randomUUID(), 2, EventType.of("Test2", randomUUID()), ZonedDateTime.now(), null)
     );
     EventLog log = new EventLog(null, null, events);
     assertEquals(events, log.effectiveEvents());
@@ -37,9 +37,9 @@ public class EventLogTest {
   @Test
   public void whenTwoEventsAndRollbackInLogEffectiveEventsAreNone() {
     List<Event<?>> events = List.of(
-        Event.of(randomUUID(), 1, EventType.of("Test1", randomUUID()), ZonedDateTime.now(), null),
-        Event.of(randomUUID(), 2, EventType.of("Test2", randomUUID()), ZonedDateTime.now(), null),
-        Event.of(randomUUID(), 3, BuiltinEventTypes.EventsRolledBack, ZonedDateTime.now(), new Data(0, "testing"))
+        new Event<>(randomUUID(), 1, EventType.of("Test1", randomUUID()), ZonedDateTime.now(), null),
+        new Event<>(randomUUID(), 2, EventType.of("Test2", randomUUID()), ZonedDateTime.now(), null),
+        new Event<>(randomUUID(), 3, BuiltinEventTypes.EventsRolledBack, ZonedDateTime.now(), new Data(0, "testing"))
         //new Event.Rollback(3, 0, "testing", Clock.systemUTC())
     );
     EventLog log = new EventLog(null, null, events);
@@ -51,7 +51,7 @@ public class EventLogTest {
     EntityType model = EntityType.of("TestModel", randomUUID(), Map::of);
     UUID entityId = randomUUID();
     List<Event<?>> events = List.of(
-        Event.of(entityId, 1, EventType.of("Test1", randomUUID()), ZonedDateTime.now(), null)
+        new Event<>(entityId, 1, EventType.of("Test1", randomUUID()), ZonedDateTime.now(), null)
     );
     EventLog log = new EventLog(model, entityId, events);
     assertEquals(model, log.entityType());
@@ -68,9 +68,9 @@ public class EventLogTest {
   public void anEventStoredWithoutDataIsReadAsNull() {
     var clock = Clock.systemUTC();
     UUID entityId = randomUUID();
-    List<Event<?>> events = List.of(
-        Event.stored(entityId, 1, NumberAssigned, ZonedDateTime.now(clock), null),
-        Event.stored(entityId, 2, NumberAssigned, ZonedDateTime.now(clock), DataType.json(Assigned.class).marshal(new Assigned("7")))
+    List<EventLog.Entry<?>> events = List.of(
+        new StoredEvent<>(entityId, 1, NumberAssigned, ZonedDateTime.now(clock), null),
+        new StoredEvent<>(entityId, 2, NumberAssigned, ZonedDateTime.now(clock), DataType.json(Assigned.class).marshal(new Assigned("7")))
     );
     EventLog log = new EventLog(null, entityId, events);
     assertEquals(Arrays.asList(null, new Assigned("7")), log.all(NumberAssigned));
@@ -83,7 +83,7 @@ public class EventLogTest {
   @Test
   public void theDataOfAnEventOfTheTransactionIsReadAsItIs() {
     var data = new Assigned("8");
-    List<Event<?>> events = List.of(Event.of(randomUUID(), 1, NumberAssigned, ZonedDateTime.now(), data));
+    List<Event<?>> events = List.of(new Event<>(randomUUID(), 1, NumberAssigned, ZonedDateTime.now(), data));
     EventLog log = new EventLog(null, null, events);
     assertSame(data, log.last(NumberAssigned));
     assertSame(data, log.all(NumberAssigned).getFirst());

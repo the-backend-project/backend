@@ -68,7 +68,7 @@ public final class Replay {
   public static final class Step {
 
     private final EventLog log;
-    private final Event<?> event;
+    private final EventLog.Entry<?> event;
     private final List<TransitionModel<?, ?>> path;
     private final List<Step> rolledBack;
     private final boolean deduced;
@@ -80,7 +80,7 @@ public final class Replay {
     private int transaction;
     private int session;
 
-    private Step(EventLog log, Event<?> event, List<TransitionModel<?, ?>> path, List<Step> rolledBack, boolean deduced) {
+    private Step(EventLog log, EventLog.Entry<?> event, List<TransitionModel<?, ?>> path, List<Step> rolledBack, boolean deduced) {
       this.log = log;
       this.event = event;
       this.path = path;
@@ -101,7 +101,7 @@ public final class Replay {
     }
 
     /// The event, which for a deduced step has no entity id and event number 0
-    public Event<?> event() {
+    public EventLog.Entry<?> event() {
       return event;
     }
 
@@ -358,7 +358,7 @@ public final class Replay {
     }
     if (found == null)
       return null;
-    Event<?> event = Event.of(null, 0, foundPath.getLast().eventType(), step.event().timestamp(), null);
+    Event<?> event = new Event<>(null, 0, foundPath.getLast().eventType(), step.event().timestamp(), null);
     Step deduced = new Step(new EventLog(found, null, List.of(event)), event, foundPath, List.of(), true);
     link(deduced, step);
     return deduced;
@@ -390,19 +390,19 @@ public final class Replay {
   /// after the event rolled back to
   private static List<Step> replay(EventLog log) {
     Map<State, List<TransitionModel<?, ?>>> transitions = log.entityType().transitions();
-    List<Event<?>> events = log.events();
+    List<EventLog.Entry<?>> events = log.events();
     List<Step> steps = new ArrayList<>();
     // The effective steps so far, with the state after each
     List<Step> effective = new ArrayList<>();
     List<State> statesAfter = new ArrayList<>();
     State state = Begin;
     for (int i = 0; i < events.size(); i++) {
-      Event<?> event = events.get(i);
+      EventLog.Entry<?> event = events.get(i);
       EventType<?, ?> next = i + 1 < events.size() ? events.get(i + 1).type() : null;
       List<TransitionModel<?, ?>> path = path(log, transitions, state, event.type(), next);
       Step step;
       if (event.type() instanceof Rollback) {
-        int toNumber = ((Rollback.Data) event.data()).toNumber();
+        int toNumber = ((Rollback.Data) log.data(event)).toNumber();
         int actualToNumber = toNumber >= 0 ? toNumber : event.eventNumber() - 1 + toNumber;
         int kept = 0;
         while (kept < effective.size() && effective.get(kept).event().eventNumber() <= actualToNumber)

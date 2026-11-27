@@ -37,7 +37,8 @@ Depend on the module in test scope only:
 
 Create a `TestApi` with a data source for the application's database, the schema name, and the same entity types as
 the state machine is given. They and the models their transitions trigger events on tell the test API the entity
-types and event types, so it can return the events with their data unmarshalled, for any entity type.
+types and event types, so it can return the event logs of any entity type, whose accessors unmarshal the data of the
+events, e.g. `log.last(eventType)` or `log.data(entry)`.
 
 ```java
 var api = new TestApi(dataSource, "Payments", entityTypes, Clock.systemUTC());

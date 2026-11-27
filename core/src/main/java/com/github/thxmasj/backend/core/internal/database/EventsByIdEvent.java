@@ -4,7 +4,7 @@ import static java.util.function.Function.identity;
 import static java.util.stream.Collectors.toMap;
 
 import com.github.thxmasj.backend.core.EntityType;
-import com.github.thxmasj.backend.core.Event;
+import com.github.thxmasj.backend.core.StoredEvent;
 import com.github.thxmasj.backend.core.EventLog;
 import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.database.DatabaseClient;
@@ -64,10 +64,10 @@ public class EventsByIdEvent {
         .map(events -> new EventLog(
             events.getFirst().entityType(),
             events.getFirst().entityId(),
-            Collections.unmodifiableList(events.stream().<Event<?>>map(TypedEvent::event).toList())
+            Collections.unmodifiableList(events.stream().<EventLog.Entry<?>>map(TypedEvent::event).toList())
         ));
   }
 
-  private record TypedEvent(EntityType entityType, UUID entityId, Event<?> event) {}
+  private record TypedEvent(EntityType entityType, UUID entityId, StoredEvent<?> event) {}
 
 }

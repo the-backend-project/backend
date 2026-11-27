@@ -281,7 +281,7 @@ public class NotStoredTest {
 
     EventLog log = log(Account, List.of(AccountOpened, PasswordSet), account);
     assertEquals(List.of("1:Account opened", "2:Password set"), events(log));
-    assertEquals("***", log.events().getLast().data());
+    assertEquals("***", log.last(PasswordSet));
   }
 
   /// The delayed event fires unless another event is stored first, so it has the number of the event not stored,

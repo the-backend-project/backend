@@ -12,6 +12,7 @@ import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.Event;
 import com.github.thxmasj.backend.core.EventLog;
 import com.github.thxmasj.backend.core.EventType;
+import com.github.thxmasj.backend.core.StoredEvent;
 import com.github.thxmasj.backend.core.IdEntityType;
 import com.github.thxmasj.backend.core.State;
 import com.github.thxmasj.backend.core.database.UnknownEntity;
@@ -71,8 +72,8 @@ public class StorageTest {
   /// A person with a name, i.e. its first event and its name's id event
   private static Change[] person(UUID entityId, String name) {
     return new Change[] {
-        change(Person, Event.of(entityId, 1, PersonCreated, ZonedDateTime.now(clock), null).marshalled()),
-        change(Names, Event.of(entityId, 1, NameClaimed, ZonedDateTime.now(clock), name).marshalled())
+        change(Person, new Event<>(entityId, 1, PersonCreated, ZonedDateTime.now(clock), null)),
+        change(Names, new Event<>(entityId, 1, NameClaimed, ZonedDateTime.now(clock), name))
     };
   }
 
@@ -81,6 +82,7 @@ public class StorageTest {
       @Override public EntityType entityType() {return entityType;}
       @Override public UUID entityId() {return event.entityId();}
       @Override public Event<?> newEvent() {return event;}
+      @Override public StoredEvent<?> storedEvent() {return StoredEvent.of(event, null);}
       @Override public DelayedEvent<?> delayedEvent() {return null;}
     };
   }
@@ -106,7 +108,7 @@ public class StorageTest {
 
     var e = assertThrows(IdEventAlreadyExists.class, () -> store(storage, person(UUID.randomUUID(), "Alice")));
 
-    assertEquals("Alice", e.idEvent().data());
+    assertEquals("Alice", NameClaimed.outputDataType().unmarshal(e.idEvent().data()));
   }
 
   @Test

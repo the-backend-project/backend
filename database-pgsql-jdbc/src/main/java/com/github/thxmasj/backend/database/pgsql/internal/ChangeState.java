@@ -7,6 +7,7 @@ import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.Event;
 import com.github.thxmasj.backend.core.IdEntityType;
 import com.github.thxmasj.backend.core.IndexEntityType;
+import com.github.thxmasj.backend.core.StoredEvent;
 import com.github.thxmasj.backend.core.TriggerType;
 import com.github.thxmasj.backend.core.database.DatabaseClient;
 import com.github.thxmasj.backend.core.database.TableType;
@@ -49,8 +50,8 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
 
   /// The duplicate key of an id event, as reported by PostgreSQL, e.g. "f721bf54-891b-41a0-aa63-5d3cbde52437, \x7b22..."
   @Override
-  protected String duplicateKey(Event<?> idEvent) {
-    return idEvent.type().id() + ", \\x" + HexFormat.of().formatHex(idEvent.storedData());
+  protected String duplicateKey(StoredEvent<?> idEvent) {
+    return idEvent.type().id() + ", \\x" + HexFormat.of().formatHex(idEvent.data());
   }
 
   private String insertSql(

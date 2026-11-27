@@ -5,7 +5,7 @@ import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toMap;
 
-import com.github.thxmasj.backend.core.Event;
+import com.github.thxmasj.backend.core.StoredEvent;
 import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.database.MappingFailure;
 import com.github.thxmasj.backend.core.database.Row;
@@ -25,7 +25,7 @@ public class Mappers {
     return idToEventType::get;
   }
 
-  public static BiFunction<UUID, Row, Event<?>> eventMapper(
+  public static BiFunction<UUID, Row, StoredEvent<?>> eventMapper(
       List<EventType<?, ?>> eventTypes,
       Clock clock
   ) {
@@ -40,7 +40,7 @@ public class Mappers {
             eventTypes.stream().map(t -> t.id() + " -> " + t.name()).collect(joining("\n"))
         ));
       try {
-        return Event.stored(
+        return new StoredEvent<>(
             entityId,
             value(row, "EventNumber", Integer.class),
             eventType,

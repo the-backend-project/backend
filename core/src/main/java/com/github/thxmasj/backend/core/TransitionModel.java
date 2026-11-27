@@ -153,16 +153,17 @@ public class TransitionModel<I, O> {
     return modelContext.withoutData();
   }
 
-  /// The output step with its event marshalled, after its mask, if it is stored. The output step of a transition makes
-  /// it, so that a failure of masking or marshalling the event is one of the transition, the event is marshalled once,
-  /// and the step the transaction records is the one with the event as it is stored. An event which isn't stored is
-  /// never marshalled, nor is the event of a transition which chose another one, which isn't stored either.
-  static <O> OutputStep<O> marshalledIfStored(OutputStep<O> step) {
+  /// The output step with the stored form of its event, masked by the mask if it isn't null, if the event is stored.
+  /// The output step of a transition makes it, so that a failure of masking or marshalling the event is one of the
+  /// transition, the event is marshalled once, and the step the transaction records is the one with the event as it is
+  /// stored. An event which isn't stored is never marshalled, nor is the event of a transition which chose another one,
+  /// which isn't stored either.
+  static <O> OutputStep<O> withStoredForm(OutputStep<O> step, UnaryOperator<O> mask) {
     if (!(step.previous() instanceof ChoiceStep<?>)
-        && step.stepOutput() instanceof Accepted<O>(Event<O> event, EntityType entityType, Severity severity)
+        && step.stepOutput() instanceof Accepted<O>(Event<O> event, EntityType entityType, Severity severity, _)
         && EventTypes.stored(event.type())
         && !step.inputStep().log().isSessionOnlyWith(event))
-      return new OutputStep<>(step.previous(), new Accepted<>(event.marshalled(), entityType, severity));
+      return new OutputStep<>(step.previous(), new Accepted<>(event, entityType, severity, StoredEvent.of(event, mask)));
     return step;
   }
 

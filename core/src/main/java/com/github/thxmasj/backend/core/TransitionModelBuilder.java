@@ -129,7 +129,7 @@ public class TransitionModelBuilder<I, T, O> {
         inputStep -> inputStep.flatMap(i -> step(i, () -> Mono.just(new OutputStep<>(
             i,
             ProcessResult.accepted(
-                Event.of(
+                new Event<>(
                     i.log().entityId(),
                     i.log().lastEventNumber() + 1,
                     BuiltinEventTypes.StatusLookedUp,
@@ -179,7 +179,7 @@ public class TransitionModelBuilder<I, T, O> {
           }
           EventLog log = i.log();
           var effectiveEvents = log.effectiveEvents();
-          List<Event<?>> eventsToRollback = effectiveEvents.subList(actualRollbackTo, effectiveEvents.size());
+          List<EventLog.Entry<?>> eventsToRollback = effectiveEvents.subList(actualRollbackTo, effectiveEvents.size());
           Traverser traverser = i.stateMachine().traverser(log.entityType());
           Mono<TransitionStep<?>> currentContext = Mono.just(i);
           for (var event : eventsToRollback.reversed()) {
@@ -209,10 +209,10 @@ public class TransitionModelBuilder<I, T, O> {
               ));
             }
           }
-          return currentContext.flatMap(c -> step(c, () -> Mono.just(TransitionModel.marshalledIfStored(new OutputStep<>(
+          return currentContext.flatMap(c -> step(c, () -> Mono.just(TransitionModel.withStoredForm(new OutputStep<>(
               c,
               ProcessResult.accepted(
-                  Event.of(
+                  new Event<>(
                       i.log().entityId(),
                       i.log().lastEventNumber() + 1,
                       eventType,
@@ -222,7 +222,7 @@ public class TransitionModelBuilder<I, T, O> {
                   i.log().entityType(),
                   Severity.Info
               )
-          )))));
+          ), null))));
         })
     );
   }
@@ -886,19 +886,19 @@ public class TransitionModelBuilder<I, T, O> {
   /// The event is made, and masked, in the output step, which is recorded by the transaction, so that the same step is
   /// given when the changes are calculated again, and the steps after it are recognised.
   private Function<Mono<InputStep<I>>, Mono<OutputStep<O>>> outputChain(Function<T, O> f, UnaryOperator<O> mask) {
-    return builderFunction.andThen(a -> a.flatMap(b -> step(b, () -> Mono.just(TransitionModel.marshalledIfStored(new OutputStep<>(
+    return builderFunction.andThen(a -> a.flatMap(b -> step(b, () -> Mono.just(TransitionModel.withStoredForm(new OutputStep<>(
         b,
         ProcessResult.accepted(
-            event(b, f.apply(b.stepOutput()), mask),
+            event(b, f.apply(b.stepOutput())),
             b.inputStep().log().entityType(),
             modelContext.severity()
         )
-    ))))));
+    ), mask)))));
   }
 
   /// The event of the transition with the output, masked when stored if the mask isn't null. A transition which
   /// chooses another one has no event of its own, as it ends in the chosen one's, with that one's mask.
-  private Event<O> event(TransitionStep<T> step, O output, UnaryOperator<O> mask) {
+  private Event<O> event(TransitionStep<T> step, O output) {
     if (output == null)
       throw new IllegalStateException(String.format(
           "The output of the transition on %s is null, which an event can't have. An event without data, of an event " +
@@ -908,10 +908,8 @@ public class TransitionModelBuilder<I, T, O> {
     InputStep<?> inputStep = step.inputStep();
     UUID entityId = inputStep.log().entityId();
     int number = inputStep.log().lastEventNumber() + 1;
-    // Marshalled in the output step, after its mask, if it is stored, see TransitionModel#marshalledIfStored
-    return mask == null ?
-        Event.of(entityId, number, modelContext.eventType(), inputStep.timestamp(), output) :
-        Event.masked(entityId, number, modelContext.eventType(), inputStep.timestamp(), output, mask);
+    // Its stored form is made in the output step, after the mask, if it is stored, see TransitionModel#withStoredForm
+    return new Event<>(entityId, number, modelContext.eventType(), inputStep.timestamp(), output);
   }
 
 
@@ -944,10 +942,10 @@ public class TransitionModelBuilder<I, T, O> {
   public TransitionModel<I, O> output() {
     return new TransitionModel<>(
         modelContext.asWithoutData(),
-        builderFunction.andThen(a -> a.flatMap(b -> step(b, () -> Mono.just(TransitionModel.marshalledIfStored(new OutputStep<>(
+        builderFunction.andThen(a -> a.flatMap(b -> step(b, () -> Mono.just(TransitionModel.withStoredForm(new OutputStep<>(
             b,
             ProcessResult.accepted(
-                Event.of(
+                new Event<>(
                     b.inputStep().log().entityId(),
                     b.inputStep().log().lastEventNumber() + 1,
                     modelContext.eventType(),
@@ -957,7 +955,7 @@ public class TransitionModelBuilder<I, T, O> {
                 b.inputStep().log().entityType(),
                 modelContext.severity()
             )
-        ))))))
+        ), null)))))
     );
   }
 

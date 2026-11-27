@@ -137,11 +137,11 @@ class SequenceDiagramFormatterTest {
   }
 
   private <T> void event(EventType<?, T> type, T data) {
-    events.add(Event.of(orderId, events.size() + 1, type, transaction, data));
+    events.add(new Event<>(orderId, events.size() + 1, type, transaction, data));
   }
 
   private void event(EventType<?, Void> type) {
-    events.add(Event.of(orderId, events.size() + 1, type, transaction, null));
+    events.add(new Event<>(orderId, events.size() + 1, type, transaction, null));
   }
 
   private EventLog log() {
@@ -225,8 +225,8 @@ class SequenceDiagramFormatterTest {
     UUID requestId = UUID.randomUUID();
     event(Placed);
     var request = new EventLog(Request, requestId, List.of(
-        Event.of(requestId, 1, Received, transaction, null),
-        Event.of(requestId, 2, Answered, transaction, null)
+        new Event<>(requestId, 1, Received, transaction, null),
+        new Event<>(requestId, 2, Answered, transaction, null)
     ));
     assertThat(new SequenceDiagramFormatter(log(), List.of(request)).format()).contains(
         // In the order they are first drawn, from the request to the order
@@ -258,8 +258,8 @@ class SequenceDiagramFormatterTest {
     UUID requestId = UUID.randomUUID();
     event(Placed);
     var request = new EventLog(Request, requestId, List.of(
-        Event.of(requestId, 1, Received, transaction, null),
-        Event.of(requestId, 2, Answered, transaction, null)
+        new Event<>(requestId, 1, Received, transaction, null),
+        new Event<>(requestId, 2, Answered, transaction, null)
     ));
     String diagram = new SequenceDiagramFormatter(log(), List.of(request), List.of(Router, Request, Order)).format();
     assertThat(diagram).contains(
@@ -284,8 +284,8 @@ class SequenceDiagramFormatterTest {
   void eventsTriggeredOnIdAndIndexEntitiesAreLeftOut() {
     UUID requestId = UUID.randomUUID();
     var request = new EventLog(Request, requestId, List.of(
-        Event.of(requestId, 1, Received, transaction, null),
-        Event.of(requestId, 2, Answered, transaction, null)
+        new Event<>(requestId, 1, Received, transaction, null),
+        new Event<>(requestId, 2, Answered, transaction, null)
     ));
     assertThat(new SequenceDiagramFormatter(request).format()).doesNotContain("Indexed", "\"Index\"");
   }
@@ -365,7 +365,7 @@ class SequenceDiagramFormatterTest {
     event(Accepted);
     nextTransaction();
     UUID otherId = UUID.randomUUID();
-    var other = new EventLog(Order, otherId, List.of(Event.of(otherId, 1, Placed, transaction, null)));
+    var other = new EventLog(Order, otherId, List.of(new Event<>(otherId, 1, Placed, transaction, null)));
     nextTransaction();
     event(Notified);
     String diagram = new SequenceDiagramFormatter(log(), List.of(other)).format();

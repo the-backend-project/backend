@@ -40,7 +40,7 @@ class Traverser {
       return currentState;
     }
     TransitionModel<?, ?> lastTransition;
-    for (var loggedEvent : effectiveEvents.stream().map(Event::type).toList()) {
+    for (var loggedEvent : effectiveEvents.stream().map(EventLog.Entry::type).toList()) {
       lastTransition = findTransitionForLoggedEvent(loggedEvent, currentState);
       currentState = targetState(currentState, lastTransition);
     }

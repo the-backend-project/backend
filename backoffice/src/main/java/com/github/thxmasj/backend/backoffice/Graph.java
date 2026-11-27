@@ -97,7 +97,7 @@ final class Graph {
   /// An event of an entity, or an id or index event
   ///
   /// @param type the event type, or null if it is unknown
-  record StoredEvent(int number, UUID typeId, EventType<?, ?> type, byte[] data, LocalDateTime timestamp) {
+  record EventRow(int number, UUID typeId, EventType<?, ?> type, byte[] data, LocalDateTime timestamp) {
 
     String typeName() {
       return type != null ? type.name() : typeId.toString();
@@ -106,13 +106,13 @@ final class Graph {
   }
 
   /// The event an entity is waiting for, triggered at the deadline if the entity has no other event before that
-  record Delayed(int eventNumber, StoredEvent event, LocalDateTime deadline, int attempt) {}
+  record Delayed(int eventNumber, EventRow event, LocalDateTime deadline, int attempt) {}
 
   /// An event an entity is waiting for, triggered when the entities indexed by the key with the reference type all have
   /// a last event of one of the last types
   ///
   /// @param trigger the entity whose event created the trigger
-  record Conditional(StoredEvent event, List<String> lastTypes, String referenceType, byte[] indexKey, UUID trigger, int triggerEventNumber) {}
+  record Conditional(EventRow event, List<String> lastTypes, String referenceType, byte[] indexKey, UUID trigger, int triggerEventNumber) {}
 
   /// An entity referring to another by an index event with its entity id as key
   record Referrer(Entity entity, String indexType) {}
@@ -120,9 +120,9 @@ final class Graph {
   /// An entity with everything recorded about it
   record View(
       Entity entity,
-      List<StoredEvent> events,
-      List<StoredEvent> ids,
-      List<StoredEvent> indexKeys,
+      List<EventRow> events,
+      List<EventRow> ids,
+      List<EventRow> indexKeys,
       Optional<Delayed> delayed,
       List<Conditional> conditionals,
       List<Referrer> referrers
@@ -282,7 +282,7 @@ final class Graph {
                 .map(t -> new Referrer(entities.get(t.entityId()), t.matchedBy()))));
   }
 
-  private Flux<StoredEvent> events(String table, UUID entityId) {
+  private Flux<EventRow> events(String table, UUID entityId) {
     return client.sql(
             "SELECT EventNumber, Type, Data, Timestamp FROM \"{schema}\".\"{table}\" WHERE EntityId=:entityId ORDER BY EventNumber"
                 .replace("{schema}", schema)
@@ -290,7 +290,7 @@ final class Graph {
         )
         .name("Backoffice." + table)
         .bind("entityId", entityId)
-        .map(row -> storedEvent(
+        .map(row -> eventRow(
             row.get("EventNumber", Integer.class),
             row.get("Type", UUID.class),
             row.get("Data", byte[].class),
@@ -314,7 +314,7 @@ final class Graph {
           int eventNumber = row.get("EventNumber", Integer.class);
           return new Delayed(
               eventNumber,
-              storedEvent(eventNumber, row.get("Type", UUID.class), row.get("Data", byte[].class), null),
+              eventRow(eventNumber, row.get("Type", UUID.class), row.get("Data", byte[].class), null),
               row.get("Deadline", LocalDateTime.class),
               row.get("Attempt", Integer.class)
           );
@@ -334,7 +334,7 @@ final class Graph {
         .name("Backoffice.ConditionalTriggers")
         .bind("entityId", entityId)
         .map(row -> new Conditional(
-            storedEvent(0, row.get("Type", UUID.class), row.get("Data", byte[].class), row.get("Timestamp", LocalDateTime.class)),
+            eventRow(0, row.get("Type", UUID.class), row.get("Data", byte[].class), row.get("Timestamp", LocalDateTime.class)),
             List.of(row.get("LastTypes", String.class).split(",")).stream().map(id -> typeName(uuid(id))).toList(),
             typeName(row.get("ReferenceType", UUID.class)),
             row.get("IndexKey", byte[].class),
@@ -344,8 +344,8 @@ final class Graph {
         .all();
   }
 
-  private StoredEvent storedEvent(int number, UUID typeId, byte[] data, LocalDateTime timestamp) {
-    return new StoredEvent(number, typeId, eventTypeMapper.apply(typeId), data, timestamp);
+  private EventRow eventRow(int number, UUID typeId, byte[] data, LocalDateTime timestamp) {
+    return new EventRow(number, typeId, eventTypeMapper.apply(typeId), data, timestamp);
   }
 
   private Entity entity(UUID entityId, UUID entityTypeId) {

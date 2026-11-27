@@ -278,7 +278,7 @@ public class TestApiTest {
     machine.onEvent(trigger(ParcelSent, ParcelShipment), new Parcel(2)).blockFirst();
 
     Map<EntityType, Object> sent = api.entitiesByIndex(ShipmentOfAccountReferenced, shipmentAccount)
-        .collectMap(EventLog::entityType, log -> (Object) log.events().getFirst().data())
+        .collectMap(EventLog::entityType, log -> (Object) log.data(log.events().getFirst()))
         .block();
 
     assertEquals(Map.of(LetterShipment, "Dear account", ParcelShipment, new Parcel(2)), sent);

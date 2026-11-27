@@ -6,7 +6,7 @@ import static java.util.stream.Collectors.joining;
 
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
-import java.util.IdentityHashMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -15,29 +15,54 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Stream;
 
-/// The event log of an entity: its events, oldest first. Its accessors give the data of the events, which every reader
-/// shares, so nothing may change it (see [Event]).
+/// The event log of an entity: its events, oldest first. An event read from the event log is a [StoredEvent], with its
+/// data as stored, and an event of the transaction an [Event], with its data as the transition made it. The accessors
+/// give the data of the events, which every reader shares, so nothing may change it (see [Event]).
 ///
-/// The log a transition is given unmarshals each event read from the event log at most once, and shares the data
-/// within the transition. It is confined to the transition, whose steps are taken one after another, so it needs no
-/// locking. Any other log unmarshals the data of such an event on every read. An event of the transaction has its data,
-/// which is never unmarshalled.
+/// The log a transition is given unmarshals each stored event at most once, and shares the data within the
+/// transition. It is confined to the transition, whose steps are taken one after another, so it needs no locking. Any
+/// other log unmarshals the data of a stored event on every read.
 public final class EventLog {
+
+  /// An event in an event log, as stored or as its transition made it
+  public sealed interface Entry<T> permits Event, StoredEvent {
+
+    UUID entityId();
+
+    int eventNumber();
+
+    EventType<?, T> type();
+
+    ZonedDateTime timestamp();
+
+    default String typeName() {
+      return type().name();
+    }
+  }
 
   private final EntityType entityType;
   private final UUID entityId;
-  private final List<Event<?>> events;
-  /// The data of the events read from the event log which have been read, if the log is a transition's, or else null
-  private final Map<Event<?>, Object> unmarshalled;
+  private final List<Entry<?>> events;
+  /// The stored forms of the events of the transaction which are stored, by their numbers, which [#asStored()] gives
+  private final Map<Integer, StoredEvent<?>> storedForms;
+  /// The data of the stored events which have been read, by their numbers, if the log is a transition's, or else null
+  private final Map<Integer, Object> unmarshalled;
 
-  public EventLog(EntityType entityType, UUID entityId, List<Event<?>> events) {
-    this(entityType, entityId, events, null);
+  public EventLog(EntityType entityType, UUID entityId, List<? extends Entry<?>> events) {
+    this(entityType, entityId, List.copyOf(events), Map.of(), null);
   }
 
-  private EventLog(EntityType entityType, UUID entityId, List<Event<?>> events, Map<Event<?>, Object> unmarshalled) {
+  private EventLog(
+      EntityType entityType,
+      UUID entityId,
+      List<Entry<?>> events,
+      Map<Integer, StoredEvent<?>> storedForms,
+      Map<Integer, Object> unmarshalled
+  ) {
     this.entityType = entityType;
     this.entityId = entityId;
     this.events = events;
+    this.storedForms = storedForms;
     this.unmarshalled = unmarshalled;
   }
 
@@ -49,14 +74,14 @@ public final class EventLog {
     return entityId;
   }
 
-  public List<Event<?>> events() {
+  public List<Entry<?>> events() {
     return events;
   }
 
-  /// The log as a transition is given it, which unmarshals the data of each event at most once, see [EventLog]. It
-  /// must only be read by the transition, e.g. by its steps and the transitions it chooses.
+  /// The log as a transition is given it, which unmarshals the data of each stored event at most once, see
+  /// [EventLog]. It must only be read by the transition, e.g. by its steps and the transitions it chooses.
   EventLog forTransition() {
-    return new EventLog(entityType, entityId, events, new IdentityHashMap<>());
+    return new EventLog(entityType, entityId, events, storedForms, new HashMap<>());
   }
 
   public int lastEventNumber() {
@@ -68,7 +93,7 @@ public final class EventLog {
         .stream()
         .filter(e -> e.eventNumber() == number && eventType.equals(e.type()))
         .findFirst()
-        .map(e -> this.<T>data(e))
+        .map(e -> this.<T>dataOf(e))
         .orElseThrow(() -> new NoSuchElementException("number(" + number + ", " + eventType.name() + "). Have:\n" + effectiveEvents().stream().map(e -> e.toString()).collect(joining("\n"))));
   }
 
@@ -77,13 +102,13 @@ public final class EventLog {
         .stream()
         .filter(e -> e.eventNumber() == number && eventType.equals(e.type()))
         .findFirst()
-        .map(e -> this.<T>data(e));
+        .map(e -> this.<T>dataOf(e));
   }
 
   public <T> T one(DataType<T> dataType) {
     return effectiveEvents().stream()
         .filter(e -> dataType.equals(e.type().outputDataType()))
-        .map(e -> this.<T>data(e))
+        .map(e -> this.<T>dataOf(e))
         .filter(e -> e != null)
         .findFirst()
         .orElseThrow(() -> new NoSuchElementException("one(" + dataType.name() + "). Have:\n" + effectiveEvents().stream().map(e -> e.toString()).collect(joining("\n"))));
@@ -92,7 +117,7 @@ public final class EventLog {
   public <T> T last(DataType<T> dataType) {
     T result = effectiveEvents().reversed().stream()
         .filter(e -> dataType.equals(e.type().outputDataType()))
-        .map(e -> this.<T>data(e))
+        .map(e -> this.<T>dataOf(e))
         .findFirst()
         .orElseThrow(() -> new NoSuchElementException("last(" + dataType.name() + ")"));
     return result;
@@ -101,12 +126,12 @@ public final class EventLog {
   public <T> T one(EventType<?, T> eventType) {
     return effectiveEvents().stream()
         .filter(e -> e.type().id().equals(eventType.id()))
-        .map(e -> this.<T>data(e))
+        .map(e -> this.<T>dataOf(e))
         .findFirst()
         .orElseThrow(() -> new NoSuchElementException(String.format("one(%s) on %s [log: %s]",
             eventType.name(),
             entityType.name(),
-            events.stream().map(Event::typeName).collect(joining(","))
+            events.stream().map(Entry::typeName).collect(joining(","))
         )));
   }
 
@@ -114,7 +139,7 @@ public final class EventLog {
   public final <T> T one(EventType<?, T>... eventTypes) {
     return effectiveEvents().stream()
         .filter(e -> Stream.of(eventTypes).map(EventType::id).toList().contains(e.type().id()))
-        .map(e -> this.<T>data(e))
+        .map(e -> this.<T>dataOf(e))
         .findFirst()
         .orElseThrow();
   }
@@ -122,14 +147,14 @@ public final class EventLog {
   public <T> Optional<T> oneIfExists(EventType<?, T> eventType) {
     return effectiveEvents().stream()
         .filter(e -> Stream.of(eventType).map(EventType::id).toList().contains(e.type().id()))
-        .map(e -> this.<T>data(e))
+        .map(e -> this.<T>dataOf(e))
         .findFirst();
   }
 
   public <T> T last(EventType<?, T> eventType) {
     return effectiveEvents().reversed().stream()
         .filter(e -> e.type().id().equals(eventType.id()))
-        .map(e -> this.<T>data(e))
+        .map(e -> this.<T>dataOf(e))
         .findFirst()
         .orElseThrow(() -> new NoSuchElementException("last(" + eventType.name() + ")"));
   }
@@ -137,14 +162,14 @@ public final class EventLog {
   public <T> Optional<T> lastIfExists(EventType<?, T> eventType) {
     return effectiveEvents().reversed().stream()
         .filter(e -> e.type().id().equals(eventType.id()))
-        .map(e -> this.<T>data(e))
+        .map(e -> this.<T>dataOf(e))
         .findFirst();
   }
 
   public <T> List<T> all(EventType<?, T> eventType) {
     return effectiveEvents().stream()
         .filter(e -> e.type().id().equals(eventType.id()))
-        .map(e -> this.<T>data(e))
+        .map(e -> this.<T>dataOf(e))
         .toList();
   }
 
@@ -165,21 +190,21 @@ public final class EventLog {
     return events().stream().anyMatch(e -> e.type().id().equals(eventType.id()));
   }
 
-  public List<Event<?>> subLog(int fromEventNumber) {
+  public List<Entry<?>> subLog(int fromEventNumber) {
     return events.stream().filter(e -> e.eventNumber() >= fromEventNumber).toList();
   }
 
   /**
    * Effective events, ignoring events that were rolled back.
    */
-  public List<Event<?>> effectiveEvents() {
+  public List<Entry<?>> effectiveEvents() {
     // Traverse the event log backwards and skip events between a rollback and its target exclusively
-    List<Event<?>> effectiveEventsReversed = new ArrayList<>(events.size());
+    List<Entry<?>> effectiveEventsReversed = new ArrayList<>(events.size());
     int skipTo = Integer.MAX_VALUE;
-    for (Event<?> event : events.reversed()) {
+    for (Entry<?> event : events.reversed()) {
       if (skipTo >= event.eventNumber()) {
         if (event.type() instanceof EventType.Rollback) {
-          int toNumber = this.<EventType.Rollback.Data>data(event).toNumber();
+          int toNumber = this.<EventType.Rollback.Data>dataOf(event).toNumber();
           skipTo = toNumber >= 0 ? toNumber : event.eventNumber() - 1 + toNumber ;
         } else {
           effectiveEventsReversed.add(event);
@@ -191,15 +216,30 @@ public final class EventLog {
 
   /// The log with its events as they are stored, e.g. masked, as a later transaction reads it
   EventLog asStored() {
-    return new EventLog(entityType(), entityId(), events().stream().<Event<?>>map(Event::asStored).toList());
+    return new EventLog(
+        entityType,
+        entityId,
+        events.stream().<Entry<?>>map(e -> e instanceof Event<?> && storedForms.containsKey(e.eventNumber()) ? storedForms.get(e.eventNumber()) : e).toList(),
+        Map.of(),
+        null
+    );
   }
 
-  public EventLog withNewEvent(Event<?> newEvent) {
-    return new EventLog(
-        entityType(),
-        entityId(),
-        join(events(), newEvent)
-    );
+  /// The log with the event after its events, e.g. one read from the event log
+  public EventLog withNewEvent(Entry<?> newEvent) {
+    return withNewEvent(newEvent, null);
+  }
+
+  /// The log with the event of a transition after its events, and its stored form, if it is stored, which
+  /// [#asStored()] gives
+  EventLog withNewEvent(Entry<?> newEvent, StoredEvent<?> storedForm) {
+    Map<Integer, StoredEvent<?>> forms = storedForms;
+    if (storedForm != null) {
+      var added = new HashMap<>(storedForms);
+      added.put(newEvent.eventNumber(), storedForm);
+      forms = Map.copyOf(added);
+    }
+    return new EventLog(entityType, entityId, join(events, newEvent), forms, null);
   }
 
   public static EventLog empty(UUID id, EntityType entityType) {
@@ -207,19 +247,26 @@ public final class EventLog {
   }
 
 
-  /// The data of the event, or null if it has none, shared by its readers. A masked event of the transaction gives its
-  /// whole data, which only the transaction has. The data of an event read from the event log is unmarshalled once in
-  /// the log of a transition, and on every read in any other log.
+  /// The data of the event of the log, or null if it has none, shared by its readers. A masked event of the
+  /// transaction gives its whole data, which only the transaction has. The data of a stored event is unmarshalled once
+  /// in the log of a transition, and on every read in any other log.
+  public <T> T data(Entry<T> entry) {
+    return this.<T>dataOf(entry);
+  }
+
   @SuppressWarnings("unchecked")
-  private <T> T data(Event<?> event) {
-    Event<T> typed = (Event<T>) event;
-    if (unmarshalled == null || typed.hasData())
-      return typed.data();
-    if (unmarshalled.containsKey(typed))
-      return (T) unmarshalled.get(typed);
-    T data = typed.data();
-    unmarshalled.put(typed, data);
-    return data;
+  private <T> T dataOf(Entry<?> entry) {
+    return switch ((Entry<T>) entry) {
+      case Event<T> event -> event.data();
+      case StoredEvent<T> stored when unmarshalled == null -> stored.unmarshalled();
+      case StoredEvent<T> stored -> {
+        if (unmarshalled.containsKey(stored.eventNumber()))
+          yield (T) unmarshalled.get(stored.eventNumber());
+        T data = stored.unmarshalled();
+        unmarshalled.put(stored.eventNumber(), data);
+        yield data;
+      }
+    };
   }
 
   @Override
@@ -247,8 +294,8 @@ public final class EventLog {
   }
 
   /// Whether the entity would be one of the session only with the event as its next, see [#isSessionOnly()]
-  boolean isSessionOnlyWith(Event<?> next) {
-    Event<?> first = events.isEmpty() ? next : events.getFirst();
+  boolean isSessionOnlyWith(Entry<?> next) {
+    Entry<?> first = events.isEmpty() ? next : events.getFirst();
     return entityType instanceof EntityType.NotStored || first.type() instanceof EventType.NotStored;
   }
 

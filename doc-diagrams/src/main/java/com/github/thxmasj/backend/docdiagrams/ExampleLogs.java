@@ -65,7 +65,7 @@ final class ExampleLogs {
   }
 
   private static <T> Event<T> event(UUID entityId, int number, EventType<?, T> type, int transaction) {
-    return Event.of(entityId, number, type, time.plusSeconds(transaction), null);
+    return new Event<>(entityId, number, type, time.plusSeconds(transaction), null);
   }
 
   private static Stream<TransitionModel<?, ?>> leaves(TransitionModel<?, ?> transition) {

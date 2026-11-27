@@ -8,6 +8,7 @@ import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.GroupedDataType;
 import com.github.thxmasj.backend.core.IdEntityType;
 import com.github.thxmasj.backend.core.IndexEntityType;
+import com.github.thxmasj.backend.core.StoredEvent;
 import com.github.thxmasj.backend.core.database.Database;
 import com.github.thxmasj.backend.core.database.DatabaseClient;
 import com.github.thxmasj.backend.core.database.UnknownEntity;
@@ -262,7 +263,7 @@ public class TestApi {
         .bind("entityId", entityId)
         .map(row -> row.get("EventNumber", Integer.class))
         .one()
-        .map(eventNumber -> Event.of(entityId, eventNumber, type, ZonedDateTime.now(clock), data).marshalled())
+        .map(eventNumber -> new Event<>(entityId, eventNumber, type, ZonedDateTime.now(clock), data))
         .flatMap(event -> changeState.execute(ZonedDateTime.now(clock), UUID.randomUUID().toString(), List.of(change(entityType, entityId, event)))
             .then(Mono.just(event)));
   }
@@ -314,6 +315,7 @@ public class TestApi {
       @Override public EntityType entityType() {return entityType;}
       @Override public UUID entityId() {return entityId;}
       @Override public Event<?> newEvent() {return event;}
+      @Override public StoredEvent<?> storedEvent() {return StoredEvent.of(event, null);}
       @Override public DelayedEvent<?> delayedEvent() {return null;}
     };
   }

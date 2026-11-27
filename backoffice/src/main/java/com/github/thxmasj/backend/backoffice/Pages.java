@@ -6,7 +6,7 @@ import com.github.thxmasj.backend.backoffice.Graph.Conditional;
 import com.github.thxmasj.backend.backoffice.Graph.Entity;
 import com.github.thxmasj.backend.backoffice.Graph.Listed;
 import com.github.thxmasj.backend.backoffice.Graph.Match;
-import com.github.thxmasj.backend.backoffice.Graph.StoredEvent;
+import com.github.thxmasj.backend.backoffice.Graph.EventRow;
 import com.github.thxmasj.backend.backoffice.Graph.View;
 import com.github.thxmasj.backend.backoffice.Sessions.User;
 import com.github.thxmasj.backend.core.DataType;
@@ -251,11 +251,11 @@ final class Pages {
         """.formatted(Sessions.Path, entity.id(), escape(entity.entityTypeName()), by != null ? " <span class=\"by\">by " + escape(by) + "</span>" : "");
   }
 
-  private static String events(List<StoredEvent> events, List<String> dataOfEvents) {
+  private static String events(List<EventRow> events, List<String> dataOfEvents) {
     if (events.isEmpty())
       return "<p class=\"empty\">None</p>\n";
     var rows = new StringBuilder();
-    for (StoredEvent event : events) {
+    for (EventRow event : events) {
       String data = data(event);
       dataOfEvents.add(data);
       rows.append("<tr><td class=\"number\">%d</td><td>%s</td><td>%s</td><td>%s</td></tr>\n".formatted(
@@ -272,7 +272,7 @@ final class Pages {
   }
 
   /// The data of an event as escaped HTML, unmarshalled by its data type if it is known
-  static String data(StoredEvent event) {
+  static String data(EventRow event) {
     byte[] data = event.data();
     if (data == null || data.length == 0)
       return "";

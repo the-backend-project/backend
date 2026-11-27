@@ -39,8 +39,9 @@ sub-type of `EventType`, which the state machine tells apart by their type:
 The data of an event is shared by everyone who reads it: the transitions reading it from the entity's event log
 (`c.log().one(..)`, `last(..)`, `all(..)` and the others alike), the transition triggering it, which gets it back, the
 one who triggered the first event of the transaction and the [listener](monitoring.md). Nothing may change it, as the
-change would be seen by the readers after it, but not stored: an event is marshalled by its transition, when it is
-made. Make event data immutable, e.g. records whose collections are immutable, with `List.copyOf` in the compact
+change would be seen by the readers after it, but not stored: the transition of an event which is stored makes its
+stored form, a `StoredEvent` with the data marshalled, and masked if the transition masks it, when it makes the
+`Event`. Make event data immutable, e.g. records whose collections are immutable, with `List.copyOf` in the compact
 constructor:
 
 ```java
@@ -51,8 +52,10 @@ record Order(String id, List<OrderLine> lines) {
 }
 ```
 
-An event of the transaction is read as the transition made it. An event read from the event log is unmarshalled when a
-transition first reads it, once per transition: the log a transition is given keeps the data of the events it has read.
+An entity's event log has its events of the transaction as `Event`s, read as the transition made them, and those read
+from the database as `StoredEvent`s, both `EventLog.Entry`s. `log.events()` gives them without their data, and
+`log.data(entry)` the data of one. A stored event is unmarshalled when a transition first reads it, once per
+transition: the log a transition is given keeps the data of the events it has read.
 
 ## Steps
 

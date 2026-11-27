@@ -34,6 +34,7 @@ import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.Severity;
 import com.github.thxmasj.backend.core.State;
 import com.github.thxmasj.backend.core.StateMachine;
+import com.github.thxmasj.backend.core.StoredEvent;
 import com.github.thxmasj.backend.core.TransitionModel;
 import com.github.thxmasj.backend.core.TransitionModelBuilder.TransitionContext;
 import com.github.thxmasj.backend.core.Tuples.Tuple2;
@@ -428,7 +429,7 @@ public class HttpOutboxTest {
         .assertNext(event -> assertEquals(processStarted, event.type()))
         .assertNext(event -> {
           assertEquals(processSucceeded, event.type());
-          assertArrayEquals("hello:200".getBytes(), event.storedData());
+          assertArrayEquals("hello:200".getBytes(), StoredEvent.of(event, null).data());
         })
         .thenCancel().verify();
   }
@@ -461,7 +462,7 @@ public class HttpOutboxTest {
         .assertNext(event -> assertEquals(model.processStarted(), event.type()))
         .assertNext(event -> {
           assertEquals(InvalidResponseReceived, event.type());
-          assertArrayEquals("Invalid response".getBytes(), event.storedData());
+          assertArrayEquals("Invalid response".getBytes(), StoredEvent.of(event, null).data());
         })
         .thenCancel().verify();
   }
@@ -474,7 +475,7 @@ public class HttpOutboxTest {
         .assertNext(event -> assertEquals(model.processStarted(), event.type()))
         .assertNext(event -> {
           assertEquals(InvalidResponseReceived, event.type());
-          assertArrayEquals("Invalid response".getBytes(), event.storedData());
+          assertArrayEquals("Invalid response".getBytes(), StoredEvent.of(event, null).data());
         })
         .thenCancel().verify();
   }
@@ -496,7 +497,7 @@ public class HttpOutboxTest {
     UUID processEntityId = UUID.randomUUID();
     @SuppressWarnings("unchecked")
     EventType<HttpRequest<Void>, Tuple2<HttpRequest<Void>, UUID>> reqDispatchedType = (EventType<HttpRequest<Void>, Tuple2<HttpRequest<Void>, UUID>>) (Object) model.exchange().requestDispatched();
-    var reqDispatchedEvent = Event.of(
+    var reqDispatchedEvent = new Event<>(
         UUID.randomUUID(),
         1,
         reqDispatchedType,
@@ -574,7 +575,7 @@ public class HttpOutboxTest {
     UUID processEntityId = UUID.randomUUID();
     @SuppressWarnings("unchecked")
     EventType<HttpRequest<Void>, Tuple2<HttpRequest<Void>, UUID>> reqDispatchedType = (EventType<HttpRequest<Void>, Tuple2<HttpRequest<Void>, UUID>>) (Object) alo.requestDispatched();
-    var reqDispatchedEvent = Event.of(
+    var reqDispatchedEvent = new Event<>(
         UUID.randomUUID(),
         1,
         reqDispatchedType,
@@ -674,7 +675,7 @@ public class HttpOutboxTest {
 
     @SuppressWarnings("unchecked")
     EventType<HttpRequest<Void>, Tuple2<HttpRequest<Void>, UUID>> reqDispatchedType = (EventType<HttpRequest<Void>, Tuple2<HttpRequest<Void>, UUID>>) (Object) alo.requestDispatched();
-    var reqDispatchedEvent = Event.of(
+    var reqDispatchedEvent = new Event<>(
         UUID.randomUUID(),
         1,
         reqDispatchedType,

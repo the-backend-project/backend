@@ -50,7 +50,7 @@ class ReplayTest {
     List<EventType<Void, Void>> types = model == Order ? List.of(Placed) : List.of(Received, Answered);
     List<Event<?>> events = new ArrayList<>();
     for (int i = 0; i < timestamps.length; i++)
-      events.add(Event.of(id, i + 1, types.get(i), timestamps[i], null));
+      events.add(new Event<>(id, i + 1, types.get(i), timestamps[i], null));
     return new EventLog(model, id, List.copyOf(events));
   }
 
@@ -102,7 +102,7 @@ class ReplayTest {
   @Test
   void theStepOfAnEntityWhichIsNotStoredIsDeducedFromTheOnlyTransitionTriggeringTheEvent() {
     UUID id = UUID.randomUUID();
-    EventLog submission = new EventLog(Submission, id, List.of(Event.of(id, 1, Accepted, time, null)));
+    EventLog submission = new EventLog(Submission, id, List.of(new Event<>(id, 1, Accepted, time, null)));
     Replay replay = Replay.of(submission, List.of(), List.of(Router, Submission));
     Step routed = replay.roots().getFirst();
     assertTrue(routed.isDeduced());
@@ -115,7 +115,7 @@ class ReplayTest {
   @Test
   void nothingIsDeducedWithoutTheEntityTypes() {
     UUID id = UUID.randomUUID();
-    EventLog submission = new EventLog(Submission, id, List.of(Event.of(id, 1, Accepted, time, null)));
+    EventLog submission = new EventLog(Submission, id, List.of(new Event<>(id, 1, Accepted, time, null)));
     Step root = Replay.of(submission).roots().getFirst();
     assertSame(submission, root.log());
   }
@@ -148,7 +148,7 @@ class ReplayTest {
 
   private static EventLog outbox(EventType<Void, Void> outcome) {
     UUID id = UUID.randomUUID();
-    return new EventLog(Outbox, id, List.of(Event.of(id, 1, Sent, time, null), Event.of(id, 2, outcome, time.plusSeconds(1), null)));
+    return new EventLog(Outbox, id, List.of(new Event<>(id, 1, Sent, time, null), new Event<>(id, 2, outcome, time.plusSeconds(1), null)));
   }
 
   @Test

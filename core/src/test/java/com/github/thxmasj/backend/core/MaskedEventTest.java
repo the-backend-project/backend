@@ -4,6 +4,7 @@ import static com.github.thxmasj.backend.core.TransitionModelBuilder.WithEvent.o
 import static com.github.thxmasj.backend.core.EntityType.Begin;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -25,16 +26,19 @@ public class MaskedEventTest {
   static EventType<Void, Void> Touched = EventType.of("Touched", UUID.fromString("9d1f3b5c-7e8a-4c80-a2b4-c6d8e0f2a457"));
   static EntityType Account = EntityType.of("Account", UUID.fromString("3c5e7a9b-1d2f-4b64-86a8-cadcebf0a679"), () -> Map.of());
 
-  /// The transitions of the session read the log of the entity with the whole data of a masked event, by every accessor
+  /// The transitions of the session read the log of the entity with the whole data of a masked event, by every
+  /// accessor, while its stored form is masked, which the log as stored has
   @Test
   public void theLogOfTheSessionHasTheWholeDataOfAMaskedEvent() {
-    var event = Event.masked(UUID.randomUUID(), 1, PasswordSet, ZonedDateTime.now(), "hunter2", _ -> "***");
-    var log = new EventLog(Account, event.entityId(), List.of(event));
+    var event = new Event<>(UUID.randomUUID(), 1, PasswordSet, ZonedDateTime.now(), "hunter2");
+    var stored = StoredEvent.of(event, _ -> "***");
+    var log = EventLog.empty(event.entityId(), Account).withNewEvent(event, stored);
     assertEquals("hunter2", log.one(PasswordSet));
     assertEquals("hunter2", log.oneIfExists(PasswordSet).orElseThrow());
     assertEquals("hunter2", log.one(DataType.string()));
     assertEquals("hunter2", log.number(1, PasswordSet));
-    assertEquals("***", new String(event.marshalled().storedData()));
+    assertEquals("***", new String(stored.data()));
+    assertEquals("***", log.asStored().one(PasswordSet));
   }
 
   /// The transition creating an account, from `Begin`, from which every entity is created
@@ -81,8 +85,8 @@ public class MaskedEventTest {
   @Test
   public void everyReaderOfAMaskedEventSharesItsWholeData() {
     var codes = new Codes(List.of("c0de"));
-    var event = Event.masked(UUID.randomUUID(), 1, CodesSet, ZonedDateTime.now(), codes, _ -> new Codes(List.of("***")));
-    var log = new EventLog(Account, event.entityId(), List.of(event));
+    var event = new Event<>(UUID.randomUUID(), 1, CodesSet, ZonedDateTime.now(), codes);
+    var log = EventLog.empty(event.entityId(), Account).withNewEvent(event, StoredEvent.of(event, _ -> new Codes(List.of("***"))));
     assertSame(codes, log.one(CodesSet));
     assertSame(codes, log.number(1, CodesSet));
     assertSame(codes, log.one(DataType.json(Codes.class)));
@@ -91,10 +95,9 @@ public class MaskedEventTest {
 
   @Test
   public void aMaskGivingNullIsRefused() {
-    var event = Event.masked(UUID.randomUUID(), 1, PasswordSet, ZonedDateTime.now(), "hunter2", _ -> null);
-    var e = assertThrows(IllegalStateException.class, event::marshalled);
+    var event = new Event<>(UUID.randomUUID(), 1, PasswordSet, ZonedDateTime.now(), "hunter2");
+    var e = assertThrows(IllegalStateException.class, () -> StoredEvent.of(event, _ -> null));
     assertTrue(e.getMessage().contains("The mask of Password set gives null"), e.getMessage());
-    assertEquals("hunter2", event.data());
   }
 
   /// An event of a type with data has data, so a transition on it can't end in output() without a data adapter
@@ -104,39 +107,37 @@ public class MaskedEventTest {
     assertTrue(e.getMessage().startsWith("The transition on Password set has no output, but its event type has data"), e.getMessage());
   }
 
-  /// The data is masked when the event is marshalled, which its transition does if it is stored, once
+  /// The stored form of an event is masked when it is made, once, which its transition does if the event is stored,
+  /// while the event keeps its whole data
   @Test
-  public void aMaskIsAppliedOnceWhenTheEventIsMarshalled() {
+  public void theStoredFormIsMaskedWhenItIsMade() {
     var masked = new AtomicInteger();
-    var event = Event.masked(UUID.randomUUID(), 1, PasswordSet, ZonedDateTime.now(), "hunter2", _ -> {
+    var event = new Event<>(UUID.randomUUID(), 1, PasswordSet, ZonedDateTime.now(), "hunter2");
+    var stored = StoredEvent.of(event, _ -> {
       masked.incrementAndGet();
       return "***";
     });
+    assertEquals("***", new String(stored.data()));
     assertEquals("hunter2", event.data());
-    assertEquals(0, masked.get());
-    var marshalled = event.marshalled();
-    assertSame(marshalled, marshalled.marshalled());
-    assertEquals("***", new String(marshalled.storedData()));
-    assertEquals("***", new String(marshalled.storedData()));
-    assertEquals("hunter2", marshalled.data());
     assertEquals(1, masked.get());
+    assertEquals("hunter2", new String(StoredEvent.of(event, null).data()));
   }
 
-  /// An event of a transition has no data as stored until it is marshalled, which its transition does if it is stored,
-  /// so storing one which isn't is a failure rather than marshalling it later
+  /// Events and stored events are values, equal if their parts are, also the data of a stored event
   @Test
-  public void anEventNotMarshalledHasNoDataAsStored() {
-    var event = Event.of(UUID.randomUUID(), 1, PasswordSet, ZonedDateTime.now(), "hunter2");
-    var e = assertThrows(IllegalStateException.class, event::storedData);
-    assertTrue(e.getMessage().contains("The event Password set is not marshalled"), e.getMessage());
-    assertEquals("hunter2", new String(event.marshalled().storedData()));
+  public void eventsAreValues() {
+    var id = UUID.randomUUID();
+    var time = ZonedDateTime.now();
+    assertEquals(new Event<>(id, 1, PasswordSet, time, "hunter2"), new Event<>(id, 1, PasswordSet, time, "hunter2"));
+    assertEquals(new StoredEvent<>(id, 1, PasswordSet, time, "***".getBytes()), new StoredEvent<>(id, 1, PasswordSet, time, "***".getBytes()));
+    assertNotEquals(new StoredEvent<>(id, 1, PasswordSet, time, "***".getBytes()), new StoredEvent<>(id, 1, PasswordSet, time, "**".getBytes()));
   }
 
   /// The log a transition is given unmarshals an event read from the event log once, and every accessor shares the
   /// data, while any other log unmarshals it on every read
   @Test
   public void theLogOfATransitionUnmarshalsAnEventReadFromTheEventLogOnce() {
-    var stored = Event.stored(UUID.randomUUID(), 1, CodesSet, ZonedDateTime.now(), DataType.json(Codes.class).marshal(new Codes(List.of("c0de"))));
+    var stored = new StoredEvent<>(UUID.randomUUID(), 1, CodesSet, ZonedDateTime.now(), DataType.json(Codes.class).marshal(new Codes(List.of("c0de"))));
     var log = new EventLog(Account, stored.entityId(), List.of(stored));
     var ofTransition = log.forTransition();
     var codes = ofTransition.one(CodesSet);

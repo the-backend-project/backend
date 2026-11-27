@@ -245,16 +245,19 @@ public class TransactionTest {
   private static OutputStep<String> output(InputStep<String> initial, String id) {
     return new OutputStep<>(
         new AssembleStep<>(initial, id),
-        ProcessResult.accepted(idEvent(id), Ids)
+        new ProcessResult.Accepted<>(idEvent(id), Ids, Severity.Info, StoredEvent.of(idEvent(id), null))
     );
   }
 
   private static IdExists<String> existing(String id) {
-    return ProcessResult.idExists(NumberClaimed, idEvent(id), EventLog.empty(UUID.randomUUID(), Order));
+    return ProcessResult.idExists(NumberClaimed, StoredEvent.of(idEvent(id), null), EventLog.empty(UUID.randomUUID(), Order));
   }
 
+  private static final UUID EntityId = UUID.randomUUID();
+  private static final ZonedDateTime Timestamp = ZonedDateTime.now();
+
   private static Event<String> idEvent(String id) {
-    return Event.of(UUID.randomUUID(), 1, NumberClaimed, ZonedDateTime.now(), id).marshalled();
+    return new Event<>(EntityId, 1, NumberClaimed, Timestamp, id);
   }
 
 }

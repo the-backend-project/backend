@@ -272,7 +272,7 @@ public class StateMachine implements AutoCloseable {
           var currentState = traversers.get(delayedTrigger.entityType()).currentState(eventLog);
           if (currentState == null)
             return Mono.error(new RuntimeException(
-                "Invalid event log: " + eventLog.events().stream().map(Event::typeName).collect(joining(","))));
+                "Invalid event log: " + eventLog.events().stream().map(EventLog.Entry::typeName).collect(joining(","))));
           return fire(delayedTrigger, eventLog)
               .flatMap(processResult -> switch (processResult) {
                     // State is resolved and delayed trigger already deleted by the change triggered by this event.
@@ -312,7 +312,8 @@ public class StateMachine implements AutoCloseable {
 
     /// @param severity the severity declared on the transition which accepted the event. The trigger which fired the
     ///                 transaction, if any, is on its first step, see [InputStep#triggerType()].
-    record Accepted<T>(Event<T> event, EntityType entityType, Severity severity) implements ProcessResult<T> {
+    /// @param stored   the event as it is stored, e.g. masked, which its transition makes if it is stored, or else null
+    record Accepted<T>(Event<T> event, EntityType entityType, Severity severity, StoredEvent<T> stored) implements ProcessResult<T> {
       public Accepted<T> accepted() {return this;}
     }
 
@@ -340,7 +341,7 @@ public class StateMachine implements AutoCloseable {
     ///
     /// @param idEvent the id event not stored
     /// @param log     the event log of the entity having the id
-    record IdExists<T>(EventType<?, T> eventType, Event<?> idEvent, EventLog log) implements ProcessResult<T> {
+    record IdExists<T>(EventType<?, T> eventType, StoredEvent<?> idEvent, EventLog log) implements ProcessResult<T> {
 
       public IdExists<T> idExists() {return this;}
     }
@@ -371,11 +372,11 @@ public class StateMachine implements AutoCloseable {
     }
 
     static <T> Accepted<T> accepted(Event<T> event, EntityType entityType) {
-      return new Accepted<>(event, entityType, Severity.Info);
+      return new Accepted<>(event, entityType, Severity.Info, null);
     }
 
     static <T> Accepted<T> accepted(Event<T> event, EntityType entityType, Severity severity) {
-      return new Accepted<>(event, entityType, severity);
+      return new Accepted<>(event, entityType, severity, null);
     }
 
     default boolean isAccepted() {
@@ -398,7 +399,7 @@ public class StateMachine implements AutoCloseable {
       throw new IllegalStateException("Result is " + this);
     }
 
-    static <T> IdExists<T> idExists(EventType<?, T> eventType, Event<?> idEvent, EventLog log) {
+    static <T> IdExists<T> idExists(EventType<?, T> eventType, StoredEvent<?> idEvent, EventLog log) {
       return new IdExists<>(eventType, idEvent, log);
     }
 
@@ -559,11 +560,14 @@ public class StateMachine implements AutoCloseable {
   /// its events as stored, e.g. masked, also those of the same transaction before the transition's, and with the
   /// event of the transition if it is stored, as the next event stored follows one which isn't. An entity of the
   /// session only has its events in the session, as they are.
-  private static <T> ActionTrigger<T> withEventAsRead(ActionTrigger<T> actionTrigger, Event<?> event) {
+  private static <T> ActionTrigger<T> withEventAsRead(ActionTrigger<T> actionTrigger, Accepted<?> accepted) {
+    Event<?> event = accepted.event();
     if (actionTrigger.eventLog().isSessionOnlyWith(event))
       return actionTrigger.withEvent(event);
     var asRead = new ActionTrigger<>(actionTrigger.action(), actionTrigger.data(), actionTrigger.eventLog().asStored());
-    return EventTypes.stored(event.type()) ? asRead.withEvent(event.asStored()) : asRead;
+    if (!EventTypes.stored(event.type()))
+      return asRead;
+    return asRead.withEvent(accepted.stored() != null ? accepted.stored() : event);
   }
 
   private List<ActionTrigger<?>> actionTriggers(@NotNull TransitionStep<?> tail) {
@@ -574,7 +578,7 @@ public class StateMachine implements AutoCloseable {
         case OutputStep<?> occ -> lastOutput = occ;
         case ActionStep<?, ?> acc -> {
           if (lastOutput != null && lastOutput.stepOutput().isAccepted()) {
-            actionTriggers.add(withEventAsRead(acc.actionTrigger(), lastOutput.stepOutput().accepted().event()));
+            actionTriggers.add(withEventAsRead(acc.actionTrigger(), lastOutput.stepOutput().accepted()));
           }
         }
         default -> {}
@@ -593,7 +597,7 @@ public class StateMachine implements AutoCloseable {
       UUID triggerId,
       @Nullable EventReference triggerEvent
   ) {
-    Debug.log(eventLog.entityType().name() + ": onEvent " + eventType.name() + " with log " + eventLog.events().stream().map(Event::typeName).collect(joining(",")));
+    Debug.log(eventLog.entityType().name() + ": onEvent " + eventType.name() + " with log " + eventLog.events().stream().map(EventLog.Entry::typeName).collect(joining(",")));
     var now = ZonedDateTime.now(clock);
     var tuple = transitionModel(eventLog, eventType);
     if (tuple.t2() == null) {
@@ -682,7 +686,7 @@ public class StateMachine implements AutoCloseable {
         })
         .onErrorResume(
             IdEventAlreadyExists.class,
-            e -> storage.eventsByIdEvent().execute(e.idEvent().type(), e.idEvent().storedData())
+            e -> storage.eventsByIdEvent().execute(e.idEvent().type(), e.idEvent().data())
                 .switchIfEmpty(Mono.error(e))
                 .doOnNext(_ -> Debug.log("onEvent " + transitionModel.eventType().name() + ": " + e.getMessage()))
                 .flatMap(log -> initial.transaction().recomputeWith(ProcessResult.idExists(e.idEvent().type(), e.idEvent(), log)) ?
@@ -700,7 +704,7 @@ public class StateMachine implements AutoCloseable {
     EventType<I, O> type = eventTrigger.eventType();
     return tail.inputStep().transaction().existingIds().stream()
         .filter(existing -> existing.idEvent().type().id().equals(type.id())
-            && Arrays.equals(existing.idEvent().storedData(), type.inputDataType().marshal(data)))
+            && Arrays.equals(existing.idEvent().data(), type.inputDataType().marshal(data)))
         .findFirst()
         .map(existing -> new IdExistsStep<>(tail, ProcessResult.idExists(type, existing.idEvent(), existing.log().forTransition())))
         .orElse(null);
@@ -913,7 +917,7 @@ public class StateMachine implements AutoCloseable {
   private static InTransaction inTransaction(UUID entityId, EntityType entityType, TransitionStep<?> transitionStep) {
     for (var c = transitionStep; c != null; c = c.previous()) {
       if (c instanceof OutputStep<?>(TransitionStep<?> previous, ProcessResult<?> stepOutput)
-          && stepOutput instanceof Accepted<?>(Event<?> event, EntityType model, _)
+          && stepOutput instanceof Accepted<?>(Event<?> event, EntityType model, _, StoredEvent<?> stored)
           && event.entityId().equals(entityId)
           && model.equals(entityType)
           && !(previous instanceof ChoiceStep)) {
@@ -921,7 +925,7 @@ public class StateMachine implements AutoCloseable {
         // An event which is not stored is not in the log of a stored entity, which the next event stored follows. The
         // log the transition was given is the entity's as the transaction has it, without the event, so it is the log,
         // rather than one read from the database.
-        return new InTransaction(EventTypes.stored(event.type()) || log.isSessionOnlyWith(event) ? log.withNewEvent(event) : log, null);
+        return new InTransaction(EventTypes.stored(event.type()) || log.isSessionOnlyWith(event) ? log.withNewEvent(event, stored) : log, null);
       }
     }
     return new InTransaction(null, previousTransaction(transitionStep));
@@ -944,7 +948,7 @@ public class StateMachine implements AutoCloseable {
     var keys = new HashSet<EntityKey>();
     for (var c = tail; c != null; c = c.previous()) {
       if (c instanceof OutputStep<?>(TransitionStep<?> previous, ProcessResult<?> stepOutput)
-          && stepOutput instanceof Accepted<?>(Event<?> event, EntityType model, _)
+          && stepOutput instanceof Accepted<?>(Event<?> event, EntityType model, _, _)
           && !(previous instanceof ChoiceStep)
           && c.inputStep().log().isSessionOnlyWith(event))
         keys.add(new EntityKey(model.id(), event.entityId()));

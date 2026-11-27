@@ -7,6 +7,7 @@ import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.Event;
 import com.github.thxmasj.backend.core.IdEntityType;
 import com.github.thxmasj.backend.core.Severity;
+import com.github.thxmasj.backend.core.StoredEvent;
 import com.github.thxmasj.backend.core.StateMachine.ProcessResult;
 import com.github.thxmasj.backend.core.TriggerType;
 import com.github.thxmasj.backend.core.database.DatabaseClient;
@@ -43,7 +44,7 @@ public abstract class ChangeState {
     if (event != null) {
       spec.bind("eventNumber", event.eventNumber())
           .bind("type", event.type().id())
-          .bindNullable("data", byte[].class, event.storedData());
+          .bindNullable("data", byte[].class, storedData(change));
     }
     if (change.firedTrigger() != null) {
       if (change.firedTrigger().type() == TriggerType.CONDITIONAL)
@@ -88,6 +89,15 @@ public abstract class ChangeState {
     return conditionalTrigger.type().inputDataType().marshal(conditionalTrigger.data());
   }
 
+  /// The data of the new event of the change as it is stored
+  ///
+  /// @throws IllegalStateException if the event has no stored form, which its transition makes if it is stored
+  private static byte[] storedData(Change change) {
+    if (change.storedEvent() == null)
+      throw new IllegalStateException("The event " + change.newEvent().typeName() + " of " + change.entityType().name() + " has no stored form, which its transition makes if it is stored");
+    return change.storedEvent().data();
+  }
+
   public interface Change {
 
     EntityType entityType();
@@ -95,6 +105,11 @@ public abstract class ChangeState {
     UUID entityId();
     
     Event<?> newEvent();
+
+    /// The new event as it is stored, if it is, or else null
+    default StoredEvent<?> storedEvent() {
+      return null;
+    }
 
     DelayedEvent<?> delayedEvent();
 
@@ -188,6 +203,11 @@ public abstract class ChangeState {
         }
 
         @Override
+        public StoredEvent<?> storedEvent() {
+          return acceptedEvent.stored();
+        }
+
+        @Override
         public Severity severity() {
           return acceptedEvent.severity();
         }
@@ -272,7 +292,7 @@ public abstract class ChangeState {
   protected abstract String sql(List<Change> changes);
 
   /// The key of an id event in its unique index, as reported by the database, i.e. its type and data
-  protected abstract String duplicateKey(Event<?> idEvent);
+  protected abstract String duplicateKey(StoredEvent<?> idEvent);
 
   /// The conflict with what another transaction stored which the failure to store the changes is, or null if it is
   /// none. A primary key violation on a table of entities or events (see [TableType]) is an [EventAlreadyExists] of the
@@ -284,8 +304,8 @@ public abstract class ChangeState {
           eventAlreadyExists(violation, changes);
       case UniqueIndexConstraintViolation violation when violation.tableType() == TableType.IdEvent ->
           changes.stream()
-              .filter(change -> change.entityType() instanceof IdEntityType && change.newEvent() != null)
-              .map(Change::newEvent)
+              .filter(change -> change.entityType() instanceof IdEntityType && change.storedEvent() != null)
+              .<StoredEvent<?>>map(Change::storedEvent)
               .filter(event -> violation.duplicateKey().equalsIgnoreCase(duplicateKey(event)))
               .<Throwable>map(event -> new IdEventAlreadyExists(event, violation))
               .findFirst()
