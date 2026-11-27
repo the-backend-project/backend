@@ -59,7 +59,7 @@ public class JsonLinesListenerTest {
   public void delayedEventsAndConditionalTriggersAreNotWritten() {
     Change.Entity entity = new Change.Entity("Notification", entityId);
     listener.changeAccepted("1", List.of(
-        new Change(entity, new Change.DelayedEvent(2, "Timeout expired", timestamp.plusSeconds(30))),
+        new Change(entity, new Change.DelayedTrigger(2, "Timeout expired", timestamp.plusSeconds(30))),
         new Change(entity, null)
     ));
 

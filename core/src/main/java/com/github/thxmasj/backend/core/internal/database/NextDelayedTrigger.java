@@ -1,5 +1,6 @@
 package com.github.thxmasj.backend.core.internal.database;
 
+import com.github.thxmasj.backend.core.Change;
 import com.github.thxmasj.backend.core.DelaySpecification;
 import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EventType;
@@ -38,7 +39,7 @@ public class NextDelayedTrigger {
     this.sql = sql;
   }
 
-  public Mono<? extends DelayedTrigger<?>> execute(DelaySpecification backoff) {
+  public Mono<? extends Change.DelayedTrigger<?>> execute(DelaySpecification backoff) {
     return databaseClient.sql(sql)
         .name("NextDelayedTrigger")
         .bind("now", ZonedDateTime.now(clock).toLocalDateTime())
@@ -61,7 +62,7 @@ public class NextDelayedTrigger {
         .one();
   }
 
-  private <T> DelayedTrigger<T> create(
+  private <T> Change.DelayedTrigger<T> create(
           UUID entityId,
           EntityType model,
           int eventNumber,
@@ -70,11 +71,11 @@ public class NextDelayedTrigger {
           ZonedDateTime nextAttemptAt,
           String correlationId
   ) {
-    return new DelayedTrigger<>(
-        entityId,
+    return new Change.DelayedTrigger<>(
         model,
-        eventNumber,
+        entityId,
         eventType,
+        eventNumber,
         data != null ? eventType.inputDataType().unmarshal(data) : null,
         nextAttemptAt,
         correlationId

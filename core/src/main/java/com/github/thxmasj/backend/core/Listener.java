@@ -63,10 +63,10 @@ public interface Listener {
 
       }
 
-      public static class DelayedEvent extends Event {
+      public static class DelayedTrigger extends Event {
         private final ZonedDateTime after;
 
-        public DelayedEvent(int number, String type, ZonedDateTime after) {
+        public DelayedTrigger(int number, String type, ZonedDateTime after) {
           super(number, type);
           this.after = after;
         }
@@ -76,7 +76,7 @@ public interface Listener {
     }
 
     /// The changes of an event are stored. A change is an accepted event, a delayed event, which is a
-    /// [Change.DelayedEvent], or a conditional trigger, which has no event. The changes are given in the order they
+    /// [Change.DelayedTrigger], or a conditional trigger, which has no event. The changes are given in the order they
     /// were calculated, with the accepted events which are not stored too (see [Change.Event#stored()]).
     default void changeAccepted(
         String correlationId,

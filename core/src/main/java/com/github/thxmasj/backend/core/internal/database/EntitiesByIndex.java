@@ -2,9 +2,9 @@ package com.github.thxmasj.backend.core.internal.database;
 
 import static java.util.Collections.unmodifiableList;
 
+import com.github.thxmasj.backend.core.Change;
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EntityType;
-import com.github.thxmasj.backend.core.StoredEvent;
 import com.github.thxmasj.backend.core.EventLog;
 import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.database.DatabaseClient;
@@ -27,7 +27,7 @@ import reactor.core.publisher.Mono;
 public class EntitiesByIndex {
 
   private final DatabaseClient client;
-  private final Map<UUID, BiFunction<UUID, Row, StoredEvent<?>>> eventMappers;
+  private final Map<UUID, BiFunction<UUID, Row, Change.Event<?>>> eventMappers;
   private final Map<UUID, EntityType> entityTypes;
   private final String sql;
 
@@ -42,7 +42,7 @@ public class EntitiesByIndex {
   ) {
     this.client = client;
     this.eventMappers = eventTypesByEntityType.entrySet().stream()
-        .collect(Collectors.toMap(e -> e.getKey().id(), e -> Mappers.eventMapper(e.getValue(), clock)));
+        .collect(Collectors.toMap(e -> e.getKey().id(), e -> Mappers.eventMapper(e.getKey(), e.getValue(), clock)));
     this.entityTypes = eventTypesByEntityType.keySet().stream().collect(Collectors.toMap(EntityType::id, Function.identity()));
     this.sql = sql;
   }
@@ -69,14 +69,14 @@ public class EntitiesByIndex {
         .flatMap(Mono::justOrEmpty)
         .collectList()
         .flatMapIterable(events -> {
-          Map<UUID, List<StoredEvent<?>>> eventsByEntityId = new LinkedHashMap<>();
+          Map<UUID, List<Change.Event<?>>> eventsByEntityId = new LinkedHashMap<>();
           Map<UUID, UUID> entityTypeIdByEntityId = new HashMap<>();
           for (ModelEvent event : events) {
             entityTypeIdByEntityId.putIfAbsent(event.entityId(), event.entityTypeId());
             eventsByEntityId.computeIfAbsent(event.entityId(), _ -> new ArrayList<>()).add(event.event());
           }
           List<EventLog> eventLogs = new ArrayList<>();
-          for (Entry<UUID, List<StoredEvent<?>>> entry : eventsByEntityId.entrySet()) {
+          for (Entry<UUID, List<Change.Event<?>>> entry : eventsByEntityId.entrySet()) {
             UUID modelId = entityTypeIdByEntityId.get(entry.getKey());
             EntityType entityType = entityTypes.get(modelId);
             eventLogs.add(new EventLog(entityType, entry.getKey(), unmodifiableList(entry.getValue())));
@@ -85,6 +85,6 @@ public class EntitiesByIndex {
         });
   }
 
-  private record ModelEvent(UUID entityId, UUID entityTypeId, StoredEvent<?> event) {}
+  private record ModelEvent(UUID entityId, UUID entityTypeId, Change.Event<?> event) {}
 
 }

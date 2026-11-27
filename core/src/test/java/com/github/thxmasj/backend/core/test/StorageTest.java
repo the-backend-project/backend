@@ -7,16 +7,15 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import com.github.thxmasj.backend.core.Change;
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.Event;
 import com.github.thxmasj.backend.core.EventLog;
 import com.github.thxmasj.backend.core.EventType;
-import com.github.thxmasj.backend.core.StoredEvent;
 import com.github.thxmasj.backend.core.IdEntityType;
 import com.github.thxmasj.backend.core.State;
 import com.github.thxmasj.backend.core.database.UnknownEntity;
-import com.github.thxmasj.backend.core.internal.database.ChangeState.Change;
 import com.github.thxmasj.backend.core.internal.database.IdEventAlreadyExists;
 import com.github.thxmasj.backend.core.internal.database.Storage;
 import java.io.PrintWriter;
@@ -77,7 +76,7 @@ public class StorageTest {
   }
 
   private static Change change(EntityType entityType, Event<?> event) {
-    return Change.ofEvent(entityType, StoredEvent.of(event, null));
+    return Change.Event.of(entityType, event, null);
   }
 
   @Test

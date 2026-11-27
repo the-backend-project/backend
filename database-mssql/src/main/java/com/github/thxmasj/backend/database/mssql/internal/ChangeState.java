@@ -5,13 +5,11 @@ import static java.util.stream.Collectors.joining;
 import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.IdEntityType;
 import com.github.thxmasj.backend.core.IndexEntityType;
-import com.github.thxmasj.backend.core.StoredEvent;
+import com.github.thxmasj.backend.core.Change;
 import com.github.thxmasj.backend.core.TriggerType;
 import com.github.thxmasj.backend.core.database.DatabaseClient;
 import com.github.thxmasj.backend.core.database.TableType;
-import com.github.thxmasj.backend.core.internal.DelayedEvent;
-import com.github.thxmasj.backend.core.internal.database.ChangeState.Change.FiredTrigger;
-import com.github.thxmasj.backend.core.internal.database.ConditionalTrigger;
+import com.github.thxmasj.backend.core.Change.FiredTrigger;
 import java.time.Clock;
 import java.util.HexFormat;
 import java.util.List;
@@ -62,10 +60,10 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
       Change change
   ) {
     EntityType entityType = change.entityType();
-    StoredEvent<?> event = change.newEvent();
-    DelayedEvent<?> delayedEvent = change.delayedEvent();
-    ConditionalTrigger<?> conditionalTrigger = change.conditionalTrigger();
-    FiredTrigger firedTrigger = change.firedTrigger();
+    Change.Event<?> event = change instanceof Change.Event<?> e ? e : null;
+    Change.DelayedTrigger<?> delayedTrigger = change instanceof Change.DelayedTrigger<?> d ? d : null;
+    Change.ConditionalTrigger<?> conditionalTrigger = change instanceof Change.ConditionalTrigger<?> c ? c : null;
+    FiredTrigger firedTrigger = change instanceof FiredTrigger f ? f : null;
     String sql =
         """
         DECLARE @entityId{changeIndex} BINARY(16)
@@ -169,7 +167,7 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
               .replace("{schema}", schema);
     }
 
-    if (delayedEvent != null) {
+    if (delayedTrigger != null) {
       // Replace the previous delayed trigger, which may not have been deleted yet by the new event's change. One of a
       // transition on an event not stored has the number of the pending one, which it replaces. The state machine leaves out
       // a delayed trigger of the transaction which a later event stored on the entity replaces, and refuses two with the
@@ -212,7 +210,7 @@ class ChangeState extends com.github.thxmasj.backend.core.internal.database.Chan
   /// The duplicate key of an id event, as reported by SQL Server with its type as a UUID (see
   /// `MssqlClient.withUuid(String)`), e.g. "019a6b2c-1d3e-7f40-8a1b-2c3d4e5f6071, 0x7B22..."
   @Override
-  protected String duplicateKey(StoredEvent<?> idEvent) {
+  protected String duplicateKey(Change.Event<?> idEvent) {
     return idEvent.type().id() + ", 0x" + HexFormat.of().formatHex(idEvent.data());
   }
 

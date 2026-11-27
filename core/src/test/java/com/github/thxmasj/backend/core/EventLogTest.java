@@ -69,8 +69,8 @@ public class EventLogTest {
     var clock = Clock.systemUTC();
     UUID entityId = randomUUID();
     List<EventLog.Entry<?>> events = List.of(
-        new StoredEvent<>(entityId, 1, NumberAssigned, ZonedDateTime.now(clock), null),
-        new StoredEvent<>(entityId, 2, NumberAssigned, ZonedDateTime.now(clock), DataType.json(Assigned.class).marshal(new Assigned("7")))
+        new Change.Event<>(null, entityId, 1, NumberAssigned, ZonedDateTime.now(clock), null),
+        new Change.Event<>(null, entityId, 2, NumberAssigned, ZonedDateTime.now(clock), DataType.json(Assigned.class).marshal(new Assigned("7")))
     );
     EventLog log = new EventLog(null, entityId, events);
     assertEquals(Arrays.asList(null, new Assigned("7")), log.all(NumberAssigned));

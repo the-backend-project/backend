@@ -2,6 +2,7 @@ package com.github.thxmasj.backend.core.internal.database;
 
 import static java.lang.String.format;
 
+import com.github.thxmasj.backend.core.Change;
 import com.github.thxmasj.backend.core.DataType;
 import com.github.thxmasj.backend.core.EntityType;
 import com.github.thxmasj.backend.core.EventReference;
@@ -50,15 +51,15 @@ public class ConditionalTriggers {
   /**
    * The oldest waiting conditional triggers whose condition is met, at most the given limit.
    */
-  public Flux<ConditionalTrigger<?>> execute(int limit) {
+  public Flux<Change.ConditionalTrigger<?>> execute(int limit) {
     return databaseClient.sql(sql)
         .name("ConditionalTriggers")
         .bind("limit", limit)
-        .<ConditionalTrigger<?>>map(this::map)
+        .<Change.ConditionalTrigger<?>>map(this::map)
         .all();
   }
 
-  private ConditionalTrigger<?> map(Row row) {
+  private Change.ConditionalTrigger<?> map(Row row) {
     UUID entityTypeId = row.get("EntityTypeId", UUID.class);
     EntityType entityType = entityTypes.get(entityTypeId);
     if (entityType == null)
@@ -99,7 +100,7 @@ public class ConditionalTriggers {
         .orElseThrow(() -> new MappingFailure(format("No event type for type id %s", eventTypeId)));
   }
 
-  private <T> ConditionalTrigger<T> create(
+  private <T> Change.ConditionalTrigger<T> create(
       UUID id,
       EventReference triggerEvent,
       EntityType entityType,
@@ -112,7 +113,7 @@ public class ConditionalTriggers {
       UUID indexKey,
       String correlationId
   ) {
-    return new ConditionalTrigger<>(
+    return new Change.ConditionalTrigger<>(
         id,
         triggerEvent,
         entityType,

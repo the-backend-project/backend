@@ -1,7 +1,7 @@
 package com.github.thxmasj.backend.core.internal.database;
 
+import com.github.thxmasj.backend.core.Change;
 import com.github.thxmasj.backend.core.EntityType;
-import com.github.thxmasj.backend.core.internal.database.ChangeState.Change;
 import java.util.List;
 import java.util.UUID;
 
@@ -22,16 +22,16 @@ public class EventAlreadyExists extends RuntimeException {
     this.eventNumber = 0;
   }
 
-  /// The event of the change exists
-  public EventAlreadyExists(Change change, List<Change> changes, Throwable cause) {
+  /// The event of a change exists
+  public EventAlreadyExists(Change.Event<?> event, List<Change> changes, Throwable cause) {
     super(
-        "Event " + change.newEvent().eventNumber() + " on entity " + change.entityType().name() + ":" +
-            change.entityId() + " already exists. Changes:\n" + changes,
+        "Event " + event.eventNumber() + " on entity " + event.entityType().name() + ":" +
+            event.entityId() + " already exists. Changes:\n" + changes,
         cause
     );
-    this.entityType = change.entityType();
-    this.entityId = change.entityId();
-    this.eventNumber = change.newEvent().eventNumber();
+    this.entityType = event.entityType();
+    this.entityId = event.entityId();
+    this.eventNumber = event.eventNumber();
   }
 
   /// Whether the event which exists is the one of the number on the entity

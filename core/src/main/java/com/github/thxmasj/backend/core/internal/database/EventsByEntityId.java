@@ -2,8 +2,8 @@ package com.github.thxmasj.backend.core.internal.database;
 
 import static java.util.Objects.requireNonNull;
 
+import com.github.thxmasj.backend.core.Change;
 import com.github.thxmasj.backend.core.EntityType;
-import com.github.thxmasj.backend.core.StoredEvent;
 import com.github.thxmasj.backend.core.EventLog;
 import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.database.DatabaseClient;
@@ -40,11 +40,11 @@ public class EventsByEntityId {
 
   public Mono<EventLog> execute(EntityType entityType, List<EventType<?, ?>> eventTypes, UUID entityId) {
     String sqlToPrepare = requireNonNull(sqls.get(entityType), "Unknown model " + entityType.name());
-    var eventMapper = Mappers.eventMapper(eventTypes, clock);
+    var eventMapper = Mappers.eventMapper(entityType, eventTypes, clock);
     return client.sql(sqlToPrepare)
         .name("EventsByEntityId")
         .bind("entityId", entityId)
-        .<StoredEvent<?>>map(row -> {
+        .<Change.Event<?>>map(row -> {
           try {
             return eventMapper.apply(entityId, row);
           } catch (MappingFailure e) {

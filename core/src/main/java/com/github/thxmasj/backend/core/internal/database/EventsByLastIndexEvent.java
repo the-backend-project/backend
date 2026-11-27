@@ -37,7 +37,7 @@ public class EventsByLastIndexEvent {
   ///
   /// @param group the marshalled group, i.e. the prefix of the data of its index events
   public Mono<EventLog> execute(EntityType entityType, List<EventType<?, ?>> eventTypes, UUID type, byte[] group, int position) {
-    var eventMapper = Mappers.eventMapper(eventTypes, clock);
+    var eventMapper = Mappers.eventMapper(entityType, eventTypes, clock);
     return client.sql(sql)
         .name("EventsByLastIndexEvent")
         .bind("type", type)

@@ -245,12 +245,12 @@ public class TransactionTest {
   private static OutputStep<String> output(InputStep<String> initial, String id) {
     return new OutputStep<>(
         new AssembleStep<>(initial, id),
-        new ProcessResult.Accepted<>(idEvent(id), Ids, Severity.Info, StoredEvent.of(idEvent(id), null))
+        new ProcessResult.Accepted<>(idEvent(id), Ids, Severity.Info, Change.Event.of(Ids, idEvent(id), null))
     );
   }
 
   private static IdExists<String> existing(String id) {
-    return ProcessResult.idExists(NumberClaimed, StoredEvent.of(idEvent(id), null), EventLog.empty(UUID.randomUUID(), Order));
+    return ProcessResult.idExists(NumberClaimed, Change.Event.of(Ids, idEvent(id), null), EventLog.empty(UUID.randomUUID(), Order));
   }
 
   private static final UUID EntityId = UUID.randomUUID();

@@ -163,7 +163,7 @@ public class TransitionModel<I, O> {
         && step.stepOutput() instanceof Accepted<O>(Event<O> event, EntityType entityType, Severity severity, _)
         && EventTypes.stored(event.type())
         && !step.inputStep().log().isSessionOnlyWith(event))
-      return new OutputStep<>(step.previous(), new Accepted<>(event, entityType, severity, StoredEvent.of(event, mask)));
+      return new OutputStep<>(step.previous(), new Accepted<>(event, entityType, severity, Change.Event.of(entityType, event, mask)));
     return step;
   }
 

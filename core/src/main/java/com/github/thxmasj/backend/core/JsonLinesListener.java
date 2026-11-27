@@ -47,7 +47,7 @@ public class JsonLinesListener implements Listener {
   public void changeAccepted(String correlationId, List<Change> changes) {
     for (Change change : changes) {
       Change.Event event = change.event();
-      if (event == null || event instanceof Change.DelayedEvent)
+      if (event == null || event instanceof Change.DelayedTrigger)
         continue;
       Map<String, Object> line = line(
           event.timestamp().toInstant(),

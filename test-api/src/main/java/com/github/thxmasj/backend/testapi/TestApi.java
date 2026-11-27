@@ -8,13 +8,12 @@ import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.GroupedDataType;
 import com.github.thxmasj.backend.core.IdEntityType;
 import com.github.thxmasj.backend.core.IndexEntityType;
-import com.github.thxmasj.backend.core.StoredEvent;
+import com.github.thxmasj.backend.core.Change;
 import com.github.thxmasj.backend.core.database.Database;
 import com.github.thxmasj.backend.core.database.DatabaseClient;
 import com.github.thxmasj.backend.core.database.UnknownEntity;
 import com.github.thxmasj.backend.core.internal.database.ChangeState;
 import com.github.thxmasj.backend.core.internal.ResolvedModels;
-import com.github.thxmasj.backend.core.internal.database.ChangeState.Change;
 import com.github.thxmasj.backend.core.internal.database.EntitiesByIndex;
 import com.github.thxmasj.backend.core.internal.database.EventsByEntityId;
 import com.github.thxmasj.backend.core.internal.database.EventsByIdEvent;
@@ -310,7 +309,7 @@ public class TestApi {
   }
 
   private static Change change(EntityType entityType, UUID entityId, Event<?> event) {
-    return new Change(entityType, entityId, StoredEvent.of(event, null), null, null, null);
+    return Change.Event.of(entityType, event, null);
   }
 
 }

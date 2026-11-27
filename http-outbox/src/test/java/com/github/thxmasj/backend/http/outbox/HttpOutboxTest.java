@@ -34,7 +34,7 @@ import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.Severity;
 import com.github.thxmasj.backend.core.State;
 import com.github.thxmasj.backend.core.StateMachine;
-import com.github.thxmasj.backend.core.StoredEvent;
+import com.github.thxmasj.backend.core.Change;
 import com.github.thxmasj.backend.core.TransitionModel;
 import com.github.thxmasj.backend.core.TransitionModelBuilder.TransitionContext;
 import com.github.thxmasj.backend.core.Tuples.Tuple2;
@@ -429,7 +429,7 @@ public class HttpOutboxTest {
         .assertNext(event -> assertEquals(processStarted, event.type()))
         .assertNext(event -> {
           assertEquals(processSucceeded, event.type());
-          assertArrayEquals("hello:200".getBytes(), StoredEvent.of(event, null).data());
+          assertArrayEquals("hello:200".getBytes(), Change.Event.of(null, event, null).data());
         })
         .thenCancel().verify();
   }
@@ -462,7 +462,7 @@ public class HttpOutboxTest {
         .assertNext(event -> assertEquals(model.processStarted(), event.type()))
         .assertNext(event -> {
           assertEquals(InvalidResponseReceived, event.type());
-          assertArrayEquals("Invalid response".getBytes(), StoredEvent.of(event, null).data());
+          assertArrayEquals("Invalid response".getBytes(), Change.Event.of(null, event, null).data());
         })
         .thenCancel().verify();
   }
@@ -475,7 +475,7 @@ public class HttpOutboxTest {
         .assertNext(event -> assertEquals(model.processStarted(), event.type()))
         .assertNext(event -> {
           assertEquals(InvalidResponseReceived, event.type());
-          assertArrayEquals("Invalid response".getBytes(), StoredEvent.of(event, null).data());
+          assertArrayEquals("Invalid response".getBytes(), Change.Event.of(null, event, null).data());
         })
         .thenCancel().verify();
   }
@@ -697,11 +697,11 @@ public class HttpOutboxTest {
       }
     }
     assertNotNull(delayedTriggerStep);
-    var timeout = delayedTriggerStep.delayedEvent();
+    var timeout = delayedTriggerStep.delayedTrigger();
     assertEquals(TimeoutExpired, timeout.type());
     assertEquals(requestId, timeout.entityId());
     assertEquals(5, timeout.eventNumber());
-    assertEquals(now.plus(inflightTimeout), timeout.after());
+    assertEquals(now.plus(inflightTimeout), timeout.deadline());
   }
 
   @Test

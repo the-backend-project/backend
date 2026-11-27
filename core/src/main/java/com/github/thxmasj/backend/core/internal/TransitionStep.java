@@ -3,6 +3,7 @@ package com.github.thxmasj.backend.core.internal;
 import static com.github.thxmasj.backend.core.Tuples.tuple;
 import static java.util.Optional.ofNullable;
 
+import com.github.thxmasj.backend.core.Change;
 import com.github.thxmasj.backend.core.EventLog;
 import com.github.thxmasj.backend.core.EventReference;
 import com.github.thxmasj.backend.core.EventTrigger;
@@ -20,7 +21,6 @@ import com.github.thxmasj.backend.core.TransitionModel;
 import com.github.thxmasj.backend.core.TransitionModelBuilder.TransitionContext;
 import com.github.thxmasj.backend.core.TriggerType;
 import com.github.thxmasj.backend.core.Tuples.Tuple2;
-import com.github.thxmasj.backend.core.internal.database.ConditionalTrigger;
 import java.time.ZonedDateTime;
 import java.util.UUID;
 
@@ -123,11 +123,11 @@ public sealed interface TransitionStep<T> {
 
   record DelayedTriggerStep<T, I1>(
       TransitionStep<T> previous,
-      DelayedEvent<I1> delayedEvent
+      Change.DelayedTrigger<I1> delayedTrigger
   ) implements TransitionStep<T> {
     @Override public String toString() {
-      return "Delayed trigger: " + delayedEvent.entityType().name() + "/" + delayedEvent.type().name() + "/"
-          + delayedEvent.entityId() + "/" + delayedEvent.eventNumber() + " after " + delayedEvent.after()
+      return "Delayed trigger: " + delayedTrigger.entityType().name() + "/" + delayedTrigger.type().name() + "/"
+          + delayedTrigger.entityId() + "/" + delayedTrigger.eventNumber() + " after " + delayedTrigger.deadline()
           + " (now is " + previous.inputStep().timestamp() + ")";
     }
 
@@ -139,7 +139,7 @@ public sealed interface TransitionStep<T> {
 
   record ConditionalTriggerStep<T, I1>(
       TransitionStep<T> previous,
-      ConditionalTrigger<I1> conditionalTrigger
+      Change.ConditionalTrigger<I1> conditionalTrigger
   ) implements TransitionStep<T> {
     @Override public String toString() {
       return "Conditional trigger: " + conditionalTrigger.entityType().name() + "/" + conditionalTrigger.type().name() + "/"

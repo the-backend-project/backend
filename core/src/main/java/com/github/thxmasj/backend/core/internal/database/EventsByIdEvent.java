@@ -3,8 +3,8 @@ package com.github.thxmasj.backend.core.internal.database;
 import static java.util.function.Function.identity;
 import static java.util.stream.Collectors.toMap;
 
+import com.github.thxmasj.backend.core.Change;
 import com.github.thxmasj.backend.core.EntityType;
-import com.github.thxmasj.backend.core.StoredEvent;
 import com.github.thxmasj.backend.core.EventLog;
 import com.github.thxmasj.backend.core.EventType;
 import com.github.thxmasj.backend.core.database.DatabaseClient;
@@ -53,7 +53,7 @@ public class EventsByIdEvent {
           if (entityType == null)
             throw new IllegalStateException("Unknown entity type " + entityTypeId + " of entity having id of type " + type.name());
           try {
-            return new TypedEvent(entityType, entityId, Mappers.eventMapper(eventTypesByEntityType.get(entityType), clock).apply(entityId, row));
+            return new TypedEvent(entityType, entityId, Mappers.eventMapper(entityType, eventTypesByEntityType.get(entityType), clock).apply(entityId, row));
           } catch (MappingFailure e) {
             throw new MappingFailure("EventsByIdEvent: Failed to map row to event for entity type " + entityType.name(), e);
           }
@@ -68,6 +68,6 @@ public class EventsByIdEvent {
         ));
   }
 
-  private record TypedEvent(EntityType entityType, UUID entityId, StoredEvent<?> event) {}
+  private record TypedEvent(EntityType entityType, UUID entityId, Change.Event<?> event) {}
 
 }

@@ -15,7 +15,6 @@ import com.github.thxmasj.backend.core.Tuples.Tuple2;
 import com.github.thxmasj.backend.core.database.UnknownEntity;
 import com.github.thxmasj.backend.core.internal.ActionTrigger;
 import com.github.thxmasj.backend.core.internal.Debug;
-import com.github.thxmasj.backend.core.internal.DelayedEvent;
 import com.github.thxmasj.backend.core.internal.TransitionStep;
 import com.github.thxmasj.backend.core.internal.TransitionStep.ActionStep;
 import com.github.thxmasj.backend.core.internal.TransitionStep.AssembleStep;
@@ -28,7 +27,6 @@ import com.github.thxmasj.backend.core.internal.TransitionStep.PendingStep;
 import com.github.thxmasj.backend.core.internal.TransitionStep.RejectedStep;
 import com.github.thxmasj.backend.core.internal.TransitionStep.TriggerStep;
 import com.github.thxmasj.backend.core.internal.TransitionStep.UnknownIdStep;
-import com.github.thxmasj.backend.core.internal.database.ConditionalTrigger;
 import java.time.Duration;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
@@ -780,13 +778,14 @@ public class TransitionModelBuilder<I, T, O> {
         transitionStep -> transitionStep
             .flatMap(c -> step(c, () -> Mono.just(new DelayedTriggerStep<>(
                 c,
-                new DelayedEvent<>(
+                new Change.DelayedTrigger<>(
                     c.inputStep().log().entityType(),
                     c.inputStep().log().entityId(),
                     eventType,
                     c.inputStep().eventNumber() + 1,
                     dataAdapter.apply(c.stepOutput()),
-                    c.inputStep().timestamp().plus(delay.apply(c.stepOutput()))
+                    c.inputStep().timestamp().plus(delay.apply(c.stepOutput())),
+                    null
                 )
             ))));
     return new TransitionModelBuilder<>(
@@ -807,7 +806,7 @@ public class TransitionModelBuilder<I, T, O> {
               var condition = conditionalTrigger.condition();
               return new ConditionalTriggerStep<>(
                   c,
-                  new ConditionalTrigger<>(
+                  new Change.ConditionalTrigger<>(
                       Identifiers.newId(),
                       new EventReference(
                           c.inputStep().log().entityId(),

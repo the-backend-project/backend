@@ -31,7 +31,7 @@ public class MaskedEventTest {
   @Test
   public void theLogOfTheSessionHasTheWholeDataOfAMaskedEvent() {
     var event = new Event<>(UUID.randomUUID(), 1, PasswordSet, ZonedDateTime.now(), "hunter2");
-    var stored = StoredEvent.of(event, _ -> "***");
+    var stored = Change.Event.of(Account, event, _ -> "***");
     var log = EventLog.empty(event.entityId(), Account).withNewEvent(event, stored);
     assertEquals("hunter2", log.one(PasswordSet));
     assertEquals("hunter2", log.oneIfExists(PasswordSet).orElseThrow());
@@ -86,7 +86,7 @@ public class MaskedEventTest {
   public void everyReaderOfAMaskedEventSharesItsWholeData() {
     var codes = new Codes(List.of("c0de"));
     var event = new Event<>(UUID.randomUUID(), 1, CodesSet, ZonedDateTime.now(), codes);
-    var log = EventLog.empty(event.entityId(), Account).withNewEvent(event, StoredEvent.of(event, _ -> new Codes(List.of("***"))));
+    var log = EventLog.empty(event.entityId(), Account).withNewEvent(event, Change.Event.of(Account, event, _ -> new Codes(List.of("***"))));
     assertSame(codes, log.one(CodesSet));
     assertSame(codes, log.number(1, CodesSet));
     assertSame(codes, log.one(DataType.json(Codes.class)));
@@ -96,7 +96,7 @@ public class MaskedEventTest {
   @Test
   public void aMaskGivingNullIsRefused() {
     var event = new Event<>(UUID.randomUUID(), 1, PasswordSet, ZonedDateTime.now(), "hunter2");
-    var e = assertThrows(IllegalStateException.class, () -> StoredEvent.of(event, _ -> null));
+    var e = assertThrows(IllegalStateException.class, () -> Change.Event.of(Account, event, _ -> null));
     assertTrue(e.getMessage().contains("The mask of Password set gives null"), e.getMessage());
   }
 
@@ -113,14 +113,14 @@ public class MaskedEventTest {
   public void theStoredFormIsMaskedWhenItIsMade() {
     var masked = new AtomicInteger();
     var event = new Event<>(UUID.randomUUID(), 1, PasswordSet, ZonedDateTime.now(), "hunter2");
-    var stored = StoredEvent.of(event, _ -> {
+    var stored = Change.Event.of(Account, event, _ -> {
       masked.incrementAndGet();
       return "***";
     });
     assertEquals("***", new String(stored.data()));
     assertEquals("hunter2", event.data());
     assertEquals(1, masked.get());
-    assertEquals("hunter2", new String(StoredEvent.of(event, null).data()));
+    assertEquals("hunter2", new String(Change.Event.of(Account, event, null).data()));
   }
 
   /// Events and stored events are values, equal if their parts are, also the data of a stored event
@@ -129,15 +129,15 @@ public class MaskedEventTest {
     var id = UUID.randomUUID();
     var time = ZonedDateTime.now();
     assertEquals(new Event<>(id, 1, PasswordSet, time, "hunter2"), new Event<>(id, 1, PasswordSet, time, "hunter2"));
-    assertEquals(new StoredEvent<>(id, 1, PasswordSet, time, "***".getBytes()), new StoredEvent<>(id, 1, PasswordSet, time, "***".getBytes()));
-    assertNotEquals(new StoredEvent<>(id, 1, PasswordSet, time, "***".getBytes()), new StoredEvent<>(id, 1, PasswordSet, time, "**".getBytes()));
+    assertEquals(new Change.Event<>(Account, id, 1, PasswordSet, time, "***".getBytes()), new Change.Event<>(Account, id, 1, PasswordSet, time, "***".getBytes()));
+    assertNotEquals(new Change.Event<>(Account, id, 1, PasswordSet, time, "***".getBytes()), new Change.Event<>(Account, id, 1, PasswordSet, time, "**".getBytes()));
   }
 
   /// The log a transition is given unmarshals an event read from the event log once, and every accessor shares the
   /// data, while any other log unmarshals it on every read
   @Test
   public void theLogOfATransitionUnmarshalsAnEventReadFromTheEventLogOnce() {
-    var stored = new StoredEvent<>(UUID.randomUUID(), 1, CodesSet, ZonedDateTime.now(), DataType.json(Codes.class).marshal(new Codes(List.of("c0de"))));
+    var stored = new Change.Event<>(Account, UUID.randomUUID(), 1, CodesSet, ZonedDateTime.now(), DataType.json(Codes.class).marshal(new Codes(List.of("c0de"))));
     var log = new EventLog(Account, stored.entityId(), List.of(stored));
     var ofTransition = log.forTransition();
     var codes = ofTransition.one(CodesSet);

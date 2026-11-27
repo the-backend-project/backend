@@ -25,7 +25,7 @@ import java.util.stream.Stream;
 public final class EventLog {
 
   /// An event in an event log, as stored or as its transition made it
-  public sealed interface Entry<T> permits Event, StoredEvent {
+  public sealed interface Entry<T> permits Event, Change.Event {
 
     UUID entityId();
 
@@ -44,7 +44,7 @@ public final class EventLog {
   private final UUID entityId;
   private final List<Entry<?>> events;
   /// The stored forms of the events of the transaction which are stored, by their numbers, which [#asStored()] gives
-  private final Map<Integer, StoredEvent<?>> storedForms;
+  private final Map<Integer, Change.Event<?>> storedForms;
   /// The data of the stored events which have been read, by their numbers, if the log is a transition's, or else null
   private final Map<Integer, Object> unmarshalled;
 
@@ -56,7 +56,7 @@ public final class EventLog {
       EntityType entityType,
       UUID entityId,
       List<Entry<?>> events,
-      Map<Integer, StoredEvent<?>> storedForms,
+      Map<Integer, Change.Event<?>> storedForms,
       Map<Integer, Object> unmarshalled
   ) {
     this.entityType = entityType;
@@ -232,8 +232,8 @@ public final class EventLog {
 
   /// The log with the event of a transition after its events, and its stored form, if it is stored, which
   /// [#asStored()] gives
-  EventLog withNewEvent(Entry<?> newEvent, StoredEvent<?> storedForm) {
-    Map<Integer, StoredEvent<?>> forms = storedForms;
+  EventLog withNewEvent(Entry<?> newEvent, Change.Event<?> storedForm) {
+    Map<Integer, Change.Event<?>> forms = storedForms;
     if (storedForm != null) {
       var added = new HashMap<>(storedForms);
       added.put(newEvent.eventNumber(), storedForm);
@@ -258,8 +258,8 @@ public final class EventLog {
   private <T> T dataOf(Entry<?> entry) {
     return switch ((Entry<T>) entry) {
       case Event<T> event -> event.data();
-      case StoredEvent<T> stored when unmarshalled == null -> stored.unmarshalled();
-      case StoredEvent<T> stored -> {
+      case Change.Event<T> stored when unmarshalled == null -> stored.unmarshalled();
+      case Change.Event<T> stored -> {
         if (unmarshalled.containsKey(stored.eventNumber()))
           yield (T) unmarshalled.get(stored.eventNumber());
         T data = stored.unmarshalled();
