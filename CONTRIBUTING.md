@@ -161,7 +161,12 @@ Docker Desktop nor Docker Engine. Once per machine:
 
 1. Install `sbx` and sign in with a Docker account, see
    [Install Docker Sandboxes](https://docs.docker.com/ai/sandboxes/install/) (on macOS: `brew trust docker/tap`,
-   `brew install docker/tap/sbx`, `sbx login`).
+   `brew install docker/tap/sbx`, `sbx login`). Local sandboxes are free, also for commercial work, but every sandbox
+   needs a signed-in Docker account: Docker ties each sandbox to a person, which its paid organization governance
+   builds on, and the sign-in authenticates the pulls of the agents' images from Docker Hub (see
+   [Why do I need to sign in?](https://docs.docker.com/ai/sandboxes/faq/)). The CLI sends Docker which commands you
+   run, whether they succeeded, how long they took and your Docker username, but not your prompts or code. Turn that
+   off with `sbx settings set telemetry.disabled true` and `sbx daemon restart`.
 2. Block every host that isn't allowed, and allow kits from this repository:
 
    ```shell
